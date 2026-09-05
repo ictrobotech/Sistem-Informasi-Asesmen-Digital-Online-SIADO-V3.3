@@ -16,8 +16,8 @@
 window.SIADO_CONFIG = {
   SUPABASE_URL: (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? location.origin
-    : 'https://GANTI-PROJECT-REF.supabase.co',
-  SUPABASE_ANON_KEY: 'GANTI_DENGAN_PUBLISHABLE_KEY_ATAU_ANON_KEY',
+    : 'https://yabjtvmvqbjiwhqqtumb.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_Lje2JVps3HhpNhkKayngZw_AsRgukzo',
   PUBLIC_BASE_URL: '',            // kosongkan = otomatis (mis. https://ictrobotech.github.io/SIADO-V3.3/)
   REALTIME_MONITOR: false,        // true = monitor admin memakai Supabase Realtime (maks 200 koneksi di paket Free)
   APP_VERSION: 'siado-v5-r3.5'  // frontend = repo SIADO-V3.3 commit 1 Sep 2026 (revisi 3.4/3.5) + jembatan Supabase

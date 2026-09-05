@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kelola Ujian | APLIKASI UJIAN ONLINE</title>
+  <link rel="icon" type="image/png" href="<?!= getAppFaviconDataUri_(); ?>">
+  <link rel="apple-touch-icon" href="<?!= getAppEmailLogoDataUri_(); ?>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <style>
+    .admin-body{background:#f3f7fb;min-height:100vh}.admin-login-page{min-height:100dvh}.admin-login-card{max-width:445px}.admin-login-card .school-mark{background:linear-gradient(140deg,#b91c1c,#ef6c00)}.admin-login-card .school-mark.brand-logo{background:#fff!important}.admin-brand-icon.brand-logo{border-radius:50%;padding:0;box-shadow:0 3px 9px rgba(16,42,67,.16)}
+    .admin-shell{display:none;min-height:100dvh}.admin-shell.show{display:flex;flex-direction:column}.admin-topbar{background:#fff;border-bottom:1px solid #dce5ef;padding:14px clamp(16px,3vw,38px);display:flex;justify-content:space-between;align-items:center;gap:16px;position:sticky;top:0;z-index:100}.admin-brand{display:flex;align-items:center;gap:12px}.admin-brand-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#1f6feb,#1457ad)}.admin-brand h1{font:800 17px var(--heading);margin:0;color:#102a43}.admin-brand p{margin:3px 0 0;color:#668097;font-size:11px;font-weight:700}.admin-top-actions{display:flex;align-items:center;gap:10px}.admin-user-chip{padding:8px 10px;border-radius:9px;background:#edf5ff;color:#235d9f;font-size:12px;font-weight:800}.logout-button{border:1px solid #f3c8c8;background:#fff;color:#b42318;border-radius:9px;min-height:36px;padding:8px 11px;font-size:12px;font-weight:800}
+    .admin-main{width:min(1440px,100%);margin:0 auto;padding:22px clamp(16px,3vw,38px) 45px;flex:1}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:20px}.summary-card{background:#fff;border:1px solid #dfe8f1;border-radius:14px;padding:15px;box-shadow:0 5px 18px rgba(32,61,88,.04);display:flex;align-items:center;gap:11px}.summary-icon{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:#eaf3ff;color:#1f6feb}.summary-card:nth-child(2) .summary-icon{background:#e8f9ee;color:#15803d}.summary-card:nth-child(3) .summary-icon{background:#fff5e7;color:#b45309}.summary-card:nth-child(4) .summary-icon{background:#fff0f0;color:#c62828}.summary-card small{display:block;color:#6b8197;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.35px}.summary-card strong{display:block;margin-top:3px;font:800 22px/1 var(--heading);color:#163958}
+    .admin-tabs{display:flex;gap:8px;overflow-x:auto;padding:3px 0 12px;margin-bottom:12px}.admin-tab{border:1px solid #d7e2ed;background:#fff;color:#59728b;border-radius:9px;white-space:nowrap;padding:10px 13px;font-size:12px;font-weight:800}.admin-tab:hover{border-color:#8ebcf2;color:#1f6feb}.admin-tab.active{background:#1f6feb;border-color:#1f6feb;color:#fff;box-shadow:0 5px 12px rgba(31,111,235,.22)}.admin-pane{display:none}.admin-pane.show{display:block}.admin-card{background:#fff;border:1px solid #dce5ef;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 6px 20px rgba(32,61,88,.04)}.admin-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}.admin-card h2{font:800 17px var(--heading);margin:0;color:#102a43}.admin-card h2 i{color:#1f6feb;margin-right:7px}.admin-card-head p,.card-subtext{font-size:12px;color:#687f95;line-height:1.5;margin:5px 0 0}.admin-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.admin-form-grid .span-2{grid-column:1/-1}.admin-field label{display:block;color:#4c6680;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;margin:0 0 7px}.admin-field textarea.admin-input{resize:vertical;min-height:103px;line-height:1.5}.admin-field small{display:block;margin-top:5px;color:#7d91a6;font-size:11px;line-height:1.45}.inline-row{display:flex;align-items:end;gap:11px;flex-wrap:wrap}.inline-row .admin-field{flex:1;min-width:170px}.small-check{display:flex;align-items:center;gap:8px;color:#516d87;font-size:12px;font-weight:700}.small-check input{accent-color:#1f6feb;width:16px;height:16px}.form-help{padding:10px 12px;border-radius:9px;background:#f5f9fc;color:#5a738c;font-size:12px;line-height:1.5;border-left:3px solid #5da3f5}.form-help strong{color:#174f90}.upload-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}.file-input{width:100%;border:1.5px dashed #9eb8d1;background:#f7fbff;border-radius:10px;padding:9px;font-size:12px;color:#4c6883}.image-preview{display:none;margin-top:10px;border:1px solid #d7e3ee;border-radius:10px;background:#f7fafc;padding:9px;text-align:center}.image-preview.show{display:block}.image-preview img{max-width:100%;max-height:180px;border-radius:7px}.image-preview small{display:block;margin-top:6px;color:#71879c;font-size:11px}.admin-primary{border:0;border-radius:10px;background:linear-gradient(135deg,#1f6feb,#1683e8);color:#fff;min-height:42px;padding:10px 15px;font-size:13px;font-weight:800;box-shadow:0 6px 14px rgba(31,111,235,.22)}.admin-secondary{border:1px solid #cbd9e7;background:#fff;color:#40617d;border-radius:9px;min-height:38px;padding:8px 11px;font-size:12px;font-weight:800}.admin-secondary:hover{background:#f4f9fd;border-color:#84b8ee;color:#1f6feb}.admin-danger{border:1px solid #f0babb;background:#fff;color:#b42318;border-radius:9px;min-height:38px;padding:8px 11px;font-size:12px;font-weight:800}.admin-danger:hover{background:#fff3f3}.table-scroll{overflow:auto;border:1px solid #e0e8f0;border-radius:11px}.admin-table{width:100%;border-collapse:collapse;min-width:760px}.admin-table th{background:#f5f8fb;color:#557089;text-align:left;padding:10px 11px;font-size:10px;text-transform:uppercase;letter-spacing:.45px;white-space:nowrap;border-bottom:1px solid #dae4ed}.admin-table td{padding:10px 11px;color:#294865;font-size:12px;line-height:1.45;border-bottom:1px solid #edf2f6;vertical-align:top}.admin-table tr:last-child td{border-bottom:0}.admin-table tr:hover td{background:#fbfdff}.cell-wrap{max-width:300px;word-break:break-word}.badge{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:4px 7px;font-size:10px;font-weight:800;white-space:nowrap}.badge.blue{background:#eaf3ff;color:#1d62b5}.badge.green{background:#e8f9ee;color:#15803d}.badge.red{background:#fff0f0;color:#be2424}.badge.amber{background:#fff5e6;color:#a66000}.badge.gray{background:#f0f4f7;color:#60768b}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.mini-button{border:1px solid #c7d7e6;background:#fff;border-radius:7px;color:#3d5f7c;padding:5px 7px;font-size:11px;font-weight:800}.mini-button.edit{color:#1f6feb;border-color:#bcd8fb}.mini-button.delete{color:#bb2525;border-color:#f4c5c5}.mini-button.disqualify{color:#ad6500;border-color:#f0cf95}.empty-state{padding:42px 18px;text-align:center;color:#71889e;font-size:13px}.empty-state i{display:block;font-size:31px;color:#a7bbcd;margin-bottom:9px}.filter-bar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:14px}.filter-bar .admin-field{min-width:210px}.monitor-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.class-recap{border:1px solid #dce6ef;border-radius:13px;margin:0 0 15px;overflow:hidden}.class-recap-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 14px;background:#f7faff}.class-recap-head h3{font:800 14px var(--heading);margin:0;color:#123654}.class-recap-head p{margin:3px 0 0;color:#6b8297;font-size:11px}.progress-bar{height:7px;width:115px;background:#e5edf4;border-radius:99px;overflow:hidden}.progress-bar b{height:100%;display:block;background:#1f6feb;border-radius:99px}.danger-zone{border:1px solid #f4c8c8;background:#fff9f9}.danger-zone h2 i{color:#c62828}.admin-modal{display:none;position:fixed;z-index:6000;inset:0;padding:18px;background:rgba(9,29,50,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}.admin-modal.show{display:flex}.admin-modal-card{width:min(100%,720px);max-height:92dvh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.25)}.admin-modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.admin-modal-head h2{font:800 18px var(--heading);margin:0;color:#102a43}.close-modal{border:0;background:#f1f5f9;color:#647b90;width:33px;height:33px;border-radius:8px;font-size:18px}.toast{position:fixed;right:18px;bottom:18px;z-index:9000;max-width:min(390px,calc(100% - 36px));padding:12px 15px;border-radius:11px;color:#fff;font-size:13px;font-weight:700;box-shadow:0 12px 30px rgba(15,35,55,.24);animation:toast-in .25s ease}.toast.success{background:#15803d}.toast.error{background:#c62828}.toast.info{background:#1f6feb}@keyframes toast-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    .admin-panel-copyright{padding:18px clamp(16px,3vw,38px) 24px;text-align:center;color:#71879c;font-size:11px;font-weight:600;border-top:1px solid #dce5ef;background:#f7fafc}.admin-card-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.essay-question,.essay-answer,.essay-rubric{min-width:220px;max-width:360px;white-space:pre-wrap;word-break:break-word}.essay-answer{padding:9px;border-radius:8px;background:#f7fbff;border-left:3px solid #1f6feb}.essay-rubric{margin-top:7px;color:#6c5a19;background:#fff9e8;padding:7px;border-radius:7px}.essay-score{width:84px!important;min-width:84px;padding:8px!important}
+    .branding-editor{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:center}.branding-preview-wrap{text-align:center}.branding-preview-frame{width:170px;height:170px;margin:0 auto 10px;border-radius:50%;padding:8px;background:#fff;border:1px solid #d8e4ef;box-shadow:0 8px 24px rgba(19,54,84,.1);overflow:hidden}.branding-preview-frame img{display:block;width:100%;height:100%;object-fit:contain;border-radius:50%}.branding-status{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:99px;padding:5px 9px;background:#edf5ff;color:#235d9f;font-size:10px;font-weight:800}.branding-status.custom{background:#e8f9ee;color:#15803d}.branding-controls .file-input{margin-top:7px}.branding-controls p{margin:8px 0 13px;color:#687f95;font-size:12px;line-height:1.55}.branding-actions{display:flex;gap:9px;flex-wrap:wrap}.branding-message{min-height:20px;margin-top:10px;font-size:12px;font-weight:700;color:#557089}.branding-message.error{color:#b42318}.branding-message.success{color:#15803d}
+    @media(max-width:900px){.summary-grid{grid-template-columns:repeat(2,1fr)}.monitor-grid{grid-template-columns:1fr}.admin-main{padding:17px 14px 38px}}@media(max-width:620px){.admin-topbar{padding:11px 14px}.admin-brand h1{font-size:14px}.admin-brand p{display:none}.admin-user-chip{display:none}.summary-grid{gap:9px}.summary-card{padding:11px}.summary-icon{width:34px;height:34px}.summary-card strong{font-size:19px}.admin-tabs{margin-left:-1px;margin-right:-1px}.admin-card{padding:16px 13px;border-radius:13px}.admin-form-grid{grid-template-columns:1fr}.admin-form-grid .span-2{grid-column:auto}.upload-row{grid-template-columns:1fr}.admin-card-head{flex-direction:column}.admin-card-head>.admin-secondary{width:100%}.admin-card-head>.admin-card-actions{width:100%;justify-content:stretch}.admin-card-head>.admin-card-actions button{flex:1}.filter-bar .admin-field{width:100%}.filter-bar .admin-field .admin-input{width:100%}.admin-modal-card{padding:17px 14px}.inline-row{align-items:stretch}.inline-row .admin-primary{width:100%}.branding-editor{grid-template-columns:1fr}.branding-preview-frame{width:145px;height:145px}.branding-actions button{width:100%}}
+      /* ============ REVISI v4: SIDEBAR PROFESIONAL ============ */
+    .admin-shell.show{display:block}
+    .admin-layout{display:grid;grid-template-columns:262px minmax(0,1fr);min-height:100dvh}
+    .admin-sidebar{position:sticky;top:0;height:100dvh;display:flex;flex-direction:column;background:linear-gradient(180deg,#102a43 0%,#0b1f36 100%);color:#cddcea;border-right:1px solid #0a1a2d;z-index:200}
+    .sidebar-brand{display:flex;align-items:center;gap:11px;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-brand .admin-brand-icon{width:40px;height:40px;border-radius:11px;background:#fff;flex:0 0 auto;overflow:hidden;display:grid;place-items:center}
+    .sidebar-brand .admin-brand-icon img{width:100%;height:100%;object-fit:contain}
+    .sidebar-brand h1{margin:0;font:800 13.5px var(--heading);color:#fff;line-height:1.25}
+    .sidebar-brand p{margin:3px 0 0;font-size:10px;font-weight:700;color:#7fa5cb;letter-spacing:.3px}
+    .sidebar-role{margin:14px 14px 6px;padding:11px 12px;border-radius:11px;background:rgba(31,111,235,.16);border:1px solid rgba(90,160,245,.28)}
+    .sidebar-role small{display:block;font-size:9.5px;font-weight:800;letter-spacing:.5px;color:#8fb9e8;text-transform:uppercase}
+    .sidebar-role strong{display:block;margin-top:3px;font-size:13px;color:#fff;font-weight:800}
+    .sidebar-role span{display:inline-block;margin-top:5px;padding:3px 8px;border-radius:99px;font-size:9.5px;font-weight:800;background:#1f6feb;color:#fff}
+    .sidebar-role span.guru{background:#0f7355}
+    .sidebar-nav{flex:1;overflow-y:auto;padding:10px 10px 16px;display:flex;flex-direction:column;gap:3px}
+    .sidebar-section{margin:13px 8px 5px;font-size:9.5px;font-weight:800;letter-spacing:.7px;color:#597a9c;text-transform:uppercase}
+    .sidebar-link{display:flex;align-items:center;gap:11px;width:100%;border:0;background:transparent;color:#b4c8dc;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:700;text-align:left;transition:background .16s,color .16s;position:relative}
+    .sidebar-link i{width:17px;text-align:center;font-size:13px;color:#7ea5cd;transition:color .16s}
+    .sidebar-link:hover{background:rgba(255,255,255,.07);color:#fff}
+    .sidebar-link:hover i{color:#8fc0f5}
+    .sidebar-link.active{background:linear-gradient(90deg,#1f6feb,#1b5fcc);color:#fff;box-shadow:0 5px 14px rgba(31,111,235,.32)}
+    .sidebar-link.active i{color:#fff}
+    .sidebar-link .link-badge{margin-left:auto;min-width:20px;padding:2px 6px;border-radius:99px;background:#c62828;color:#fff;font-size:9.5px;font-weight:800;text-align:center}
+    .sidebar-link.admin-only:after{content:'ADMIN';margin-left:auto;font-size:8px;font-weight:800;color:#5c7f9f;letter-spacing:.4px}
+    .sidebar-link.active.admin-only:after{color:#cfe3fb}
+    .sidebar-footer{padding:12px 14px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:9.5px;color:#5e7d9c;line-height:1.5}
+    .sidebar-logout{width:100%;margin-bottom:9px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#c8d8ea;border-radius:9px;min-height:37px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px;transition:none;animation:none}
+    .sidebar-logout:hover,.sidebar-logout:focus-visible{background:#c62828;color:#fff;border-color:#c62828;transition:none;animation:none;transform:none;box-shadow:none}
+    .sidebar-logout:active{background:#a81f1f;color:#fff;border-color:#a81f1f;transform:none}
+    .admin-content{min-width:0;display:flex;flex-direction:column;background:#f3f7fb}
+    .admin-topbar{position:sticky;top:0;z-index:150}
+    .topbar-title h2{margin:0;font:800 17px var(--heading);color:#102a43}
+    .topbar-title p{margin:3px 0 0;font-size:11.5px;color:#6b8298}
+    .sidebar-toggle{display:none;border:1px solid #d7e2ed;background:#fff;color:#40617d;border-radius:9px;width:38px;height:38px;font-size:16px}
+    .notif-button{position:relative;border:1px solid #d7e2ed;background:#fff;color:#40617d;border-radius:9px;width:38px;height:38px;font-size:15px}
+    .notif-button:hover{border-color:#8ebcf2;color:#1f6feb}
+    .notif-dot{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:99px;background:#c62828;color:#fff;font-size:9.5px;font-weight:800;display:none;align-items:center;justify-content:center}
+    .notif-dot.show{display:flex}
+    .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(9,29,50,.5);z-index:190}
+    .sidebar-backdrop.show{display:block}
+    .admin-pane-title{margin:0 0 4px;font:800 20px var(--heading);color:#102a43}
+    .admin-pane-sub{margin:0 0 18px;font-size:12.5px;color:#6b8298;line-height:1.55}
+    .role-locked{display:none!important}
+
+    /* ============================================================
+     * REVISI 3.4b - PEMILIH TEMA YANG TERLIHAT
+     * Sebelumnya hanya ada <select> kosong sehingga tidak ada yang
+     * tampak di layar. Sekarang 5 tema ditampilkan sebagai kartu
+     * warna yang bisa diklik; <select> tetap ada sebagai cadangan
+     * bila JavaScript gagal dimuat.
+     * ============================================================ */
+    .tema-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:11px;margin:4px 0 14px}
+    .tema-chip{position:relative;display:flex;align-items:center;gap:11px;padding:11px 12px;border:2px solid #dce5ef;
+      border-radius:13px;background:#fff;cursor:pointer;text-align:left;transition:border-color .15s ease,box-shadow .15s ease,transform .12s ease}
+    .tema-chip:hover{border-color:#8ebcf2;transform:translateY(-1px);box-shadow:0 8px 18px rgba(32,61,88,.10)}
+    .tema-chip.aktif{border-color:var(--tema-warna,#1f6feb);box-shadow:0 0 0 3px color-mix(in srgb,var(--tema-warna,#1f6feb) 18%,transparent)}
+    .tema-chip .tema-bulat{width:34px;height:34px;border-radius:50%;flex:0 0 34px;
+      background:linear-gradient(135deg,var(--tema-warna,#1f6feb),var(--tema-gelap,#0b1f36));box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
+    .tema-chip .tema-teks{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .tema-chip .tema-nama{font:800 12.5px var(--heading);color:#102a43;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tema-chip .tema-status{font-size:10.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#8398ad}
+    .tema-chip.aktif .tema-status{color:var(--tema-warna,#1f6feb)}
+    .tema-chip .tema-centang{position:absolute;top:7px;right:9px;font-size:12px;color:var(--tema-warna,#1f6feb);opacity:0}
+    .tema-chip.aktif .tema-centang{opacity:1}
+
+    /* Media uploader kelola soal */
+    .media-box{border:1px solid #dbe6f0;border-radius:13px;padding:14px;background:#fbfdff;margin-top:6px}
+    .media-box-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+    .media-box-head h4{margin:0;font:800 13px var(--heading);color:#163958;display:flex;align-items:center;gap:7px}
+    .media-box-head h4 i{color:#1f6feb}
+    .media-tabs{display:flex;gap:5px;background:#eaf1f8;padding:3px;border-radius:9px}
+    .media-tab{border:0;background:transparent;color:#5b7590;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:800}
+    .media-tab.active{background:#fff;color:#1f6feb;box-shadow:0 2px 6px rgba(32,61,88,.1)}
+    .media-panel{display:none}
+    .media-panel.show{display:block}
+    .media-preview{display:none;margin-top:11px;border:1px solid #d7e3ee;border-radius:11px;background:#fff;padding:11px;text-align:center}
+    .media-preview.show{display:block}
+    .media-preview img{max-width:100%;max-height:220px;border-radius:8px}
+    .media-preview video,.media-preview iframe{width:100%;max-width:460px;aspect-ratio:16/9;border:0;border-radius:8px;background:#000}
+    .media-preview .media-meta{display:block;margin-top:8px;font-size:11px;color:#6b8298;word-break:break-all}
+    .media-status{margin-top:9px;font-size:11.5px;font-weight:700;display:none;padding:9px 11px;border-radius:9px;line-height:1.5}
+    .media-status.show{display:block}
+    .media-status.ok{background:#e8f9ee;color:#15803d}
+    .media-status.err{background:#fff0f0;color:#b42318}
+    .media-status.info{background:#eaf3ff;color:#1d62b5}
+    .upload-progress{display:none;margin-top:9px;height:8px;background:#e5edf4;border-radius:99px;overflow:hidden}
+    .upload-progress.show{display:block}
+    .upload-progress b{display:block;height:100%;width:0;background:linear-gradient(90deg,#1f6feb,#22c55e);transition:width .2s}
+    .media-hint{margin:8px 0 0;font-size:11px;color:#7d91a6;line-height:1.5}
+
+    /* Notifikasi */
+    .notif-list{display:flex;flex-direction:column;gap:9px;max-height:60vh;overflow:auto}
+    .notif-item{display:flex;gap:11px;padding:12px 13px;border:1px solid #e2eaf2;border-radius:11px;background:#fff}.notif-item .notif-body{flex:1;min-width:0}.notif-actions{display:flex;align-items:flex-start}.notif-actions .mini-button{padding:5px 8px}
+    .notif-item.unread{background:#f5faff;border-color:#bcd8fb}
+    .notif-icon{width:34px;height:34px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;background:#eaf3ff;color:#1f6feb;font-size:13px}
+    .notif-item.warn .notif-icon{background:#fff5e6;color:#b45309}
+    .notif-item.danger .notif-icon{background:#fff0f0;color:#c62828}
+    .notif-body strong{display:block;font-size:13px;color:#163958;font-weight:800}
+    .notif-body p{margin:4px 0 0;font-size:12px;color:#5d768e;line-height:1.5}
+    .notif-body time{display:block;margin-top:5px;font-size:10.5px;color:#8ba0b4;font-weight:700}
+    .notif-cat{display:inline-block;margin-left:7px;padding:2px 7px;border-radius:99px;background:#eef3f8;color:#5b7590;font-size:9px;font-weight:800}
+
+    /* Rombel dan peserta */
+    .rombel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px;margin-bottom:16px}
+    .rombel-card{border:1px solid #dce6ef;border-radius:12px;padding:14px;background:#fff}
+    .rombel-card h4{margin:0;font:800 15px var(--heading);color:#123654}
+    .rombel-card p{margin:5px 0 0;font-size:11.5px;color:#6b8297}
+    .rombel-card .rombel-actions{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+    .tingkat-pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:800;background:#eaf3ff;color:#1d62b5}
+    .token-yes{color:#15803d;font-weight:800}
+    .token-no{color:#b45309;font-weight:800}
+
+    /* Export */
+    .export-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:13px}
+    .export-card{border:1px solid #dce6ef;border-radius:13px;padding:17px;background:#fff;text-align:center}
+    .export-card i{font-size:30px;margin-bottom:9px}
+    .export-card.excel i{color:#15803d}
+    .export-card.pdf i{color:#c62828}
+    .export-card h4{margin:0 0 5px;font:800 15px var(--heading);color:#163958}
+    .export-card p{margin:0 0 13px;font-size:11.5px;color:#6b8298;line-height:1.5}
+
+    @media(max-width:1050px){
+      .admin-layout{grid-template-columns:1fr}
+      .admin-sidebar{position:fixed;left:0;top:0;width:262px;transform:translateX(-100%);transition:transform .25s ease;z-index:200}
+      .admin-sidebar.open{transform:translateX(0)}
+      .sidebar-toggle{display:grid;place-items:center}
+    }
+
+  
+    /* Sakelar peran pada login panel */
+    .role-switch{display:flex;align-items:flex-start;gap:11px;margin:2px 0 4px;padding:12px 13px;
+      border:1.5px solid #dbe6f0;border-radius:12px;background:#f8fbfe;cursor:pointer;
+      transition:border-color .18s,background .18s;user-select:none}
+    .role-switch:hover{border-color:#9cc6f5;background:#f2f8ff}
+    .role-switch input{position:absolute;opacity:0;width:0;height:0}
+    .role-switch-box{flex:0 0 auto;width:21px;height:21px;margin-top:1px;border-radius:6px;
+      border:1.8px solid #b9cbdd;background:#fff;display:grid;place-items:center;
+      transition:background .18s,border-color .18s}
+    .role-switch-box i{font-size:11px;color:#fff;opacity:0;transform:scale(.6);transition:opacity .16s,transform .16s}
+    .role-switch input:checked ~ .role-switch-box{background:#1f6feb;border-color:#1f6feb}
+    .role-switch input:checked ~ .role-switch-box i{opacity:1;transform:scale(1)}
+    .role-switch input:focus-visible ~ .role-switch-box{box-shadow:0 0 0 3px rgba(31,111,235,.28)}
+    .role-switch-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .role-switch-text strong{font-size:12.5px;font-weight:800;color:#1d3a5c}
+    .role-switch-text small{font-size:11px;color:#7189a0;line-height:1.45}
+      .panel-open-link{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:11px 16px;
+      border-radius:10px;background:#1f6feb;color:#fff;font-size:13px;font-weight:800;
+      text-decoration:none;box-shadow:0 6px 16px rgba(31,111,235,.28)}
+    .panel-open-link:hover{background:#1a5fd0}
+  
+    /* ============ DIALOG TERPUSAT ============ */
+    .app-dialog{position:fixed;inset:0;z-index:1200;display:none;align-items:center;justify-content:center;
+      padding:20px;background:rgba(9,26,45,.55);backdrop-filter:blur(3px)}
+    .app-dialog.show{display:flex;animation:dlgFade .18s ease}
+    @keyframes dlgFade{from{opacity:0}to{opacity:1}}
+    .app-dialog-card{width:100%;max-width:440px;background:#fff;border-radius:16px;padding:26px 24px 20px;
+      text-align:center;box-shadow:0 26px 60px rgba(9,26,45,.32);animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2)}
+    @keyframes dlgPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+    .app-dialog-icon{width:60px;height:60px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;
+      font-size:25px;background:#eaf3ff;color:#1f6feb}
+    .app-dialog-icon.warn{background:#fff6e6;color:#b45309}
+    .app-dialog-icon.danger{background:#ffefef;color:#c62828}
+    .app-dialog-icon.success{background:#e9f9ef;color:#15803d}
+    .app-dialog-card h3{margin:0 0 8px;font:800 18.5px var(--heading);color:#102a43}
+    .app-dialog-card p{margin:0;font-size:13.5px;color:#5b7590;line-height:1.6;word-break:break-word}
+    .app-dialog-field{display:none;margin-top:16px;text-align:left}
+    .app-dialog-field.show{display:block}
+    .app-dialog-field label{display:block;margin-bottom:6px;font-size:12px;font-weight:800;color:#22496e}
+    .app-dialog-field small{display:block;margin-top:6px;font-size:11px;color:#7d93a8;line-height:1.5}
+    .app-dialog-actions{display:flex;gap:9px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+    .app-dialog-actions button{min-width:132px;justify-content:center}
+    .app-dialog-actions .admin-danger{min-width:132px}
+    @media(max-width:480px){
+      .app-dialog-actions{flex-direction:column-reverse}
+      .app-dialog-actions button{width:100%}
+    }
+    /* ---- v4.9: kotak hasil dengan rincian ---- */
+    .app-dialog-card .dialog-text{display:block;font-size:13.5px;color:#5b7590;line-height:1.6}
+    .app-dialog-card .dialog-list{list-style:none;margin:15px 0 0;padding:0;text-align:left;
+      border:1px solid #e3ebf3;border-radius:11px;overflow:hidden;background:#f9fbfd}
+    .app-dialog-card .dialog-list li{display:flex;justify-content:space-between;align-items:baseline;
+      gap:12px;padding:9px 13px;font-size:12.5px;color:#42607d;border-bottom:1px solid #e9eff5}
+    .app-dialog-card .dialog-list li:last-child{border-bottom:0}
+    .app-dialog-card .dialog-list li span{color:#6b8299}
+    .app-dialog-card .dialog-list li b{color:#123a63;font-weight:800;text-align:right;word-break:break-word}
+    .app-dialog-icon.info{background:#eaf3ff;color:#1f6feb}
+    /* Penanda hasil pencarian kosong di dalam tabel. */
+    .filter-empty{margin:12px 0 0;padding:13px 15px;border-radius:11px;background:#fff8ec;
+      border:1px solid #f3ddb4;color:#8a5a12;font-size:12.5px;font-weight:700;
+      display:flex;align-items:center;gap:9px}
+    .filter-empty i{font-size:15px;color:#c98a1e}
+    .filter-empty[hidden]{display:none}
+  </style>
+  <style>
+    /* REVISI 6: aksen tema profesional pada panel (warna utama mengikuti
+       tema yang dipilih admin). */
+    html[data-theme="emerald"] .admin-brand-icon,html[data-theme="emerald"] .admin-primary{background:linear-gradient(135deg,#0e9f6e,#0a7d56)}
+    html[data-theme="emerald"] .admin-tab.active{background:#0e9f6e;border-color:#0e9f6e;box-shadow:0 5px 12px rgba(14,159,110,.22)}
+    html[data-theme="emerald"] .admin-tab:hover{border-color:#0e9f6e;color:#0e9f6e}
+    html[data-theme="emerald"] .summary-icon{background:#e4f6ee;color:#0e9f6e}
+    html[data-theme="emerald"] .admin-card h2 i{color:#0e9f6e}
+    html[data-theme="royal"] .admin-brand-icon,html[data-theme="royal"] .admin-primary{background:linear-gradient(135deg,#6d28d9,#5b21b6)}
+    html[data-theme="royal"] .admin-tab.active{background:#6d28d9;border-color:#6d28d9;box-shadow:0 5px 12px rgba(109,40,217,.22)}
+    html[data-theme="royal"] .admin-tab:hover{border-color:#6d28d9;color:#6d28d9}
+    html[data-theme="royal"] .summary-icon{background:#f0e9fd;color:#6d28d9}
+    html[data-theme="royal"] .admin-card h2 i{color:#6d28d9}
+    html[data-theme="ocean"] .admin-brand-icon,html[data-theme="ocean"] .admin-primary{background:linear-gradient(135deg,#0d9488,#0f766e)}
+    html[data-theme="ocean"] .admin-tab.active{background:#0d9488;border-color:#0d9488;box-shadow:0 5px 12px rgba(13,148,136,.22)}
+    html[data-theme="ocean"] .admin-tab:hover{border-color:#0d9488;color:#0d9488}
+    html[data-theme="ocean"] .summary-icon{background:#e0f5f2;color:#0d9488}
+    html[data-theme="ocean"] .admin-card h2 i{color:#0d9488}
+    html[data-theme="sunset"] .admin-brand-icon,html[data-theme="sunset"] .admin-primary{background:linear-gradient(135deg,#ea580c,#c2410c)}
+    html[data-theme="sunset"] .admin-tab.active{background:#ea580c;border-color:#ea580c;box-shadow:0 5px 12px rgba(234,88,12,.22)}
+    html[data-theme="sunset"] .admin-tab:hover{border-color:#ea580c;color:#ea580c}
+    html[data-theme="sunset"] .summary-icon{background:#ffedd8;color:#ea580c}
+    html[data-theme="sunset"] .admin-card h2 i{color:#ea580c}
+  </style>
+</head>
+<body class="admin-body">
+
+  <!-- LOGIN PANEL (admin & guru mapel, satu tampilan) -->
+  <section id="adminLoginPage" class="admin-login-page login-background" style="background:<?!= getLoginBackgroundCss_(); ?>">
+    <div class="brand-orb orb-one"></div><div class="brand-orb orb-two"></div>
+    <main class="login-card admin-login-card">
+      <div class="login-brand">
+        <div class="school-mark brand-logo"><img src="<?!= getAppLogoDataUri_(); ?>" alt="Logo sekolah"></div>
+        <p class="eyebrow eyebrow-panel">KELOLA UJIAN</p>
+        <p class="eyebrow eyebrow-sub">SISTEM INFORMASI</p>
+        <h1>ASESMEN DIGITALISASI ONLINE</h1>
+        <p class="school-name">SMP LABSCHOOL UNTAD PALU</p>
+        <div class="brand-rule"></div>
+        <p class="login-intro">Masuk dengan akun proktor/admin atau akun guru mapel Anda.</p>
+      </div>
+      <form id="adminLoginForm" autocomplete="off" novalidate>
+        <div class="field-group"><label for="adminUsername"><i class="fa-regular fa-user"></i> Username</label><input id="adminUsername" type="text" autocomplete="off" placeholder="Username admin atau guru mapel" required></div>
+        <div class="field-group"><label for="adminPassword"><i class="fa-solid fa-lock"></i> Password</label><div class="password-field"><input id="adminPassword" type="password" autocomplete="off" placeholder="Password akun" required><button id="toggleAdminPassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button></div></div>
+        <label class="role-switch" for="modePeserta">
+          <input id="modePeserta" type="checkbox">
+          <span class="role-switch-box"><i class="fa-solid fa-check"></i></span>
+          <span class="role-switch-text">
+            <strong>Peserta ujian</strong>
+            <small>Centang untuk pindah ke halaman login peserta.</small>
+          </span>
+        </label>
+        <div id="adminLoginMessage" class="form-message" role="alert"></div>
+        <button id="adminLoginButton" class="primary-button login-button" type="submit"><span>Masuk Panel</span><i class="fa-solid fa-arrow-right"></i></button>
+      </form>
+      <footer class="login-copyright">Copyright © 2026 ICT-ROBOTECH. All rights reserved</footer>
+    </main>
+  </section>
+
+  <!-- PANEL -->
+  <section id="adminShell" class="admin-shell">
+    <div class="admin-layout">
+
+      <!-- SIDEBAR KIRI -->
+      <aside id="adminSidebar" class="admin-sidebar" aria-label="Menu utama panel">
+        <div class="sidebar-brand">
+          <div class="admin-brand-icon brand-logo"><img src="<?!= getAppLogoDataUri_(); ?>" alt="Logo sekolah"></div>
+          <div><h1>SIADO V3.3</h1><p>SMP LABSCHOOL UNTAD</p></div>
+        </div>
+
+        <div class="sidebar-role">
+          <small>Masuk sebagai</small>
+          <strong id="sidebarUserName">Admin</strong>
+          <span id="sidebarUserRole">PROKTOR / ADMIN</span>
+        </div>
+
+        <nav class="sidebar-nav">
+          <p class="sidebar-section">Akademik</p>
+          <button class="sidebar-link active" data-tab="soal" type="button"><i class="fa-solid fa-file-pen"></i> Kelola Soal</button>
+          <button id="menuKartuSoal" class="sidebar-link" data-tab="kartusoal" data-jenis-ujian="true" type="button"><i class="fa-solid fa-address-card"></i> Kartu Soal</button>
+          <button class="sidebar-link" data-tab="monitor" type="button"><i class="fa-solid fa-tower-broadcast"></i> Monitor Peserta</button>
+          <button class="sidebar-link" data-tab="pelanggaran" type="button"><i class="fa-solid fa-shield-halved"></i> Pelanggaran</button>
+
+          <p class="sidebar-section">Penilaian</p>
+          <button class="sidebar-link" data-tab="uraian" type="button"><i class="fa-solid fa-pen-ruler"></i> Nilai Uraian</button>
+          <button class="sidebar-link" data-tab="hasil" type="button"><i class="fa-solid fa-square-poll-vertical"></i> Hasil Ujian</button>
+          <button class="sidebar-link" data-tab="rekap" type="button"><i class="fa-solid fa-chart-column"></i> Rekap Kelas</button>
+          <button class="sidebar-link" data-tab="export" type="button"><i class="fa-solid fa-file-export"></i> Export Laporan</button>
+
+          <p class="sidebar-section">Manajemen</p>
+          <button class="sidebar-link" data-tab="peserta" type="button"><i class="fa-solid fa-user-graduate"></i> Data Peserta</button>
+          <button class="sidebar-link admin-only" data-tab="pengguna" data-admin="true" type="button"><i class="fa-solid fa-users-gear"></i> Akun Guru</button>
+          <button class="sidebar-link" data-tab="notifikasi" type="button"><i class="fa-solid fa-bell"></i> Notifikasi <span id="notifSidebarBadge" class="link-badge" style="display:none">0</span></button>
+          <button class="sidebar-link" data-tab="pengaturan" type="button"><i class="fa-solid fa-gear"></i> Pengaturan</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button id="adminLogoutButton" class="sidebar-logout" type="button"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+          Copyright © 2026 ICT-ROBOTECH.<br>All rights reserved.
+        </div>
+      </aside>
+      <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+      <!-- KONTEN -->
+      <div class="admin-content">
+        <header class="admin-topbar">
+          <div style="display:flex;align-items:center;gap:12px">
+            <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Buka menu"><i class="fa-solid fa-bars"></i></button>
+            <div class="topbar-title"><h2 id="topbarTitle">Kelola Soal</h2><p id="topbarSubtitle">Bank soal dan media stimulus ujian</p></div>
+          </div>
+          <div class="admin-top-actions">
+            <button id="notifButton" class="notif-button" type="button" aria-label="Notifikasi"><i class="fa-regular fa-bell"></i><span id="notifDot" class="notif-dot">0</span></button>
+            <span id="adminUserDisplay" class="admin-user-chip">Admin</span>
+          </div>
+        </header>
+
+        <main class="admin-main">
+          <section class="summary-grid" aria-label="Ringkasan aplikasi">
+            <div class="summary-card"><div class="summary-icon"><i class="fa-solid fa-file-circle-check"></i></div><div><small>Soal Aktif</small><strong id="sumSoal">0</strong></div></div>
+            <div class="summary-card"><div class="summary-icon"><i class="fa-solid fa-user-clock"></i></div><div><small>Peserta Aktif</small><strong id="sumAktif">0</strong></div></div>
+            <div class="summary-card"><div class="summary-icon"><i class="fa-solid fa-clipboard-check"></i></div><div><small>Ujian Selesai</small><strong id="sumSelesai">0</strong></div></div>
+            <div class="summary-card"><div class="summary-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div><small>Pelanggaran</small><strong id="sumPelanggaran">0</strong></div></div>
+          </section>
+
+          <!-- ================= KELOLA SOAL ================= -->
+          <section id="pane-soal" class="admin-pane show">
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div><h2><i class="fa-solid fa-circle-plus"></i> Tambah Soal Baru</h2><p>Soal yang disimpan dapat diedit realtime. Peserta aktif menerima pembaruan pada sinkronisasi berikutnya.</p></div>
+              </div>
+              <form id="addQuestionForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="fTipe">Tipe soal</label><select id="fTipe" class="admin-input"><option value="PG">PG biasa</option><option value="PGK">PGK</option><option value="PGK_MCMA">PGK MCMA</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian</option><option value="URAIAN">Uraian</option></select></div>
+                  <div class="admin-field"><label for="fPoin">Poin</label><input id="fPoin" class="admin-input" type="number" min="1" max="1000" value="10"></div>
+                  <div class="admin-field"><label for="fTingkat">Kelas sasaran soal</label><select id="fTingkat" class="admin-input"><option value="SEMUA">Semua kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option></select><small>Bank soal per kelas: soal yang dikhususkan untuk kelas VII hanya dikerjakan kelas VII.</small></div>
+                  <div class="admin-field span-2"><label for="fPertanyaan">Pertanyaan</label><textarea id="fPertanyaan" class="admin-input" maxlength="12000" placeholder="Tulis pertanyaan. Gunakan baris baru bila diperlukan." required></textarea></div>
+                  <div class="admin-field span-2"><label for="fOpsi">Opsi / Pernyataan</label><textarea id="fOpsi" class="admin-input" placeholder="Satu opsi atau pernyataan pada setiap baris."></textarea><small id="fFormatHelp" class="form-help"></small></div>
+                  <div class="admin-field span-2"><label for="fKunci">Kunci jawaban / rubrik</label><textarea id="fKunci" class="admin-input" placeholder="Isi berdasarkan petunjuk format di atas."></textarea></div>
+                  <div class="admin-field span-2"><label for="fDeskripsiStimulus">Deskripsi stimulus (opsional)</label><textarea id="fDeskripsiStimulus" class="admin-input" rows="2" maxlength="1000" placeholder="Contoh: Perhatikan gambar berikut dengan saksama, kemudian jawablah pertanyaan di bawahnya."></textarea><small>Tampil di atas gambar/video pada soal ini saja. Hanya muncul bila soal memiliki gambar atau video.</small></div>
+                </div>
+
+                <!-- MEDIA GAMBAR -->
+                <div class="media-box" data-media-box="f" data-media-kind="gambar">
+                  <div class="media-box-head">
+                    <h4><i class="fa-regular fa-image"></i> Stimulus Gambar (opsional)</h4>
+                    <div class="media-tabs">
+                      <button class="media-tab active" data-media-tab="komputer" type="button">Komputer</button>
+                      <button class="media-tab" data-media-tab="drive" type="button">Google Drive</button>
+                      <button class="media-tab" data-media-tab="url" type="button">URL</button>
+                    </div>
+                  </div>
+                  <div class="media-panel show" data-media-panel="komputer">
+                    <input class="file-input" type="file" data-media-file="true" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp">
+                    <p class="media-hint">Gambar tersimpan rapi di Google Drive pada folder <b>APLIKASI WEB &rsaquo; OUTPUT &rsaquo; GAMBAR</b> dan otomatis dibuka aksesnya. Tidak perlu menempel link.</p>
+                  </div>
+                  <div class="media-panel" data-media-panel="drive">
+                    <input class="admin-input" type="text" data-media-drive="true" placeholder="Tempel link Google Drive gambar (share link)">
+                    <p class="media-hint">Format apa pun diterima: /file/d/..., ?id=..., atau link berbagi. Sistem mengubahnya menjadi link tampil otomatis.</p>
+                  </div>
+                  <div class="media-panel" data-media-panel="url">
+                    <input class="admin-input" type="url" data-media-url="true" placeholder="https://contoh.com/gambar.jpg">
+                    <p class="media-hint">Wajib HTTPS agar tidak diblokir browser.</p>
+                  </div>
+                  <div class="admin-field" style="margin-top:11px"><label for="fImageAlt">Keterangan gambar</label><input id="fImageAlt" class="admin-input" maxlength="300" type="text" placeholder="Contoh: Diagram siklus air"></div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+                    <button class="admin-secondary" type="button" data-media-action="proses"><i class="fa-solid fa-cloud-arrow-up"></i> Proses &amp; Pratinjau</button>
+                    <button class="admin-secondary" type="button" data-media-action="hapus"><i class="fa-solid fa-eraser"></i> Kosongkan</button>
+                  </div>
+                  <div class="upload-progress" data-media-progress="true"><b></b></div>
+                  <div class="media-status" data-media-status="true"></div>
+                  <div class="media-preview" data-media-preview="true"></div>
+                  <input type="hidden" id="fImageLink" data-media-value="true">
+                </div>
+
+                <!-- MEDIA VIDEO -->
+                <div class="media-box" data-media-box="fv" data-media-kind="video">
+                  <div class="media-box-head">
+                    <h4><i class="fa-solid fa-film"></i> Stimulus Video (opsional)</h4>
+                    <div class="media-tabs">
+                      <button class="media-tab active" data-media-tab="komputer" type="button">Komputer</button>
+                      <button class="media-tab" data-media-tab="drive" type="button">Google Drive</button>
+                      <button class="media-tab" data-media-tab="url" type="button">URL</button>
+                    </div>
+                  </div>
+                  <div class="media-panel show" data-media-panel="komputer">
+                    <input class="file-input" type="file" data-media-file="true" accept="video/mp4,video/webm,video/ogg,video/quicktime">
+                    <p class="media-hint">Maksimal <b>1 GB</b>, disarankan HD landscape 16:9 (1280×720 atau 1920×1080). Video tersimpan di folder <b>APLIKASI WEB &rsaquo; OUTPUT &rsaquo; VIDEO</b>, diunggah langsung ke Drive dengan progres di bawah.</p>
+                  </div>
+                  <div class="media-panel" data-media-panel="drive">
+                    <input class="admin-input" type="text" data-media-drive="true" placeholder="Tempel link Google Drive video">
+                    <p class="media-hint">Video Drive diputar memakai pemutar Drive resmi agar lancar dan tidak memakan kuota aplikasi.</p>
+                  </div>
+                  <div class="media-panel" data-media-panel="url">
+                    <input class="admin-input" type="url" data-media-url="true" placeholder="https://contoh.com/video.mp4 atau link YouTube">
+                    <p class="media-hint">Mendukung file MP4/WEBM langsung maupun YouTube.</p>
+                  </div>
+                  <div class="admin-field" style="margin-top:11px"><label for="fVideoAlt">Keterangan video</label><input id="fVideoAlt" class="admin-input" maxlength="300" type="text" placeholder="Contoh: Simulasi peredaran darah"></div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+                    <button class="admin-secondary" type="button" data-media-action="proses"><i class="fa-solid fa-cloud-arrow-up"></i> Proses &amp; Pratinjau</button>
+                    <button class="admin-secondary" type="button" data-media-action="hapus"><i class="fa-solid fa-eraser"></i> Kosongkan</button>
+                  </div>
+                  <div class="upload-progress" data-media-progress="true"><b></b></div>
+                  <div class="media-status" data-media-status="true"></div>
+                  <div class="media-preview" data-media-preview="true"></div>
+                  <input type="hidden" id="fVideoLink" data-media-value="true">
+                </div>
+
+                <div class="admin-field" style="margin-top:15px"><label>Status soal</label><label class="small-check"><input id="fAktif" type="checkbox" checked> Aktifkan soal untuk peserta baru</label></div>
+                <p class="card-subtext">Catatan format: PG memilih satu jawaban; PGK menilai setiap pernyataan Benar/Salah; PGK MCMA dapat memiliki lebih dari satu jawaban benar.</p>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Soal</button>
+              </form>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div><h2><i class="fa-solid fa-file-import"></i> Import Soal</h2><p>Import massal dari file CSV atau Excel (.xlsx). Kolom wajib: tipe, pertanyaan, kunci_jawaban. Kolom opsional: opsi, poin, aktif, mapel, stimulus_gambar, stimulus_video.</p></div>
+                <button id="downloadTemplateSoal" class="admin-secondary" type="button"><i class="fa-solid fa-download"></i> Unduh Template CSV</button>
+              </div>
+              <div class="upload-row">
+                <div class="admin-field"><label for="importSoalFile">Pilih file soal</label><input id="importSoalFile" class="file-input" type="file" accept=".csv,.xlsx,.xls,text/csv"></div>
+                <button id="importSoalButton" class="admin-primary" type="button"><i class="fa-solid fa-file-arrow-up"></i> Import Sekarang</button>
+              </div>
+              <div id="importSoalResult" class="media-status"></div>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div><h2><i class="fa-solid fa-list-check"></i> Bank Soal</h2><p>Gunakan tombol edit untuk memperbaiki soal secara realtime, atau ubah status seluruh soal sekaligus.</p></div>
+                <div class="admin-card-actions">
+                  <button id="deactivateAllQuestions" class="admin-danger" type="button"><i class="fa-solid fa-toggle-off"></i> Nonaktifkan Semua Soal</button>
+                  <button id="activateAllQuestions" class="admin-secondary" type="button"><i class="fa-solid fa-toggle-on"></i> Aktifkan Semua</button>
+                  <button id="refreshSoal" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                </div>
+              </div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariSoal">Cari soal</label><input id="cariSoal" class="admin-input" type="search" placeholder="Ketik kata pada pertanyaan, kunci, atau mapel"></div>
+                <div class="admin-field"><label for="filterSoalTipe">Tipe soal</label><select id="filterSoalTipe" class="admin-input"><option value="">Semua tipe</option><option value="PG">Pilihan Ganda</option><option value="PGK">PG Kompleks (B/S)</option><option value="PGK_MCMA">PG Kompleks (Banyak Jawaban)</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian Singkat</option><option value="URAIAN">Uraian</option></select></div>
+                <div class="admin-field"><label for="filterSoalStatus">Status</label><select id="filterSoalStatus" class="admin-input"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+                <div class="admin-field"><label for="filterSoalTingkat">Kelas sasaran</label><select id="filterSoalTingkat" class="admin-input"><option value="">Semua kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option><option value="SEMUA">Semua (SEMUA)</option></select></div>
+              </div>
+              <div id="questionTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat soal...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= KARTU SOAL ================= -->
+          <section id="pane-kartusoal" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div>
+                  <h2><i class="fa-solid fa-address-card"></i> Kartu Soal</h2>
+                  <p>Kisi-kisi setiap butir soal: capaian pembelajaran, kelas, materi/elemen, kompetensi, indikator soal, level kognitif, tipe soal, dan kunci jawaban. Menu ini hanya aktif bila Jenis Ujian pada Pengaturan diatur ke <b>STS</b> atau <b>SAS</b>.</p>
+                </div>
+                <button id="refreshKartuSoal" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+              </div>
+              <div id="kartuSoalKonteks" class="form-help" style="margin-bottom:14px">Memuat konteks kartu soal...</div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariKartuSoal">Cari butir soal</label><input id="cariKartuSoal" class="admin-input" type="search" placeholder="Ketik pertanyaan, materi, indikator, atau level kognitif"></div>
+                <div class="admin-field"><label for="filterKartuLengkap">Kelengkapan</label><select id="filterKartuLengkap" class="admin-input"><option value="">Semua butir</option><option value="lengkap">Sudah lengkap</option><option value="belum">Belum lengkap</option></select></div>
+              </div>
+              <div id="kartuSoalTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-address-card"></i> Memuat kartu soal...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= MONITOR ================= -->
+          <section id="pane-monitor" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-tower-broadcast"></i> Peserta Aktif dan Realtime</h2><p>Data diperbarui otomatis setiap 15 detik. Admin dapat mendiskualifikasi peserta secara langsung.</p></div><button id="refreshMonitor" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariMonitor">Cari peserta aktif</label><input id="cariMonitor" class="admin-input" type="search" placeholder="Ketik nama, username, atau kelas"></div>
+              </div>
+              <div id="monitorTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-satellite-dish"></i> Memuat peserta aktif...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= PELANGGARAN ================= -->
+          <section id="pane-pelanggaran" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-shield-halved"></i> Log Pelanggaran</h2><p>Jenis pelanggaran, jumlah, tindakan, dan status pengiriman email ditampilkan dari database.</p></div><div class="admin-card-actions"><button id="clearViolationHistory" class="admin-danger admin-only-action" type="button"><i class="fa-solid fa-trash-can"></i> Hapus History</button><button id="refreshPelanggaran" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariPelanggaran">Cari pelanggaran</label><input id="cariPelanggaran" class="admin-input" type="search" placeholder="Ketik nama peserta, kelas, atau jenis pelanggaran"></div>
+              </div>
+              <div id="violationTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-shield"></i> Memuat pelanggaran...</div></div>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div><h2><i class="fa-solid fa-unlock-keyhole"></i> Pemulihan Peserta Terdiskualifikasi</h2><p>Buka kembali akses peserta yang terkena diskualifikasi agar dapat login dan mengikuti ujian lagi.</p></div>
+                <div class="admin-card-actions">
+                  <button id="pulihkanSemuaDq" class="admin-danger admin-only-action" type="button"><i class="fa-solid fa-users-rays"></i> Pulihkan Semua</button>
+                  <button id="resetDataDq" class="admin-danger admin-only-action" type="button"><i class="fa-solid fa-broom"></i> Reset Data</button>
+                  <button id="refreshDiskualifikasi" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                </div>
+              </div>
+              <div class="admin-field span-2" style="margin-bottom:12px">
+                <label for="modePemulihan">Mode pemulihan</label>
+                <select id="modePemulihan" class="admin-input">
+                  <option value="ulang">Ulang dari awal - jawaban lama dihapus, waktu penuh kembali</option>
+                  <option value="lanjut">Lanjutkan sesi - jawaban dan sisa waktu sebelumnya dipertahankan</option>
+                </select>
+                <small>Mode ini dipakai saat menekan tombol Pulihkan pada tabel di bawah.</small>
+              </div>
+              <div id="diskualifikasiTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-user-shield"></i> Memuat data diskualifikasi...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= NILAI URAIAN ================= -->
+          <section id="pane-uraian" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-pen-ruler"></i> Penilaian Manual Jawaban Uraian</h2><p>Nilai jawaban uraian di sini sebelum hasil diexport. Setelah semua uraian dinilai, status Tuntas/Remedial peserta dihitung ulang otomatis.</p></div><div class="admin-card-actions"><button id="saveAllEssayScores" class="admin-primary" type="button"><i class="fa-solid fa-floppy-disk"></i> Simpan Semua Nilai</button><button id="clearEssayHistory" class="admin-danger admin-only-action" type="button"><i class="fa-solid fa-eraser"></i> Hapus History</button><button id="refreshUraian" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+              <div class="filter-bar">
+                <div class="admin-field"><label for="filterUraianKelas">Filter kelas</label><input id="filterUraianKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div>
+                <div class="admin-field" style="flex:1"><label for="cariUraian">Cari peserta</label><input id="cariUraian" class="admin-input" type="search" placeholder="Ketik nama atau username peserta"></div>
+                <label class="small-check"><input id="filterUraianPending" type="checkbox" checked> Hanya yang belum dinilai</label>
+              </div>
+              <div id="essayTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-pen-ruler"></i> Memuat jawaban uraian...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= HASIL ================= -->
+          <section id="pane-hasil" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-square-poll-vertical"></i> Hasil Ujian Peserta</h2><p>Satu baris per peserta lengkap dengan KKM dan status Tuntas/Remedial.</p></div></div>
+              <div class="filter-bar"><div class="admin-field"><label for="filterHasilKelas">Filter kelas</label><input id="filterHasilKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div><div class="admin-field" style="flex:1"><label for="cariHasil">Cari peserta</label><input id="cariHasil" class="admin-input" type="search" placeholder="Ketik nama atau username peserta"></div><button id="refreshHasil" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh Hasil</button></div>
+              <div id="resultTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-chart-line"></i> Memuat hasil ujian...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= REKAP ================= -->
+          <section id="pane-rekap" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-chart-column"></i> Rekap Hasil Per Kelas</h2><p>Reset kelas menghapus sesi, jawaban, hasil, pelanggaran, dan blokir diskualifikasi untuk kelas tersebut. Soal tidak dihapus.</p></div><div class="admin-card-actions"><button id="clearRecapHistory" class="admin-danger admin-only-action" type="button"><i class="fa-solid fa-trash-can"></i> Hapus History</button><button id="refreshRekap" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariRekap">Cari kelas</label><input id="cariRekap" class="admin-input" type="search" placeholder="Ketik nama kelas, contoh: IX A"></div>
+              </div>
+              <div id="recapList"><div class="empty-state"><i class="fa-solid fa-chart-pie"></i> Memuat rekap kelas...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= EXPORT ================= -->
+          <section id="pane-export" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-file-export"></i> Export Laporan Nilai &amp; Pelanggaran</h2><p>Laporan berisi dua lembar: <b>Nilai</b> (benar, salah, skor, KKM, status Tuntas/Remedial) dan <b>Pelanggaran</b> selama ujian. Format sudah dirapikan dan siap dicetak.</p></div></div>
+              <div class="filter-bar">
+                <div class="admin-field"><label for="exportKelas">Filter kelas (kosongkan untuk semua)</label><input id="exportKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div>
+              </div>
+              <div class="export-grid">
+                <div class="export-card excel">
+                  <i class="fa-solid fa-file-excel"></i>
+                  <h4>Microsoft Excel</h4>
+                  <p>Format .xlsx dengan header berwarna, kolom otomatis, dan ringkasan tuntas/remedial.</p>
+                  <button id="exportExcel" class="admin-primary" type="button"><i class="fa-solid fa-download"></i> Download Excel</button>
+                </div>
+                <div class="export-card pdf">
+                  <i class="fa-solid fa-file-pdf"></i>
+                  <h4>Dokumen PDF</h4>
+                  <p>Format A4 landscape, rapi untuk ditandatangani dan diarsipkan sekolah.</p>
+                  <button id="exportPdf" class="admin-primary" type="button"><i class="fa-solid fa-download"></i> Download PDF</button>
+                </div>
+              </div>
+              <div id="exportStatus" class="media-status"></div>
+              <p class="form-help" style="margin-top:14px"><strong>Saran:</strong> nilai seluruh jawaban uraian pada menu <b>Nilai Uraian</b> terlebih dahulu agar kolom status pada laporan tidak berisi "Menunggu Penilaian".</p>
+            </article>
+          </section>
+
+          <!-- ================= DATA PESERTA ================= -->
+          <section id="pane-peserta" class="admin-pane">
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-layer-group"></i> Rombongan Belajar (VII – IX)</h2><p>Setiap rombel memiliki token ujian sendiri. Peserta login memakai <b>username</b> yang didaftarkan dan token rombel sebagai password. <b>Urutan rombel</b> (VII KH Dewantara, Ahmad Dahlan, ... IX Karanjalemba) diatur oleh admin lewat tombol panah pada kartu rombel di bawah — berlaku di Data Peserta, Monitor, Hasil, Nilai Uraian, Pelanggaran, Rekap Kelas, dan Export.</p></div></div>
+              <form id="rombelForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="rNama">Nama rombel</label><input id="rNama" class="admin-input" maxlength="60" placeholder="Contoh: VII A" required></div>
+                  <div class="admin-field"><label for="rWali">Wali kelas (opsional)</label><input id="rWali" class="admin-input" maxlength="120" placeholder="Nama wali kelas"></div>
+                  <div class="admin-field"><label for="rToken">Token ujian rombel</label><div class="password-field"><input id="rToken" class="admin-input" type="text" minlength="6" maxlength="100" placeholder="Minimal 6 karakter, kosongkan bila tidak diubah"><button id="generateToken" class="icon-button" type="button" aria-label="Buat token acak"><i class="fa-solid fa-dice"></i></button></div><small>Bagikan token ini kepada peserta rombel tersebut saat ujian dimulai.</small></div>
+                  <div class="admin-field"><label>Status</label><label class="small-check"><input id="rAktif" type="checkbox" checked> Rombel aktif mengikuti ujian</label></div>
+                </div>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Rombel</button>
+              </form>
+              <div id="rombelList" class="rombel-grid" style="margin-top:18px"></div>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-plus"></i> Tambah Peserta Ujian</h2><p>Username ditentukan langsung oleh <b>admin atau guru mapel</b> (bukan otomatis). Aturan username: huruf kecil, tanpa spasi, tanpa titik; angka dan simbol <b>_</b> / <b>-</b> boleh.</p></div></div>
+              <form id="participantForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="pNama">Nama lengkap peserta</label><input id="pNama" class="admin-input" maxlength="150" placeholder="Contoh: Ahmad Fauzan Ramadhan" required></div>
+                  <div class="admin-field"><label for="pUsername">Username peserta (untuk login)</label><input id="pUsername" class="admin-input" maxlength="60" placeholder="Contoh: ahmadfauzan / ahmad_fauzan" required><small id="pUsernamePreview">Huruf kecil, tanpa spasi, tanpa titik (moh.adit tidak diterima).</small></div>
+                  <div class="admin-field"><label for="pRombel">Rombel</label><select id="pRombel" class="admin-input" required><option value="">Pilih rombel</option></select></div>
+                  <div class="admin-field"><label for="pNis">NIS (opsional)</label><input id="pNis" class="admin-input" maxlength="40" placeholder="Nomor induk siswa"></div>
+                </div>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-user-check"></i> Tambah Peserta</button>
+              </form>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-file-import"></i> Import Data Peserta</h2><p>File CSV/Excel dengan kolom: <b>nama</b>, <b>rombel</b>, <b>username</b> (opsional — bila kosong dibuat dari nama depan), dan <b>nis</b> (opsional).</p></div><button id="downloadTemplatePeserta" class="admin-secondary" type="button"><i class="fa-solid fa-download"></i> Unduh Template CSV</button></div>
+              <div class="upload-row">
+                <div class="admin-field"><label for="importPesertaFile">Pilih file peserta</label><input id="importPesertaFile" class="file-input" type="file" accept=".csv,.xlsx,.xls,text/csv"></div>
+                <button id="importPesertaButton" class="admin-primary" type="button"><i class="fa-solid fa-file-arrow-up"></i> Import Peserta</button>
+              </div>
+              <div id="importPesertaResult" class="media-status"></div>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-graduate"></i> Peserta Rombel</h2><p>Hanya peserta pada daftar ini yang dapat masuk ke ruang ujian.</p></div><div class="admin-card-actions"><div class="admin-field" style="min-width:170px"><label for="filterPesertaRombel">Filter rombel</label><select id="filterPesertaRombel" class="admin-input"><option value="">Semua rombel</option></select></div><button id="refreshPeserta" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariPeserta">Cari peserta</label><input id="cariPeserta" class="admin-input" type="search" placeholder="Ketik nama lengkap, username, atau NIS"></div>
+                <div class="admin-field"><label for="filterPesertaKehadiran">Kehadiran</label><select id="filterPesertaKehadiran" class="admin-input"><option value="">Semua kehadiran</option><option value="HADIR">Hadir</option><option value="SAKIT">Sakit</option><option value="IZIN">Izin</option><option value="ALPA">Alpa</option></select></div>
+              </div>
+              <div id="participantTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-users"></i> Memuat data peserta...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= AKUN GURU (ADMIN ONLY) ================= -->
+          <section id="pane-pengguna" class="admin-pane" data-admin="true">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-plus"></i> Tambah Akun Guru Mapel</h2><p>Guru mapel dapat mengelola soal, menilai, dan mengexport laporan, tetapi <b>tidak dapat</b> mengubah logo aplikasi, kredensial admin, atau mereset aplikasi.</p></div></div>
+              <form id="teacherForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="gNama">Nama guru</label><input id="gNama" class="admin-input" maxlength="120" placeholder="Contoh: Siti Nurhaliza, S.Pd." required></div>
+                  <div class="admin-field"><label for="gUsername">Username</label><input id="gUsername" class="admin-input" maxlength="60" placeholder="Contoh: sitinur" required><small>Huruf kecil tanpa spasi.</small></div>
+                  <div class="admin-field"><label for="gMapel">Mata pelajaran diampu</label><input id="gMapel" class="admin-input" maxlength="150" placeholder="Contoh: IPA Terpadu" required></div>
+                  <div class="admin-field"><label for="gKkm">KKM mata pelajaran</label><input id="gKkm" class="admin-input" type="number" min="0" max="100" value="75" required><small>Menentukan batas Tuntas / Remedial untuk mapel ini.</small></div>
+                  <div class="admin-field span-2"><label for="gPassword">Password akun guru</label><div class="password-field"><input id="gPassword" class="admin-input" type="password" minlength="8" maxlength="300" placeholder="Minimal 8 karakter" required><button id="toggleTeacherPassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button></div></div>
+                </div>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-user-check"></i> Buat Akun Guru</button>
+              </form>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-users-gear"></i> Daftar Akun Guru Mapel</h2><p>Admin dapat mereset password atau menghapus akun guru kapan saja.</p></div><button id="refreshGuru" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div>
+              <div class="filter-bar">
+                <div class="admin-field" style="flex:1"><label for="cariGuru">Cari akun guru</label><input id="cariGuru" class="admin-input" type="search" placeholder="Ketik nama guru, username, atau mata pelajaran"></div>
+              </div>
+              <div id="teacherTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-users"></i> Memuat akun guru...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= NOTIFIKASI ================= -->
+          <section id="pane-notifikasi" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-bell"></i> Pusat Notifikasi</h2><p>Semua informasi aplikasi: login akun, peserta masuk dan selesai, pelanggaran, upload media, import data, perubahan pengaturan, dan export laporan.</p></div><div class="admin-card-actions"><button id="markAllNotif" class="admin-secondary" type="button"><i class="fa-solid fa-check-double"></i> Tandai Dibaca</button><button id="clearNotif" class="admin-danger" type="button"><i class="fa-solid fa-trash-can"></i> Hapus Semua</button><button id="refreshNotif" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+              <div id="notifList" class="notif-list"><div class="empty-state"><i class="fa-regular fa-bell"></i> Memuat notifikasi...</div></div>
+            </article>
+          </section>
+
+          <!-- ================= PENGATURAN ================= -->
+          <section id="pane-pengaturan" class="admin-pane">
+            <article class="admin-card">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-sliders"></i> Pengaturan Ujian <span id="sPemilikBadge" class="badge blue">akun ini</span></h2><p>Durasi dapat diterapkan ke sesi aktif; perubahan menambah atau mengurangi selisih waktu pada sisa waktu peserta.</p></div></div>
+              <form id="settingsForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="sJenisUjian">Jenis ujian</label><select id="sJenisUjian" class="admin-input"><option value="SUMATIF_HARIAN">Sumatif Harian (SH)</option><option value="STS">Sumatif Tengah Semester (STS)</option><option value="SAS">Sumatif Akhir Semester (SAS)</option><option value="UAS">Ujian Akhir Sekolah (UAS)</option></select><small>Menu Kartu Soal aktif untuk STS, SAS, dan UAS.</small></div>
+                  <div class="admin-field"><label for="sTahunAjaran">Tahun ajaran</label><input id="sTahunAjaran" class="admin-input" maxlength="30" placeholder="Contoh: 2026/2027"><small>Diketik manual dan ikut membentuk judul besar ujian.</small></div>
+                  <div class="admin-field"><label for="sSemester">Semester</label><select id="sSemester" class="admin-input"><option value="GANJIL">Ganjil</option><option value="GENAP">Genap</option></select><small>Menentukan kata Ganjil atau Genap pada judul besar ujian.</small></div>
+                  <div class="admin-field"><label for="sMapel">Mata pelajaran yang diujikan</label><input id="sMapel" class="admin-input" maxlength="150" placeholder="Contoh: Matematika"><small>Diisi manual sesuai mapel yang sedang diujikan.</small></div>
+                  <div class="admin-field"><label for="sGuruMapel">Nama guru mapel (tampil ke peserta)</label><input id="sGuruMapel" class="admin-input" maxlength="150" placeholder="Contoh: Sri Wahyuni, S.Pd."><small>Diisi manual. Ditampilkan di bawah nama mata pelajaran pada halaman peserta.</small></div>
+                  <div class="admin-field"><label for="sDurasi">Durasi ujian (menit)</label><input id="sDurasi" class="admin-input" type="number" min="1" max="300" placeholder="Contoh: 90"><small>Diisi manual sesuai lama ujian yang direncanakan.</small></div>
+                  <div class="admin-field"><label for="sKkm">KKM default</label><input id="sKkm" class="admin-input" type="number" min="0" max="100" value="75"><small>Dipakai bila mapel tidak terhubung ke akun guru tertentu.</small></div>
+                  <div class="admin-field"><label for="sEmail">Email untuk melaporkan pelanggaran</label><input id="sEmail" class="admin-input" type="email" maxlength="254" placeholder="Contoh: pengawas@sekolah.sch.id"><small>Setiap pelanggaran peserta dikirim ke alamat ini dan tetap disimpan di database.</small></div>
+                  <div class="admin-field"><label for="sTimerMerah">Timer merah (menit terakhir)</label><input id="sTimerMerah" class="admin-input" type="number" min="1" max="30" value="5"></div>
+                  <div class="admin-field"><label for="sUserPeserta">Username peserta cadangan</label><input id="sUserPeserta" class="admin-input" maxlength="100" placeholder="Contoh: peserta"><small>Diisi manual. Dipakai hanya bila data peserta belum diisi.</small></div>
+                  <div class="admin-field"><label for="sPassPeserta">Password ujian cadangan (opsional)</label><div class="password-field"><input id="sPassPeserta" class="admin-input" type="password" minlength="8" maxlength="300" placeholder="Kosongkan bila tidak diubah"><button id="toggleParticipantNewPassword" class="icon-button" type="button" aria-label="Tampilkan password peserta"><i class="fa-regular fa-eye"></i></button></div><small>Dipakai rombel yang belum memiliki token.</small></div>
+                  <div class="admin-field span-2"><label for="sJudulUjian">Judul besar ujian (tampil di atas nama mata pelajaran)</label><input id="sJudulUjian" class="admin-input" maxlength="200" readonly placeholder="Terbentuk otomatis setelah jenis ujian, semester, dan tahun ajaran diisi"><small>Terisi otomatis dari Jenis Ujian + Semester + Tahun Ajaran, contoh: SUMATIF HARIAN GANJIL TA 2026/2027. Perubahan langsung terlihat oleh peserta yang sedang ujian.</small></div>
+                  <div class="admin-field span-2"><label for="sPetunjukUjian">Petunjuk ujian (satu baris = satu butir)</label><textarea id="sPetunjukUjian" class="admin-input" rows="8" maxlength="4000" placeholder="Tulis satu petunjuk per baris."></textarea><small>Ditampilkan pada halaman petunjuk sebelum peserta masuk ke soal. Penomoran dibuat otomatis.</small></div>
+                  <div class="admin-field span-2"><label class="small-check"><input id="sUjianAktif" type="checkbox"> Buka ujian ini untuk peserta (tampil pada pilihan mata pelajaran saat login)</label><small>Peserta hanya dapat memilih ujian yang dibuka dan sudah memiliki soal aktif.</small></div>
+                  <div class="admin-field span-2"><label class="small-check"><input id="sApplyActive" type="checkbox"> Terapkan perubahan durasi kepada peserta yang sedang aktif/jeda</label></div>
+                  <div class="admin-field span-2" style="border:1.5px dashed #c7d7e6;border-radius:12px;padding:14px;background:#f8fbff">
+                    <label for="sPesertaDurasi"><i class="fa-solid fa-bolt" style="color:#f59e0b"></i> Ubah Durasi Realtime (tanpa menyimpan pengaturan lain)</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                      <select id="sPesertaDurasi" class="admin-input" style="max-width:280px">
+                        <option value="">Semua peserta aktif</option>
+                      </select>
+                      <input id="sDurasiRealtime" class="admin-input" type="number" min="1" max="300" style="max-width:150px" placeholder="Menit baru">
+                      <button id="btnTerapkanDurasi" class="admin-primary" type="button"><i class="fa-solid fa-clock-rotate-left"></i> Terapkan</button>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                      <button id="btnResetWaktuPeserta" class="admin-danger" type="button"><i class="fa-solid fa-rotate-left"></i> Reset Waktu Peserta Terpilih</button>
+                      <button id="btnResetWaktuSemua" class="admin-danger" type="button"><i class="fa-solid fa-stopwatch"></i> Reset Waktu Semua Peserta</button>
+                    </div>
+                    <small>Pilih satu peserta untuk mengubah waktunya saja, atau biarkan "Semua peserta aktif" untuk semua. Waktu yang sudah terpakai dipertahankan, sisanya dihitung ulang dari durasi baru. <b>Reset waktu</b> mengembalikan sisa waktu peserta ke durasi penuh ujiannya. Perubahan terlihat peserta dalam ≤10 detik.</small>
+                  </div>
+                </div>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Pengaturan</button>
+              </form>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-palette"></i> Tema Tampilan Aplikasi</h2><p>Pilih salah satu dari 5 tema profesional. Berlaku langsung untuk halaman login, ruang ujian peserta, dan panel ini.</p></div></div>
+              <!-- Kartu warna: pilihan tema yang langsung terlihat dan dapat diklik. -->
+              <div id="temaGrid" class="tema-grid" role="radiogroup" aria-label="Pilihan tema tampilan"></div>
+              <div class="inline-row">
+                <div class="admin-field">
+                  <label for="sTema">Tema</label>
+                  <!-- REVISI 3.4b: opsi ditulis langsung di HTML sebagai cadangan,
+                       sehingga 5 tema tetap muncul walau JavaScript gagal dimuat. -->
+                  <select id="sTema" class="admin-input">
+                    <option value="navy">Navy Profesional</option>
+                    <option value="emerald">Emerald Modern</option>
+                    <option value="royal">Royal Violet</option>
+                    <option value="ocean">Ocean Teal</option>
+                    <option value="sunset">Sunset Coral</option>
+                  </select>
+                </div>
+                <button id="btnSimpanTema" class="admin-primary" type="button"><i class="fa-solid fa-palette"></i> Terapkan Tema</button>
+              </div>
+              <small>Klik salah satu kartu warna di atas untuk melihat pratinjau, lalu tekan <b>Terapkan Tema</b> untuk menyimpan. Tema berlaku untuk halaman login, ruang ujian peserta, dan panel ini (tersimpan pada sheet Pengaturan, kunci <b>Tema_Aplikasi</b>).</small>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-panorama"></i> Background Halaman Login</h2><p>Berlaku untuk halaman login peserta dan panel. Pilih preset bawaan atau unggah gambar sendiri.</p></div></div>
+              <div class="media-tabs" style="width:max-content;margin-bottom:14px">
+                <button class="media-tab active" data-bg-tab="preset" type="button">Preset Warna</button>
+                <button class="media-tab" data-bg-tab="gambar" type="button">Upload Gambar</button>
+              </div>
+              <div class="media-panel show" data-bg-panel="preset">
+                <div id="bgPresetList" class="rombel-grid"></div>
+              </div>
+              <div class="media-panel" data-bg-panel="gambar">
+                <div class="admin-field"><label for="bgImageFile">Pilih gambar background</label><input id="bgImageFile" class="file-input" type="file" accept="image/png,image/jpeg,image/jpg,image/webp"><small>Disarankan landscape minimal 1600×900. Gambar dikompres otomatis sebelum disimpan.</small></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+                  <button id="applyBgImage" class="admin-primary" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> Terapkan Background</button>
+                  <button id="resetBgImage" class="admin-secondary" type="button"><i class="fa-solid fa-rotate-left"></i> Kembali ke Preset</button>
+                </div>
+              </div>
+              <div id="bgPreview" class="media-preview"></div>
+              <div id="bgStatus" class="media-status"></div>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-regular fa-image"></i> Ubah Logo Aplikasi</h2><p>Hanya proktor/admin. Logo diterapkan ke halaman peserta, header ujian, panel, favicon, dan email pelanggaran tanpa deploy ulang.</p></div></div>
+              <form id="brandingLogoForm">
+                <div class="branding-editor">
+                  <div class="branding-preview-wrap">
+                    <div class="branding-preview-frame"><img id="brandingLogoPreview" src="<?!= getAppEmailLogoDataUri_(); ?>" alt="Pratinjau logo aplikasi"></div>
+                    <span id="brandingLogoStatus" class="branding-status"><i class="fa-solid fa-circle-check"></i> Logo bawaan aktif</span>
+                  </div>
+                  <div class="branding-controls">
+                    <div class="admin-field"><label for="brandingLogoFile">Pilih logo baru</label><input id="brandingLogoFile" class="file-input" type="file" accept="image/png,image/jpeg,image/webp"><small>Gunakan PNG, JPEG, atau WebP. Disarankan persegi minimal 512×512 px.</small></div>
+                    <div class="branding-actions"><button id="applyBrandingLogo" class="admin-primary" type="submit"><i class="fa-solid fa-wand-magic-sparkles"></i> Terapkan Logo</button><button id="resetBrandingLogo" class="admin-secondary" type="button"><i class="fa-solid fa-rotate-left"></i> Kembali ke Logo Bawaan</button></div>
+                    <div id="brandingLogoMessage" class="branding-message" role="status" aria-live="polite"></div>
+                  </div>
+                </div>
+              </form>
+            </article>
+
+            <article class="admin-card" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-gear"></i> Ubah Username dan Password Admin</h2><p>Khusus proktor/admin. Password disimpan dalam bentuk hash, bukan teks biasa.</p></div></div>
+              <form id="adminCredentialForm">
+                <div class="admin-form-grid">
+                  <div class="admin-field"><label for="sAdminUser">Username admin baru</label><input id="sAdminUser" class="admin-input" maxlength="100" required></div>
+                  <div class="admin-field"><label for="sCurrentAdminPass">Password admin saat ini</label><input id="sCurrentAdminPass" class="admin-input" type="password" maxlength="300" required></div>
+                  <div class="admin-field"><label for="sNewAdminPass">Password admin baru</label><div class="password-field"><input id="sNewAdminPass" class="admin-input" type="password" minlength="8" maxlength="300" required><button id="toggleNewAdminPassword" class="icon-button" type="button" aria-label="Tampilkan password admin baru"><i class="fa-regular fa-eye"></i></button></div></div>
+                  <div class="admin-field"><label for="sConfirmAdminPass">Konfirmasi password admin baru</label><div class="password-field"><input id="sConfirmAdminPass" class="admin-input" type="password" minlength="8" maxlength="300" required><button id="toggleConfirmAdminPassword" class="icon-button" type="button" aria-label="Tampilkan konfirmasi password admin"><i class="fa-regular fa-eye"></i></button></div></div>
+                </div>
+                <button class="admin-primary" type="submit"><i class="fa-solid fa-key"></i> Ubah Kredensial Admin</button>
+              </form>
+            </article>
+
+            <article class="admin-card danger-zone" data-admin="true">
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-rotate-left"></i> Reset Default</h2><p>Khusus proktor/admin. Mengembalikan pengaturan, akun admin/peserta, logo, dan background ke nilai awal. Bank soal dan data ujian tidak dihapus.</p></div><button id="resetDefaultButton" class="admin-danger" type="button"><i class="fa-solid fa-triangle-exclamation"></i> Reset ke Default</button></div>
+            </article>
+          </section>
+        </main>
+        <footer class="admin-panel-copyright">Copyright © 2026 ICT-ROBOTECH. All rights reserved.</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODAL EDIT PESERTA -->
+  <!-- MODAL KARTU SOAL -->
+  <div id="kartuSoalModal" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="kartuSoalTitle">
+    <div class="admin-modal-card">
+      <div class="admin-modal-head">
+        <h2 id="kartuSoalTitle"><i class="fa-solid fa-address-card"></i> Kartu Soal</h2>
+        <button id="closeKartuSoal" class="close-modal" type="button" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="kartuSoalForm">
+        <input id="ksIdSoal" type="hidden">
+        <div class="form-help" style="margin-bottom:15px">Butir soal: <b id="ksRingkasSoal">-</b></div>
+        <div class="admin-form-grid">
+          <div class="admin-field span-2"><label for="ksCapaian">Capaian pembelajaran</label><textarea id="ksCapaian" class="admin-input" maxlength="2000" rows="3" placeholder="Tuliskan capaian pembelajaran yang diukur butir soal ini"></textarea></div>
+          <div class="admin-field"><label for="ksKelas">Kelas</label><input id="ksKelas" class="admin-input" maxlength="60" placeholder="Contoh: IX"></div>
+          <div class="admin-field"><label for="ksNomorSoal">Nomor soal pada kartu</label><input id="ksNomorSoal" class="admin-input" maxlength="20" placeholder="Contoh: 1"></div>
+          <div class="admin-field span-2"><label for="ksMateri">Materi / elemen</label><input id="ksMateri" class="admin-input" maxlength="500" placeholder="Contoh: Bilangan Berpangkat"></div>
+          <div class="admin-field span-2"><label for="ksKompetensi">Kompetensi</label><textarea id="ksKompetensi" class="admin-input" maxlength="1000" rows="2" placeholder="Kompetensi yang diukur butir soal ini"></textarea></div>
+          <div class="admin-field span-2"><label for="ksIndikator">Indikator soal</label><textarea id="ksIndikator" class="admin-input" maxlength="1000" rows="2" placeholder="Disajikan ..., peserta didik dapat ..."></textarea></div>
+          <div class="admin-field"><label for="ksLevel">Level kognitif</label><select id="ksLevel" class="admin-input"><option value="">Belum ditentukan</option><option value="C1">C1 - Mengingat</option><option value="C2">C2 - Memahami</option><option value="C3">C3 - Menerapkan</option><option value="C4">C4 - Menganalisis</option><option value="C5">C5 - Mengevaluasi</option><option value="C6">C6 - Mencipta</option></select></div>
+          <div class="admin-field"><label for="ksTipe">Tipe soal</label><select id="ksTipe" class="admin-input"><option value="PG">Pilihan Ganda</option><option value="PGK">Pilihan Ganda Kompleks (Benar/Salah)</option><option value="PGK_MCMA">Pilihan Ganda Kompleks (Banyak Jawaban)</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian Singkat</option><option value="URAIAN">Uraian</option></select><small>Dapat diubah di sini; perubahan otomatis ikut berlaku pada menu Kelola Soal.</small></div>
+          <div class="admin-field span-2"><label for="ksKunci">Kunci jawaban</label><textarea id="ksKunci" class="admin-input" rows="2" readonly></textarea><small>Terisi otomatis dari kunci jawaban soal. Ubah melalui menu Kelola Soal bila perlu.</small></div>
+        </div>
+        <div class="inline-row" style="margin-top:17px;justify-content:flex-end">
+          <button id="batalKartuSoal" class="admin-secondary" type="button">Batal</button>
+          <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Kartu Soal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="kehadiranModal" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="kehadiranTitle">
+    <div class="admin-modal-card" style="max-width:460px">
+      <div class="admin-modal-head"><h2 id="kehadiranTitle"><i class="fa-solid fa-clipboard-user"></i> Catat Kehadiran</h2><button id="closeKehadiran" class="close-modal" type="button" aria-label="Tutup">&times;</button></div>
+      <form id="kehadiranForm">
+        <input id="khId" type="hidden">
+        <div class="admin-form-grid">
+          <div class="admin-field span-2"><div class="form-help">Peserta: <b id="khNama">-</b> &mdash; rombel <b id="khRombel">-</b></div></div>
+          <div class="admin-field span-2"><label for="khStatus">Status kehadiran pada ujian ini</label><select id="khStatus" class="admin-input">
+            <option value="HADIR">Hadir</option>
+            <option value="SAKIT">Sakit</option>
+            <option value="IZIN">Izin</option>
+            <option value="ALPA">Alpa</option>
+          </select><small>Status selain Hadir mencegah peserta masuk ruang ujian dan ikut tercatat pada Hasil Ujian, Rekap Kelas, serta laporan Excel/PDF.</small></div>
+        </div>
+        <div class="app-dialog-actions" style="justify-content:flex-end">
+          <button id="batalKehadiran" class="admin-secondary" type="button">Batal</button>
+          <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Kehadiran</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="editParticipantModal" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="editPesertaTitle">
+    <div class="admin-modal-card" style="max-width:560px">
+      <div class="admin-modal-head"><h2 id="editPesertaTitle"><i class="fa-solid fa-user-pen"></i> Ubah Data Peserta</h2><button id="closeEditPeserta" class="close-modal" type="button" aria-label="Tutup">×</button></div>
+      <form id="editParticipantForm">
+        <input id="epId" type="hidden">
+        <div class="admin-form-grid">
+          <div class="admin-field span-2"><label for="epNama">Nama lengkap</label><input id="epNama" class="admin-input" maxlength="150" required></div>
+          <div class="admin-field"><label for="epUsername">Username</label><input id="epUsername" class="admin-input" maxlength="60" required><small>Huruf kecil, tanpa spasi, tanpa titik (moh.adit ditolak); angka dan simbol _ / - boleh.</small></div>
+          <div class="admin-field"><label for="epRombel">Rombel</label><select id="epRombel" class="admin-input" required></select></div>
+          <div class="admin-field"><label for="epNis">NIS</label><input id="epNis" class="admin-input" maxlength="40" placeholder="Nomor induk siswa"></div>
+          <div class="admin-field"><label for="epKehadiran">Status kehadiran</label><select id="epKehadiran" class="admin-input">
+            <option value="HADIR">Hadir</option>
+            <option value="SAKIT">Sakit</option>
+            <option value="IZIN">Izin</option>
+            <option value="ALPA">Alpa</option>
+          </select><small>Status selain Hadir mencegah peserta masuk ujian dan tercatat pada laporan.</small></div>
+          <div class="admin-field span-2"><label class="small-check"><input id="epAktif" type="checkbox" checked> Peserta aktif dan boleh mengikuti ujian</label></div>
+        </div>
+        <div class="app-dialog-actions" style="justify-content:flex-end">
+          <button id="batalEditPeserta" class="admin-secondary" type="button">Batal</button>
+          <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT AKUN GURU -->
+  <div id="editTeacherModal" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="editGuruTitle">
+    <div class="admin-modal-card" style="max-width:560px">
+      <div class="admin-modal-head"><h2 id="editGuruTitle"><i class="fa-solid fa-user-gear"></i> Ubah Akun Guru Mapel</h2><button id="closeEditGuru" class="close-modal" type="button" aria-label="Tutup">×</button></div>
+      <form id="editTeacherForm">
+        <input id="egUsernameLama" type="hidden">
+        <div class="admin-form-grid">
+          <div class="admin-field"><label for="egNama">Nama guru</label><input id="egNama" class="admin-input" maxlength="150" required></div>
+          <div class="admin-field"><label for="egUsername">Username</label><input id="egUsername" class="admin-input" maxlength="60" required><small>Huruf kecil tanpa spasi.</small></div>
+          <div class="admin-field"><label for="egMapel">Mata pelajaran</label><input id="egMapel" class="admin-input" maxlength="150" placeholder="Contoh: Matematika"></div>
+          <div class="admin-field"><label for="egKkm">KKM mata pelajaran</label><input id="egKkm" class="admin-input" type="number" min="0" max="100" placeholder="Contoh: 75"></div>
+          <div class="admin-field span-2"><label for="egPassword">Password baru (opsional)</label><div class="password-field"><input id="egPassword" class="admin-input" type="password" minlength="8" maxlength="300" placeholder="Kosongkan bila tidak diubah"><button id="toggleEgPassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button></div><small>Minimal 8 karakter. Kosongkan bila password tidak ingin diganti.</small></div>
+          <div class="admin-field span-2"><label class="small-check"><input id="egAktif" type="checkbox" checked> Akun aktif dan boleh masuk panel</label></div>
+        </div>
+        <div class="app-dialog-actions" style="justify-content:flex-end">
+          <button id="batalEditGuru" class="admin-secondary" type="button">Batal</button>
+          <button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT SOAL -->
+  <div id="editQuestionModal" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <div class="admin-modal-card">
+      <div class="admin-modal-head"><h2 id="editModalTitle"><i class="fa-solid fa-pen-to-square"></i> Edit Soal Realtime</h2><button id="closeEditModal" class="close-modal" type="button" aria-label="Tutup">×</button></div>
+      <form id="editQuestionForm">
+        <input id="eId" type="hidden">
+        <div class="admin-form-grid">
+          <div class="admin-field"><label for="eTipe">Tipe soal</label><select id="eTipe" class="admin-input"><option value="PG">PG biasa</option><option value="PGK">PGK</option><option value="PGK_MCMA">PGK MCMA</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian</option><option value="URAIAN">Uraian</option></select></div>
+          <div class="admin-field"><label for="ePoin">Poin</label><input id="ePoin" class="admin-input" type="number" min="1" max="1000"></div>
+          <div class="admin-field"><label for="eTingkat">Kelas sasaran soal</label><select id="eTingkat" class="admin-input"><option value="SEMUA">Semua kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option></select><small>Bank soal per kelas: soal VII hanya diakses peserta kelas VII.</small></div>
+          <div class="admin-field span-2"><label for="ePertanyaan">Pertanyaan</label><textarea id="ePertanyaan" class="admin-input" maxlength="12000" required></textarea></div>
+          <div class="admin-field span-2"><label for="eDeskripsiStimulus">Deskripsi stimulus (opsional)</label><textarea id="eDeskripsiStimulus" class="admin-input" rows="2" maxlength="1000" placeholder="Tampil di atas gambar/video soal ini."></textarea></div>
+          <div class="admin-field span-2"><label for="eOpsi">Opsi / Pernyataan</label><textarea id="eOpsi" class="admin-input"></textarea><small id="eFormatHelp" class="form-help"></small></div>
+          <div class="admin-field span-2"><label for="eKunci">Kunci jawaban / rubrik</label><textarea id="eKunci" class="admin-input"></textarea></div>
+          <div class="admin-field span-2"><label for="eImageLink">Link stimulus gambar (otomatis terisi setelah upload)</label><input id="eImageLink" class="admin-input" type="text" placeholder="https://..."></div>
+          <div class="admin-field"><label for="eImageFile">Ganti gambar dari komputer</label><input id="eImageFile" class="file-input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp"></div>
+          <div class="admin-field"><label for="eImageAlt">Keterangan gambar</label><input id="eImageAlt" class="admin-input" maxlength="300" type="text"></div>
+          <div class="admin-field span-2"><label for="eVideoLink">Link stimulus video (otomatis terisi setelah upload)</label><input id="eVideoLink" class="admin-input" type="text" placeholder="https://... atau link Google Drive"></div>
+          <div class="admin-field"><label for="eVideoFile">Ganti video dari komputer (maks 1 GB)</label><input id="eVideoFile" class="file-input" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime"></div>
+          <div class="admin-field"><label for="eVideoAlt">Keterangan video</label><input id="eVideoAlt" class="admin-input" maxlength="300" type="text"></div>
+          <div class="admin-field"><label>Status soal</label><label class="small-check"><input id="eAktif" type="checkbox"> Aktif</label><label class="small-check" style="margin-top:7px"><input id="eHapusGambar" type="checkbox"> Hapus stimulus gambar</label><label class="small-check" style="margin-top:7px"><input id="eHapusVideo" type="checkbox"> Hapus stimulus video</label></div>
+          <div class="admin-field"><label>Pratinjau media</label><button id="ePreviewMedia" class="admin-secondary" type="button"><i class="fa-solid fa-eye"></i> Cek &amp; Pratinjau Media</button></div>
+        </div>
+        <div class="upload-progress" id="eUploadProgress"><b></b></div>
+        <div class="media-status" id="eMediaStatus"></div>
+        <div id="eImagePreview" class="media-preview"></div>
+        <div id="eVideoPreview" class="media-preview"></div>
+        <div class="modal-actions"><button id="cancelEdit" class="admin-secondary" type="button">Batal</button><button class="admin-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Simpan Perubahan</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DIALOG TERPUSAT: konfirmasi, input, dan notifikasi hasil aksi -->
+  <div id="appDialog" class="app-dialog" role="dialog" aria-modal="true" aria-labelledby="appDialogTitle">
+    <div class="app-dialog-card" role="document">
+      <div class="app-dialog-icon" id="appDialogIcon"><i class="fa-solid fa-circle-question"></i></div>
+      <h3 id="appDialogTitle">Konfirmasi</h3>
+      <p id="appDialogMessage">Pesan konfirmasi.</p>
+      <div class="app-dialog-field" id="appDialogFieldWrap">
+        <label id="appDialogLabel" for="appDialogInput">Masukkan nilai</label>
+        <input id="appDialogInput" class="admin-input" type="text" autocomplete="off">
+        <small id="appDialogHint"></small>
+      </div>
+      <div class="app-dialog-actions">
+        <button id="appDialogCancel" class="admin-secondary" type="button">Batal</button>
+        <button id="appDialogOk" class="admin-primary" type="button">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminToast" aria-live="polite"></div>
+  <script>
+    /* URL asli Web App dari server; window.location di iframe Apps Script
+       menunjuk ke userCodeAppPanel dan tidak bisa dipakai berpindah halaman. */
+    var APP_WEB_URL = '<?!= getWebAppUrl_(); ?>';
+    /* Alamat pembungkus publik (mis. GitHub Pages). Bila diisi, perpindahan
+       halaman memakai alamat ini agar kolom alamat browser tetap rapi. */
+    var APP_PUBLIC_URL = '<?!= urlPesertaPublik_(); ?>';
+    /* Sesi panel yang dititipkan server lewat kode sekali pakai pada URL,
+       supaya login guru/proktor tidak diminta dua kali. */
+    var SESI_HANDOFF = <?!= (typeof SESI_HANDOFF !== 'undefined' && SESI_HANDOFF) ? SESI_HANDOFF : 'null'; ?>;
+  </script>
+  <?!= include('admin-script'); ?>
+  <script>
+  /* ================================================================
+   * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
+   * Bila blok admin-script gagal diparse (file terpotong saat disalin,
+   * versi lama, dll.), seluruh isinya TIDAK berjalan termasuk kotak
+   * error yang ada di dalamnya. Blok ini berdiri sendiri sehingga
+   * tetap berjalan dan menampilkan pesan di layar.
+   * ================================================================ */
+  (function() {
+    function kotakPesan(judul, detail) {
+      try {
+        var div = document.getElementById('fatalErrorBox');
+        if (!div) {
+          div = document.createElement('div');
+          div.id = 'fatalErrorBox';
+          div.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:14px 18px;font:13px/1.5 monospace;white-space:pre-wrap;word-break:break-word;';
+          document.body.appendChild(div);
+        }
+        div.style.display = 'block';
+        div.textContent = judul + '\n' + (detail || '');
+      } catch (e) {}
+    }
+    window.addEventListener('error', function(e) {
+      kotakPesan('Kesalahan JavaScript: ' + (e.message || 'unknown'),
+        (e.filename || '') + ' baris ' + (e.lineno || '') + ':' + (e.colno || ''));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var alasan = (e && e.reason && (e.reason.message || e.reason)) || e || '';
+      kotakPesan('Janji gagal (unhandled rejection):', String(alasan));
+    });
+    // Beberapa saat setelah halaman siap, pastikan skrip utama benar-benar
+    // berjalan. Kalau tidak, tampilkan peringatan alih-alih layar putih.
+    window.setTimeout(function() {
+      if (typeof window.ADMIN === 'undefined' || typeof window.loadParticipants !== 'function') {
+        kotakPesan('Skrip panel (admin-script) GAGAL DIMUAT.',
+          'File "admin-script" di deployment kemungkinan terpotong saat disalin, masih versi lama, atau tidak lengkap. ' +
+          'Salin ulang SELURUH isi revisi/admin-script.html ke file "admin-script", lalu Deploy > New version.');
+      }
+    }, 1500);
+  })();
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a345515c69fe91b7',t:'MTc4ODI3NjY0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "SIADO - Asesmen Digitalisasi Online",
+  "short_name": "SIADO",
+  "description": "Aplikasi Ujian Online SMP Labschool Untad Palu.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "LGS.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "LGS.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "LGS.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

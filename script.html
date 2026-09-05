@@ -1,0 +1,2885 @@
+<script>
+/* ================================================================
+ * script.html - Panel peserta
+ * Timer, autosave, sinkron soal realtime, dan proteksi best-effort.
+ * ================================================================ */
+
+var UJIAN = {
+  peserta: null,
+  soal: [],
+  versiSoal: '',
+  judulUjian: '',
+  petunjukUjian: '',
+  payloadTertunda: null,
+  jawaban: {},
+  index: 0,
+  remaining: 0,
+  duration: 0,
+  batasMerah: 300,
+  pelanggaran: 0,
+  pelanggaranPindahTab: 0,
+  autoExitDiskualifikasiId: null,
+  aktif: false,
+  jeda: false,
+  selesaiDiproses: false,
+  lastTick: 0,
+  timerId: null,
+  heartbeatId: null,
+  syncId: null,
+  saveTimers: {},
+  savePromises: {},
+  answerVersions: {},
+  savedVersions: {},
+  cooldown: {},
+  tabKeluarAktif: false,
+  urutanKeluarTab: 0,
+  warningQueue: [],
+  warningVisible: false,
+  fullscreenRestorePending: false,
+  pendingViolationEvents: {},
+  processedViolationEvents: {},
+  heartbeatBusy: false,
+  syncBusy: false,
+  fullscreenActivated: false,
+  heartbeatMs: 8000,
+  syncMs: 10000,
+  // REVISI ANTI-LAG: revisi timer (perubahan durasi realtime oleh pengawas)
+  // dan antrean jawaban yang dikirim berkelompok (batch).
+  timerRevision: 0,
+  dirtyAnswers: {},
+  flushTimerId: null,
+  flushIntervalId: null,
+  flushBusy: false,
+  flushPromise: null,
+  // REVISI KEAMANAN: masa tenggang layar HP mati (mobile). Layar yang hidup
+  // kembali sebelum batas waktu tidak dihitung pelanggaran.
+  layarMatiTimer: null,
+  layarMatiGrace: 5,
+  // REVISI 3.5: berapa kali absen singkat (di bawah masa tenggang) yang masih
+  // dimaafkan dalam 3 menit sebelum dicatat sebagai pelanggaran pindah tab.
+  maksAbsenSingkat: 3,
+  publicConfig: null,
+  brandingVersion: '',
+  bgVersion: '',
+  brandingSyncId: null,
+  brandingBusy: false,
+  guruMapel: '',
+  kkm: 75,
+  daftarRombel: [],
+  daftarUjian: []
+};
+
+var SESSION_STORAGE_KEY = 'ao_uji_session_v2';
+var splitTimer = null;
+
+/**
+ * Memanggil server dari halaman peserta.
+ *
+ * PENTING AGAR TIDAK MACET. Bila koneksi terputus, Google Apps Script tidak
+ * pernah memanggil handler mana pun, sehingga Promise menggantung SELAMANYA
+ * dan layar peserta diam tanpa penjelasan. Batas waktu di bawah memastikan
+ * kegagalan selalu muncul sebagai pesan yang bisa ditindaklanjuti.
+ */
+var BATAS_WAKTU_API_PESERTA_MS = 30000;
+
+function apiPeserta(action, payload, batasMs) {
+  var data = payload || {};
+  data.action = action;
+  return new Promise(function(resolve, reject) {
+    var selesai = false;
+    var batas = window.setTimeout(function() {
+      if (selesai) return;
+      selesai = true;
+      var galat = new Error('Server belum merespons. Periksa koneksi internet Anda, lalu coba lagi.');
+      galat.timeout = true;
+      reject(galat);
+    }, batasMs || BATAS_WAKTU_API_PESERTA_MS);
+
+    function tuntas(fn) {
+      return function(hasil) {
+        if (selesai) return;
+        selesai = true;
+        window.clearTimeout(batas);
+        fn(hasil);
+      };
+    }
+
+    try {
+      google.script.run
+        .withSuccessHandler(tuntas(resolve))
+        .withFailureHandler(tuntas(function(err) {
+          reject(err instanceof Error ? err :
+            new Error((err && err.message) || 'Permintaan ke server gagal.'));
+        }))
+        .handleApiRequest(data);
+    } catch (error) {
+      if (selesai) return;
+      selesai = true;
+      window.clearTimeout(batas);
+      reject(error);
+    }
+  });
+}
+
+function credentialSesi() {
+  return {
+    sessionId: UJIAN.peserta && UJIAN.peserta.sessionId,
+    sessionToken: UJIAN.peserta && UJIAN.peserta.sessionToken
+  };
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Terapkan tema tersimpan secepatnya agar tidak berkedip, lalu server
+  // menegaskan tema resmi lewat loadPublicConfig.
+  try {
+    var temaTersimpan = localStorage.getItem('siado_tema');
+    if (temaTersimpan) document.documentElement.setAttribute('data-theme', temaTersimpan);
+  } catch (error) {}
+  bindInterface();
+  bindSecurityEvents();
+  loadPublicConfig();
+  startBrandingSync_();
+  tryRestoreSession();
+});
+
+/** Menerapkan tema tampilan (5 tema profesional, diatur admin di panel). */
+function terapkanTema_(tema) {
+  var t = String(tema || 'navy').toLowerCase();
+  try { localStorage.setItem('siado_tema', t); } catch (error) {}
+  document.documentElement.setAttribute('data-theme', t);
+}
+
+function bindInterface() {
+  document.getElementById('loginForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+    // Fullscreen hanya untuk peserta ujian; panel tidak memerlukannya.
+    if (!modePanelAktif_()) requestFullscreenSafe();
+    loginPeserta();
+  });
+
+  var modePanel = document.getElementById('modePanel');
+  if (modePanel) {
+    modePanel.addEventListener('change', terapkanModeLogin_);
+    terapkanModeLogin_();
+  }
+
+  // Revisi 6: username TIDAK lagi dikoreksi otomatis. Peserta wajib mengetik
+  // persis username yang didaftarkan admin/guru; bila salah, server memberi
+  // notifikasi generik dan kolom dikosongkan (tidak membocorkan username).
+
+  document.getElementById('togglePassword').addEventListener('click', function() {
+    var input = document.getElementById('passwordPeserta');
+    var icon = this.querySelector('i');
+    var showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    icon.className = showing ? 'fa-regular fa-eye' : 'fa-regular fa-eye-slash';
+    this.setAttribute('aria-label', showing ? 'Tampilkan password' : 'Sembunyikan password');
+  });
+
+  // Halaman petunjuk: tombol mulai aktif setelah peserta menyatakan paham.
+  var setuju = document.getElementById('briefingAgree');
+  var mulaiBtn = document.getElementById('briefingStart');
+  if (setuju && mulaiBtn) {
+    setuju.addEventListener('change', function() { mulaiBtn.disabled = !this.checked; });
+    mulaiBtn.addEventListener('click', function() {
+      if (mulaiBtn.disabled) return;
+      mulaiDariPetunjuk_();
+    });
+  }
+  var kembaliBtn = document.getElementById('briefingBack');
+  if (kembaliBtn) kembaliBtn.addEventListener('click', function() {
+    UJIAN.payloadTertunda = null;
+    kembaliKeLogin('Anda keluar dari ruang ujian. Silakan login kembali bila ingin memulai.');
+  });
+
+  document.getElementById('nextButton').addEventListener('click', function() { pindahSoal(UJIAN.index + 1); });
+  document.getElementById('refreshPageButton').addEventListener('click', refreshHalamanUjian);
+  document.getElementById('finishButton').addEventListener('click', bukaKonfirmasiSelesai);
+  document.getElementById('cancelFinish').addEventListener('click', function() { hideModal('finishModal'); });
+  document.getElementById('confirmFinish').addEventListener('click', function() { prosesSelesai(false); });
+  document.getElementById('closeWarning').addEventListener('click', function() {
+    // REVISI 3.4: permintaan layar penuh dijalankan PALING AWAL di dalam
+    // gesture klik agar tidak ditolak browser, lalu modal ditutup. Bila
+    // browser tetap menolak, gerbang layar penuh yang menutup soal.
+    UJIAN.fullscreenRestorePending = false;
+    requestFullscreenSafe(true);
+    hideModal('warningModal');
+    UJIAN.warningVisible = false;
+    samarkanKontenUjian_(false);
+    // Peserta telah kembali ke soal; event keluar berikutnya harus dihitung lagi.
+    if (document.visibilityState === 'visible') UJIAN.tabKeluarAktif = false;
+    if (UJIAN.warningQueue.length) {
+      showNextViolationWarning_();
+      return;
+    }
+    window.setTimeout(function() {
+      if (UJIAN.aktif && !sedangLayarPenuh_() && bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+    }, 400);
+  });
+
+  // Gerbang layar penuh: tombolnya adalah gesture sah untuk masuk kembali.
+  var tombolGerbang = document.getElementById('fullscreenGateButton');
+  if (tombolGerbang) tombolGerbang.addEventListener('click', function() {
+    UJIAN.fullscreenRestorePending = false;
+    requestFullscreenSafe(true).then(function(berhasil) {
+      if (berhasil) sembunyikanGerbangLayarPenuh_();
+      else tampilkanToastPeserta_('Browser menolak layar penuh. Tekan F11 atau izinkan layar penuh untuk melanjutkan.', true);
+    });
+  });
+
+  document.getElementById('resumeButton').addEventListener('click', lanjutkanSetelahJeda);
+  // Gunakan wrapper agar objek PointerEvent tidak diteruskan sebagai pesan login.
+  document.getElementById('resultLogout').addEventListener('click', function() { kembaliKeLogin(); });
+  document.getElementById('disqualifiedLogout').addEventListener('click', function() { kembaliKeLogin(); });
+}
+
+async function loadPublicConfig() {
+  try {
+    var result = await apiPeserta('getKonfigurasiPublik', {});
+    if (!result.success) return;
+    UJIAN.publicConfig = result;
+    UJIAN.batasMerah = Math.max(1, Number(result.batasTimerMerahMenit || 5)) * 60;
+    UJIAN.heartbeatMs = Math.max(4000, Number(result.heartbeatSeconds || 8) * 1000);
+    UJIAN.syncMs = Math.max(8000, Number(result.questionSyncSeconds || 10) * 1000);
+    UJIAN.layarMatiGrace = Math.max(2, Math.min(30, Number(result.layarMatiGraceSeconds || 5)));
+    UJIAN.guruMapel = String(result.guruMapel || '');
+    UJIAN.kkm = Number(result.kkm || 75);
+    UJIAN.daftarRombel = result.daftarRombel || [];
+    if (UJIAN.daftarRombel.length) isiPilihanRombel_(UJIAN.daftarRombel, '');
+    UJIAN.daftarUjian = result.daftarUjian || [];
+    isiPilihanUjian_(UJIAN.daftarUjian, '');
+    applyBrandingData_(result.branding);
+    applyLoginBackground_(result.loginBackground);
+    terapkanTema_(result.tema);
+  } catch (error) {
+    console.warn('Konfigurasi publik gagal dibaca:', error);
+  }
+}
+
+function applyBrandingData_(branding) {
+  if (!branding || !branding.version) return;
+  UJIAN.brandingVersion = String(branding.version);
+  document.querySelectorAll('.brand-logo img').forEach(function(image) {
+    image.src = branding.logoUiDataUri;
+  });
+  var favicon = document.querySelector('link[rel="icon"]');
+  if (favicon) favicon.href = branding.faviconDataUri;
+  var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (appleIcon) appleIcon.href = branding.logoEmailDataUri;
+}
+
+/** Menerapkan background login (preset gradient atau gambar unggahan admin). */
+function applyLoginBackground_(background) {
+  if (!background) return;
+  UJIAN.bgVersion = String(background.version || '');
+  var element = document.getElementById('loginBackground');
+  if (!element) return;
+  element.style.background = background.mode === 'gambar' && background.imageDataUri ?
+    "linear-gradient(rgba(8,25,48,.62),rgba(8,25,48,.72)), url('" + background.imageDataUri + "') center/cover no-repeat fixed" :
+    (background.presetCss || '');
+}
+
+function startBrandingSync_() {
+  if (UJIAN.brandingSyncId) clearInterval(UJIAN.brandingSyncId);
+  UJIAN.brandingSyncId = window.setInterval(syncBranding_, 10000);
+  window.setTimeout(syncBranding_, 900);
+}
+
+async function syncBranding_() {
+  if (UJIAN.brandingBusy || document.hidden) return;
+  UJIAN.brandingBusy = true;
+  try {
+    var result = await apiPeserta('getBrandingPublik', {
+      knownVersion: UJIAN.brandingVersion || '',
+      knownBgVersion: UJIAN.bgVersion || ''
+    });
+    if (result && result.success && result.changed) {
+      if (result.branding) applyBrandingData_(result.branding);
+      if (result.background) applyLoginBackground_(result.background);
+    }
+  } catch (error) {
+    console.warn('Sinkronisasi logo peserta tertunda:', error);
+  } finally {
+    UJIAN.brandingBusy = false;
+  }
+}
+
+function tryRestoreSession() {
+  var raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    var saved = JSON.parse(raw);
+    if (!saved.sessionId || !saved.sessionToken) return;
+    UJIAN.peserta = saved;
+    setLoginMessage('Memulihkan sesi ujian sebelumnya...', 'success');
+    mulaiAtauPulihkanUjian(true);
+  } catch (error) {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  }
+}
+
+async function loginPeserta() {
+  var username = document.getElementById('usernamePeserta').value.trim();
+  var kelas = document.getElementById('kelasPeserta').value.trim();
+  var password = document.getElementById('passwordPeserta').value;
+  if (!username || !password) {
+    setLoginMessage('Username dan password wajib diisi.', 'error');
+    return;
+  }
+
+  if (!modePanelAktif_()) {
+    if (!document.getElementById('kelasPeserta').value.trim()) {
+      setLoginMessage('Pilih rombel/kelas Anda terlebih dahulu.', 'error');
+      return;
+    }
+    var pilihUjian = document.getElementById('ujianPeserta');
+    if (pilihUjian && !pilihUjian.value.trim()) {
+      setLoginMessage(UJIAN.daftarUjian && UJIAN.daftarUjian.length
+        ? 'Pilih mata pelajaran yang akan Anda ujikan terlebih dahulu.'
+        : 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.', 'error');
+      return;
+    }
+  }
+
+  toggleLoading(true, 'Memverifikasi akun...');
+  document.getElementById('loginButton').disabled = true;
+  try {
+    var result = await apiPeserta('loginTerpadu', {
+      nama: '', kelas: kelas, username: username, password: password,
+      // Menentukan ujian milik guru mana yang akan dikerjakan.
+      pemilikUjian: (document.getElementById('ujianPeserta') || {}).value || ''
+    });
+
+    // Akun panel (guru mapel / proktor) langsung dibawa ke panel pengelolaan.
+    if (result.success && result.tipe === 'PANEL') {
+      setLoginMessage('Login sebagai ' + (result.role === 'ADMIN' ? 'proktor/admin' : 'guru mapel') +
+        '. Membuka panel...', 'success');
+      // Sesi dititipkan agar panel tidak meminta password untuk kedua kalinya.
+      try {
+        sessionStorage.setItem('ao_panel_handoff_v1', JSON.stringify({
+          adminToken: result.adminToken, username: result.username,
+          nama: result.nama, role: result.role, expiresAt: result.expiresAt
+        }));
+      } catch (storageError) {}
+      GUARD.navigasiResmi = true;
+      exitFullscreenSafe();
+      bukaPanelAdmin_(result.redirectUrl, result.redirectUrlApp);
+      return;
+    }
+
+    if (!result.success) {
+      if (result.code === 'DISKUALIFIKASI') {
+        tampilDiskualifikasi();
+      } else {
+        setLoginMessage(result.message || 'Login gagal.', 'error');
+        // Revisi 6: bila kredensial salah, kolom dikosongkan kembali (default)
+        // dan tidak ada petunjuk username/password yang benar.
+        document.getElementById('usernamePeserta').value = '';
+        document.getElementById('passwordPeserta').value = '';
+        try { document.getElementById('usernamePeserta').focus(); } catch (error) {}
+        // Daftar ujian bisa berubah saat guru membuka/menutup ujiannya.
+        if (result.daftarUjian) {
+          isiPilihanUjian_(result.daftarUjian, (document.getElementById('ujianPeserta') || {}).value || '');
+        }
+      }
+      exitFullscreenSafe();
+      return;
+    }
+
+    UJIAN.peserta = {
+      sessionId: result.sessionId,
+      sessionToken: result.sessionToken,
+      nama: result.nama,
+      kelas: result.kelas,
+      username: username,
+      mapel: result.mapel,
+      guruMapel: result.guruMapel || UJIAN.guruMapel
+    };
+    saveSessionLocal();
+    await mulaiAtauPulihkanUjian(false);
+  } catch (error) {
+    // Pesan spesifik jauh lebih menolong daripada "tidak dapat terhubung".
+    setLoginMessage(
+      (error && error.message) || 'Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.',
+      'error');
+    exitFullscreenSafe();
+  } finally {
+    toggleLoading(false);
+    document.getElementById('loginButton').disabled = false;
+  }
+}
+
+/**
+ * Menentukan URL Web App yang sebenarnya.
+ *
+ * Di dalam iframe Apps Script, window.location menunjuk ke alamat internal
+ * googleusercontent (.../userCodeAppPanel) yang bukan aplikasi kita. Membuka
+ * alamat itu menghasilkan layar putih kosong. Karena itu URL asli selalu
+ * diambil dari APP_WEB_URL yang disuntikkan server.
+ */
+function urlAplikasi_(halaman) {
+  // Pembungkus publik diprioritaskan supaya alamat yang terlihat pengguna
+  // adalah domain sekolah, bukan script.google.com.
+  var publik = (typeof APP_PUBLIC_URL === 'string' && APP_PUBLIC_URL) ? APP_PUBLIC_URL : '';
+  if (publik) {
+    if (!halaman) return publik;
+    return publik + (publik.indexOf('?') === -1 ? '?' : '&') + 'page=' + halaman;
+  }
+  var dasar = (typeof APP_WEB_URL === 'string' && APP_WEB_URL) ? APP_WEB_URL : '';
+  if (!dasar) {
+    // Cadangan terakhir: pakai alamat saat ini bila bukan panel internal.
+    var sekarang = String(window.location.href).split('?')[0];
+    dasar = /userCodeAppPanel|googleusercontent/i.test(sekarang) ? '' : sekarang;
+  }
+  if (!dasar) return '';
+  return halaman ? (dasar + '?page=' + halaman) : dasar;
+}
+
+/**
+ * Berpindah halaman dari dalam iframe Apps Script.
+ *
+ * window.top.location tidak dapat diubah langsung karena kebijakan lintas
+ * domain, sehingga navigasi dilakukan lewat anchor bertarget _top.
+ */
+function pindahHalaman_(target) {
+  if (!target) return false;
+  var anchor = document.createElement('a');
+  anchor.href = target;
+  anchor.target = '_top';
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  try { anchor.click(); } catch (error) {}
+  window.setTimeout(function() {
+    if (anchor.parentNode) anchor.parentNode.removeChild(anchor);
+  }, 4000);
+  return true;
+}
+
+/**
+ * Apakah aplikasi sedang berjalan di dalam pembungkus (mis. GitHub Pages)?
+ * Halaman Apps Script SELALU berada di dalam iframe, jadi keberadaan iframe
+ * saja tidak cukup; yang menandakan pembungkus adalah adanya APP_PUBLIC_URL.
+ */
+function adaPembungkus_() {
+  return !!(typeof APP_PUBLIC_URL === 'string' && APP_PUBLIC_URL);
+}
+
+/**
+ * Meminta pembungkus mengganti isi bingkainya sendiri.
+ *
+ * Ini jauh lebih andal daripada anchor target="_top": browser memblokir iframe
+ * lintas domain yang mencoba menavigasi jendela induk, terlebih bila
+ * pemanggilannya tidak langsung dari klik pengguna (tertahan await).
+ */
+function mintaPembungkusPindah_(targetApp, halaman) {
+  if (!adaPembungkus_()) return false;
+  try {
+    window.parent.postMessage({
+      sumber: 'siado', aksi: 'pindah',
+      halaman: halaman || '', url: targetApp || ''
+    }, '*');
+    return true;
+  } catch (error) { return false; }
+}
+
+/** Membuka panel pengelolaan setelah login guru/proktor berhasil. */
+function bukaPanelAdmin_(redirectUrl, redirectUrlApp) {
+  // Di dalam pembungkus: cukup ganti isi bingkai, tanpa navigasi lintas domain.
+  if (mintaPembungkusPindah_(redirectUrlApp || '', 'admin')) {
+    // Cadangan bila pembungkus versi lama tidak menanggapi pesan.
+    window.setTimeout(function() {
+      if (redirectUrl) pindahHalaman_(redirectUrl);
+    }, 1200);
+    return;
+  }
+  var target = redirectUrl || urlAplikasi_('admin');
+  if (!target) {
+    setLoginMessage('Alamat panel tidak dapat ditentukan. Muat ulang halaman lalu coba lagi.', 'error');
+    return;
+  }
+  pindahHalaman_(target);
+}
+
+/** Apakah pengguna mencentang "saya guru mapel atau proktor". */
+function modePanelAktif_() {
+  var box = document.getElementById('modePanel');
+  return !!(box && box.checked);
+}
+
+/**
+ * Mengganti tampilan login antara mode peserta dan mode panel tanpa pindah
+ * halaman. Field rombel disembunyikan pada mode panel, dan seluruh teks
+ * menyesuaikan agar peserta tidak melihat istilah guru/proktor.
+ */
+function terapkanModeLogin_() {
+  var panel = modePanelAktif_();
+  var teks = panel ? {
+    intro: 'Masuk memakai akun panel Anda untuk mengelola soal, menilai, dan melihat laporan ujian.',
+    usernamePlaceholder: 'Username akun panel',
+    usernameHint: 'Gunakan username akun guru mapel atau proktor/admin.',
+    passwordLabel: 'Password',
+    passwordPlaceholder: 'Password akun Anda',
+    tombol: 'Masuk Panel',
+    catatan: 'Sesi panel terenkripsi dan tercatat pada log audit.'
+  } : {
+    intro: 'Masukkan username, rombel, dan token ujian dari pengawas untuk memulai ujian.',
+    usernamePlaceholder: 'Masukkan username Anda',
+    usernameHint: 'Isi <b>username</b> yang diberikan guru/pengawas: <b>huruf kecil, tanpa spasi, tanpa titik</b> (angka dan simbol <b>_</b> / <b>-</b> boleh).',
+    passwordLabel: 'Token ujian',
+    passwordPlaceholder: 'Token ujian dari pengawas',
+    tombol: 'Mulai Ujian',
+    catatan: 'Jawaban tersimpan otomatis dan sesi terlindungi.'
+  };
+
+  // Judul login: mode peserta dua baris, mode panel tiga baris dengan
+  // "KELOLA UJIAN" di atas sebagai penanda halaman pengelolaan.
+  setTeks_('loginEyebrow', panel ? 'KELOLA UJIAN' : 'SISTEM INFORMASI');
+  setTeks_('loginTitle', 'ASESMEN DIGITALISASI ONLINE');
+  var eyebrowAtas = document.getElementById('loginEyebrow');
+  if (eyebrowAtas) eyebrowAtas.classList.toggle('eyebrow-panel', panel);
+  var eyebrowSub = document.getElementById('loginEyebrowSub');
+  if (eyebrowSub) eyebrowSub.hidden = !panel;
+  setTeks_('loginIntro', teks.intro);
+  setTeks_('passwordLabelText', teks.passwordLabel);
+  setTeks_('loginButtonText', teks.tombol);
+  setTeks_('loginSecurityText', teks.catatan);
+
+  var hint = document.getElementById('usernameHint');
+  if (hint) hint.innerHTML = teks.usernameHint;
+
+  var username = document.getElementById('usernamePeserta');
+  if (username) username.placeholder = teks.usernamePlaceholder;
+
+  var password = document.getElementById('passwordPeserta');
+  if (password) password.placeholder = teks.passwordPlaceholder;
+
+  var icon = document.getElementById('usernameIcon');
+  if (icon) icon.className = panel ? 'fa-solid fa-user-shield' : 'fa-regular fa-id-badge';
+
+  // Rombel hanya relevan bagi peserta.
+  var wrapper = document.getElementById('rombelWrapper');
+  if (wrapper) wrapper.classList.toggle('field-hidden', panel);
+  var kelas = document.getElementById('kelasPeserta');
+  if (kelas) {
+    kelas.disabled = panel;
+    if (panel) kelas.value = '';
+  }
+
+  // Begitu pula pemilih mata pelajaran yang diujikan.
+  var wadahUjian = document.getElementById('ujianWrapper');
+  if (wadahUjian) wadahUjian.classList.toggle('field-hidden', panel);
+  var pilihUjian = document.getElementById('ujianPeserta');
+  if (pilihUjian) {
+    pilihUjian.disabled = panel;
+    if (panel) pilihUjian.value = '';
+  }
+
+  var sakelar = document.querySelector('.role-switch');
+  if (sakelar) sakelar.classList.toggle('is-panel', panel);
+  var kartu = document.querySelector('.participant-login-card');
+  if (kartu) kartu.classList.toggle('panel-mode', panel);
+
+  setLoginMessage('', '');
+}
+
+function setTeks_(id, teks) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = teks;
+}
+
+/** Mengisi dropdown rombel dari data peserta yang terdaftar. */
+function isiPilihanRombel_(list, selected) {
+  var select = document.getElementById('kelasPeserta');
+  if (!select) return;
+  var options = ['<option value="">Pilih rombel Anda</option>'];
+  (list || []).forEach(function(item) {
+    var value = String(item || '');
+    if (!value) return;
+    options.push('<option value="' + escapeHtml(value) + '"' +
+      (value === selected ? ' selected' : '') + '>' + escapeHtml(value) + '</option>');
+  });
+  select.innerHTML = options.join('');
+}
+
+/**
+ * Mengisi pilihan ujian pada halaman login.
+ *
+ * Tiap guru mapel memiliki pengaturan ujiannya sendiri, sehingga peserta
+ * memilih mata pelajaran mana yang akan dikerjakan. Bila hanya ada satu
+ * ujian yang dibuka, pilihan itu langsung terpilih.
+ */
+function isiPilihanUjian_(list, selected) {
+  var select = document.getElementById('ujianPeserta');
+  if (!select) return;
+  var daftar = Array.isArray(list) ? list.filter(function(item) { return item && item.pemilik; }) : [];
+  UJIAN.daftarUjian = daftar;
+
+  var options = [];
+  if (daftar.length !== 1) options.push('<option value="">Pilih ujian yang akan dikerjakan</option>');
+  daftar.forEach(function(item) {
+    var label = String(item.mapel || 'Mata Pelajaran');
+    if (item.guru) label += ' — ' + item.guru;
+    options.push('<option value="' + escapeHtml(String(item.pemilik)) + '"' +
+      (String(item.pemilik) === String(selected) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
+  });
+  if (!daftar.length) {
+    options = ['<option value="">Belum ada ujian yang dibuka</option>'];
+  }
+  select.innerHTML = options.join('');
+  if (daftar.length === 1) select.value = String(daftar[0].pemilik);
+
+  var hint = document.getElementById('ujianHint');
+  if (hint) {
+    if (!daftar.length) {
+      hint.textContent = 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.';
+    } else if (daftar.length === 1) {
+      var satu = daftar[0];
+      hint.textContent = 'Ujian tersedia: ' + satu.mapel +
+        (satu.durasiMenit ? ' — ' + satu.durasiMenit + ' menit' : '') +
+        (satu.jumlahSoal ? ', ' + satu.jumlahSoal + ' soal.' : '.');
+    } else {
+      hint.textContent = 'Tersedia ' + daftar.length + ' ujian. Pilih sesuai jadwal dari pengawas.';
+    }
+  }
+}
+
+/** Refresh halaman ujian: simpan jawaban lalu ambil ulang data dari server. */
+async function refreshHalamanUjian() {
+  if (!UJIAN.aktif) return;
+  var button = document.getElementById('refreshPageButton');
+  button.disabled = true;
+  button.classList.add('spinning');
+  toggleLoading(true, 'Memuat ulang halaman ujian...');
+  try {
+    await saveAllAnswers();
+    var result = await apiPeserta('mulaiUjian', credentialSesi());
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    if (result.status === 'SELESAI') {
+      selesaikanDariPayloadServer_(result);
+      return;
+    }
+    terapkanPayloadUjian(result, true);
+    setSaveStatus('saved');
+    tampilkanToastPeserta_('Halaman ujian berhasil dimuat ulang. Jawaban Anda tetap tersimpan.');
+  } catch (error) {
+    tampilkanToastPeserta_('Gagal memuat ulang. Periksa koneksi lalu coba lagi.', true);
+  } finally {
+    toggleLoading(false);
+    button.disabled = false;
+    button.classList.remove('spinning');
+  }
+}
+
+function tampilkanToastPeserta_(message, isError) {
+  var existing = document.getElementById('pesertaToast');
+  if (existing) existing.remove();
+  var toast = document.createElement('div');
+  toast.id = 'pesertaToast';
+  toast.className = 'peserta-toast' + (isError ? ' error' : '');
+  toast.innerHTML = '<i class="fa-solid ' + (isError ? 'fa-triangle-exclamation' : 'fa-circle-check') + '"></i> ' + escapeHtml(message);
+  document.body.appendChild(toast);
+  window.setTimeout(function() { if (toast.parentNode) toast.remove(); }, 3600);
+}
+
+function tampilkanPemberitahuanWaktu_(result) {
+  var menit = Math.round(Number(result.totalSeconds || 0) / 60);
+  if (menit > 0) {
+    tampilkanToastPeserta_('Pengawas mengubah waktu ujian: ' + menit + ' menit. Timer Anda telah disesuaikan.');
+  }
+}
+
+async function mulaiAtauPulihkanUjian(silentRecovery) {
+  if (!UJIAN.peserta) return;
+  if (!silentRecovery) toggleLoading(true, 'Menyiapkan ruang ujian...');
+  try {
+    var result = await apiPeserta('mulaiUjian', credentialSesi());
+    if (!result.success) {
+      if (result.code === 'DISKUALIFIKASI') tampilDiskualifikasi();
+      else setLoginMessage(result.message || 'Sesi tidak dapat dipulihkan.', 'error');
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      return;
+    }
+    if (result.status === 'SELESAI') {
+      selesaikanDariPayloadServer_(result);
+      return;
+    }
+    terapkanPayloadUjian(result, true);
+    // Petunjuk hanya ditampilkan saat ujian benar-benar baru dimulai.
+    // Peserta yang memulihkan sesi berjalan langsung kembali ke soal
+    // agar sisa waktunya tidak terbuang.
+    var ujianBaru = String(result.status || '') === 'MENUNGGU';
+    if (ujianBaru && !silentRecovery) {
+      tampilkanPetunjukUjian_(result);
+      return;
+    }
+    switchScreen('examScreen');
+    UJIAN.aktif = true;
+    UJIAN.jeda = false;
+    UJIAN.selesaiDiproses = false;
+    startExamLoops();
+    lockPortraitIfSupported();
+  } catch (error) {
+    if (!silentRecovery) setLoginMessage('Gagal memuat soal. Silakan coba login kembali.', 'error');
+    else setLoginMessage('Sesi belum dapat dipulihkan. Periksa koneksi.', 'error');
+  } finally {
+    if (!silentRecovery) toggleLoading(false);
+  }
+}
+
+function terapkanPayloadUjian(result, initial) {
+  var replaceQuestions = !!initial || result.soalDiperbarui !== false;
+  var currentId = currentQuestion() ? String(currentQuestion().id_soal) : '';
+  if (replaceQuestions) UJIAN.soal = result.soal || [];
+  UJIAN.versiSoal = result.versiSoal || UJIAN.versiSoal;
+  if (result.timerRevision !== undefined && Number(result.timerRevision) !== Number(UJIAN.timerRevision)) {
+    // Perubahan durasi oleh pengawas langsung diikuti (bukan di-min-kan).
+    UJIAN.timerRevision = Number(result.timerRevision);
+    UJIAN.remaining = Math.max(0, Number(result.remainingSeconds || 0));
+    UJIAN.duration = Math.max(0, Number(result.totalSeconds || 0));
+    if (!initial) tampilkanPemberitahuanWaktu_(result);
+  } else {
+    UJIAN.remaining = Math.max(0, Number(result.remainingSeconds || 0));
+    UJIAN.duration = Math.max(0, Number(result.totalSeconds || 0));
+  }
+  UJIAN.pelanggaran = Number(result.jumlahPelanggaran || UJIAN.pelanggaran || 0);
+  UJIAN.pelanggaranPindahTab = Number(result.jumlahPindahTab || UJIAN.pelanggaranPindahTab || 0);
+  if (result.nama && UJIAN.peserta) UJIAN.peserta.nama = result.nama;
+  if (result.kelas && UJIAN.peserta) UJIAN.peserta.kelas = result.kelas;
+  if (result.mapel && UJIAN.peserta) UJIAN.peserta.mapel = result.mapel;
+  if (result.guruMapel) {
+    UJIAN.guruMapel = String(result.guruMapel);
+    if (UJIAN.peserta) UJIAN.peserta.guruMapel = UJIAN.guruMapel;
+  }
+  // Teks tampilan dapat diubah admin kapan saja; sinkronisasi berkala
+  // membawa versi terbaru sehingga peserta melihat perubahan realtime.
+  if (result.judulUjian !== undefined) {
+    UJIAN.judulUjian = String(result.judulUjian || '');
+    terapkanJudulUjian_();
+  }
+  if (result.petunjukUjian !== undefined) {
+    UJIAN.petunjukUjian = String(result.petunjukUjian || '');
+  }
+
+  if (replaceQuestions) {
+    var serverAnswers = result.jawaban || {};
+    if (initial) {
+      UJIAN.jawaban = serverAnswers;
+      UJIAN.answerVersions = {};
+      UJIAN.savedVersions = {};
+      Object.keys(serverAnswers).forEach(function(id) {
+        UJIAN.answerVersions[id] = 0;
+        UJIAN.savedVersions[id] = 0;
+      });
+    } else {
+      // Jangan menimpa jawaban lokal yang sedang diketik ketika admin mengedit soal realtime.
+      Object.keys(serverAnswers).forEach(function(id) {
+        if (UJIAN.jawaban[id] === undefined && !UJIAN.savePromises[id]) {
+          UJIAN.jawaban[id] = serverAnswers[id];
+          UJIAN.answerVersions[id] = 0;
+          UJIAN.savedVersions[id] = 0;
+        }
+      });
+    }
+    var newIndex = UJIAN.soal.map(function(q) { return String(q.id_soal); }).indexOf(currentId);
+    UJIAN.index = newIndex >= 0 ? newIndex : 0;
+  }
+
+  document.getElementById('displayNama').textContent = UJIAN.peserta.nama || '-';
+  document.getElementById('displayKelas').textContent = 'Kelas ' + (UJIAN.peserta.kelas || '-');
+  document.getElementById('mapelTitle').textContent = UJIAN.peserta.mapel || 'Mata Pelajaran';
+  // Nama guru mapel ditampilkan tepat di bawah mata pelajaran yang diujikan.
+  var guru = UJIAN.peserta.guruMapel || UJIAN.guruMapel || '';
+  document.getElementById('guruMapelName').textContent = guru ? ('Guru Mapel: ' + guru) : 'Guru mapel belum diatur';
+  document.getElementById('guruMapelLabel').style.display = 'flex';
+  document.getElementById('examMeta').textContent = (UJIAN.publicConfig && UJIAN.publicConfig.sekolah) || 'SMP LABSCHOOL UNTAD PALU';
+  // Indikator header khusus menunjukkan jumlah pindah tab (batas 3 kali).
+  document.getElementById('violationCount').textContent = UJIAN.pelanggaranPindahTab;
+  if (replaceQuestions) {
+    renderNavigation();
+    renderQuestion();
+    // Revisi 6: guru mengubah soal/opsi jawaban -> peserta menerima versi baru
+    // pada sinkronisasi berikutnya (<=10 dtk) dan langsung diberi tahu.
+    if (!initial && UJIAN.aktif && !UJIAN.jeda) {
+      tampilkanToastPeserta_('Soal diperbarui oleh guru. Perubahan langsung tampil.', false);
+    }
+  }
+  updateTimerUI();
+}
+
+function startExamLoops() {
+  stopExamLoops();
+  UJIAN.lastTick = Date.now();
+  UJIAN.timerId = window.setInterval(tickTimer, 300);
+  UJIAN.heartbeatId = window.setInterval(sendHeartbeat, UJIAN.heartbeatMs);
+  UJIAN.syncId = window.setInterval(syncExam, UJIAN.syncMs);
+  // REVISI 3.4: seluruh penjaga keamanan tampilan soal dipasang di sini agar
+  // aktif untuk ujian baru maupun sesi yang dipulihkan.
+  aktifkanModeUjianAman_();
+  sendHeartbeat();
+}
+
+function stopExamLoops() {
+  if (UJIAN.timerId) clearInterval(UJIAN.timerId);
+  if (UJIAN.heartbeatId) clearInterval(UJIAN.heartbeatId);
+  if (UJIAN.syncId) clearInterval(UJIAN.syncId);
+  if (UJIAN.flushTimerId) clearTimeout(UJIAN.flushTimerId);
+  if (UJIAN.flushIntervalId) clearInterval(UJIAN.flushIntervalId);
+  batalTenggangLayarMati_();
+  UJIAN.timerId = UJIAN.heartbeatId = UJIAN.syncId = null;
+  UJIAN.flushTimerId = UJIAN.flushIntervalId = null;
+  // Penjaga keamanan hanya dilepas bila ujian benar-benar berakhir; saat
+  // startExamLoops memanggil ulang fungsi ini, UJIAN.aktif masih true.
+  if (!UJIAN.aktif) matikanModeUjianAman_();
+}
+
+function tickTimer() {
+  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.selesaiDiproses) return;
+  var now = Date.now();
+  var delta = Math.floor((now - UJIAN.lastTick) / 1000);
+  if (delta < 1) return;
+  UJIAN.lastTick += delta * 1000;
+  UJIAN.remaining = Math.max(0, UJIAN.remaining - delta);
+  updateTimerUI();
+  if (UJIAN.remaining <= 0) prosesSelesai(true);
+}
+
+function updateTimerUI() {
+  var seconds = Math.max(0, Math.floor(UJIAN.remaining || 0));
+  var minutes = Math.floor(seconds / 60);
+  var rest = seconds % 60;
+  document.getElementById('timerDisplay').textContent = pad2(minutes) + ':' + pad2(rest);
+  document.getElementById('timerBox').classList.toggle('warning', seconds > 0 && seconds <= UJIAN.batasMerah);
+}
+
+function pad2(value) { return value < 10 ? '0' + value : String(value); }
+
+async function sendHeartbeat() {
+  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.heartbeatBusy || UJIAN.selesaiDiproses) return;
+  UJIAN.heartbeatBusy = true;
+  try {
+    var result = await apiPeserta('heartbeat', Object.assign(credentialSesi(), {
+      remainingSeconds: UJIAN.remaining,
+      timerRevision: UJIAN.timerRevision
+    }));
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    if (result.status === 'JEDA' || result.needsResume) {
+      UJIAN.remaining = Number(result.remainingSeconds || UJIAN.remaining);
+      tampilkanJeda('Tampilan dijeda karena koneksi bermasalah. Waktu resmi tetap dihitung oleh server.');
+      return;
+    }
+    if (result.timeUp || result.remainingSeconds <= 0) {
+      UJIAN.remaining = 0;
+      updateTimerUI();
+      prosesSelesai(true);
+      return;
+    }
+    if (typeof result.remainingSeconds === 'number') {
+      if (result.timerRevision !== undefined && Number(result.timerRevision) !== Number(UJIAN.timerRevision)) {
+        // Pengawas mengubah durasi secara realtime: ikuti waktu resmi server.
+        UJIAN.timerRevision = Number(result.timerRevision);
+        UJIAN.remaining = Math.max(0, Math.floor(Number(result.remainingSeconds)));
+        tampilkanPemberitahuanWaktu_(result);
+      } else {
+        UJIAN.remaining = Math.min(UJIAN.remaining, result.remainingSeconds);
+      }
+      updateTimerUI();
+    }
+  } catch (error) {
+    pauseForRecovery('Koneksi ke server terputus. Tampilan dijeda; waktu resmi tetap dihitung oleh server.');
+  } finally {
+    UJIAN.heartbeatBusy = false;
+  }
+}
+
+async function syncExam() {
+  if (!UJIAN.aktif || UJIAN.syncBusy || UJIAN.selesaiDiproses) return;
+  UJIAN.syncBusy = true;
+  try {
+    var result = await apiPeserta('sinkronUjian', Object.assign(credentialSesi(), { versiSoal: UJIAN.versiSoal }));
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    if (result.status === 'SELESAI') return;
+    if (result.status === 'JEDA') {
+      tampilkanJeda('Tampilan dijeda. Tekan Lanjutkan setelah perangkat dan koneksi siap; waktu resmi tetap berjalan.');
+      return;
+    }
+    terapkanPayloadUjian(result, false);
+  } catch (error) {
+    // Heartbeat menangani jeda agar tidak mengirim request berulang saat offline.
+    console.warn('Sinkronisasi soal gagal:', error);
+  } finally {
+    UJIAN.syncBusy = false;
+  }
+}
+
+function currentQuestion() { return UJIAN.soal[UJIAN.index] || null; }
+
+function renderNavigation() {
+  var nav = document.getElementById('questionNav');
+  var answered = 0;
+  var html = '';
+  UJIAN.soal.forEach(function(question, index) {
+    var id = String(question.id_soal);
+    var isAnswered = jawabanTerisi(question, UJIAN.jawaban[id]);
+    if (isAnswered) answered += 1;
+    var classes = ['nav-number'];
+    if (index === UJIAN.index) classes.push('current');
+    classes.push(isAnswered ? 'answered' : 'empty');
+    html += '<button type="button" class="' + classes.join(' ') + '" data-index="' + index + '" title="Soal ' +
+      (index + 1) + (isAnswered ? ' — sudah terjawab' : ' — belum terjawab') +
+      '" aria-label="Buka soal ' + (index + 1) + '">' + (index + 1) + '</button>';
+  });
+  nav.innerHTML = html;
+  nav.querySelectorAll('.nav-number').forEach(function(button) {
+    button.addEventListener('click', function() { pindahSoal(Number(this.dataset.index)); });
+  });
+  var total = UJIAN.soal.length || 1;
+  document.getElementById('answeredSummary').textContent = answered + ' / ' + UJIAN.soal.length + ' terjawab';
+  var bar = document.getElementById('navProgressBar');
+  if (bar) bar.style.width = Math.round(answered / total * 100) + '%';
+  var finishButton = document.getElementById('finishButton');
+  if (finishButton) {
+    var complete = answered === UJIAN.soal.length && UJIAN.soal.length > 0;
+    finishButton.classList.toggle('ready', complete);
+    finishButton.title = complete ? 'Semua soal sudah terjawab' :
+      'Masih ada ' + (UJIAN.soal.length - answered) + ' soal belum terjawab';
+  }
+}
+
+function renderQuestion() {
+  var question = currentQuestion();
+  if (!question) {
+    document.getElementById('questionCard').innerHTML = '<div class="question-loading">Tidak ada soal yang dapat ditampilkan.</div>';
+    return;
+  }
+  var id = String(question.id_soal);
+  var type = String(question.tipe || '').toUpperCase();
+  var mediaHtml = renderStimulusMedia_(question);
+  // Deskripsi stimulus kini melekat pada masing-masing soal dan hanya
+  // ditampilkan bila soal itu memang memiliki gambar/video.
+  var deskripsiSoal = String(question.stimulus_deskripsi || '');
+  if (mediaHtml && deskripsiSoal) {
+    mediaHtml = '<p class="stimulus-intro">' + formatText(deskripsiSoal) + '</p>' + mediaHtml;
+  }
+  var questionHtml = mediaHtml +
+    '<div class="question-content question-protected" data-protected-question="true">' + formatText(question.pertanyaan) + '</div>';
+
+  questionHtml += '<section class="answer-section" data-answer-type="' + escapeHtml(type) + '">' +
+    '<p class="answer-label"><i class="fa-solid fa-pen-to-square"></i> Jawaban Anda' +
+    (type === 'URAIAN' ? '<span class="paste-allowed"><i class="fa-solid fa-paste"></i> Salin-tempel diizinkan pada soal uraian</span>' : '') +
+    '</p>' + renderAnswerInput(question, UJIAN.jawaban[id]) + '</section>';
+
+  document.getElementById('questionCard').innerHTML = questionHtml;
+  document.getElementById('questionNumber').textContent = 'SOAL ' + (UJIAN.index + 1);
+  document.getElementById('questionType').textContent = labelTipe(type);
+  document.getElementById('questionPosition').textContent = 'Soal ' + (UJIAN.index + 1) + ' dari ' + UJIAN.soal.length;
+  document.getElementById('nextButton').disabled = UJIAN.index === UJIAN.soal.length - 1;
+  document.getElementById('nextButton').style.display = UJIAN.index === UJIAN.soal.length - 1 ? 'none' : 'inline-flex';
+  perbaruiChipStatusJawaban_();
+  bindAnswerInputs();
+  bindMediaFallback_();
+}
+
+/**
+ * Stimulus gambar dan video WAJIB tampil bila soal memilikinya.
+ * Video Drive/YouTube memakai iframe, file langsung memakai tag <video>.
+ */
+function renderStimulusMedia_(question) {
+  var html = '';
+  var imageUrl = urlGambarTampil_(question.stimulus_gambar, 1600);
+  if (imageUrl) {
+    var idGambar = idDriveDariUrl_(imageUrl);
+    html += '<figure class="stimulus-wrap question-protected" data-protected-question="true">' +
+      '<div class="stimulus-frame">' +
+      '<img src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(question.stimulus_alt || 'Stimulus gambar soal') +
+      '" draggable="false" data-media-image="true" loading="eager" referrerpolicy="no-referrer" ' +
+      'crossorigin="anonymous" data-drive-id="' + escapeHtml(idGambar) + '" data-percobaan="0">' +
+      '<div class="media-fallback" data-media-fallback="image" hidden style="display:none">' +
+      '<i class="fa-regular fa-image"></i><p>Gambar stimulus sedang dimuat ulang...</p>' +
+      '<a href="' + escapeHtml(imageUrl) + '" target="_blank" rel="noopener">Buka gambar di tab baru</a></div>' +
+      '</div>' +
+      (question.stimulus_alt ? '<figcaption class="stimulus-caption">' + escapeHtml(question.stimulus_alt) + '</figcaption>' : '') +
+      '</figure>';
+  }
+
+  var videoUrl = safeMediaUrl(question.stimulus_video);
+  if (videoUrl) {
+    var kind = String(question.stimulus_video_kind || '').toLowerCase();
+    if (!kind) kind = /\.(mp4|webm|ogg|ogv|m4v|mov)(\?|$)/i.test(videoUrl) ? 'video' : 'iframe';
+    var player = kind === 'video' ?
+      '<video class="stimulus-video" controls controlslist="nodownload" playsinline preload="metadata" data-media-video="true">' +
+        '<source src="' + escapeHtml(videoUrl) + '">Browser Anda tidak mendukung pemutar video.</video>' :
+      '<iframe class="stimulus-video" src="' + escapeHtml(videoUrl) + '" title="' +
+        escapeHtml(question.stimulus_video_alt || 'Video stimulus soal') +
+        '" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen loading="eager"></iframe>';
+
+    html += '<figure class="stimulus-wrap video question-protected" data-protected-question="true">' +
+      '<div class="stimulus-frame video-frame">' + player +
+      '<div class="media-fallback" data-media-fallback="video" hidden style="display:none">' +
+      '<i class="fa-solid fa-film"></i><p>Video stimulus tidak dapat dimuat.</p>' +
+      '<a href="' + escapeHtml(videoUrl) + '" target="_blank" rel="noopener">Buka video di tab baru</a></div>' +
+      '</div>' +
+      (question.stimulus_video_alt ? '<figcaption class="stimulus-caption">' + escapeHtml(question.stimulus_video_alt) + '</figcaption>' : '') +
+      '</figure>';
+  }
+  return html;
+}
+
+/**
+ * Bila gambar gagal dimuat, coba beberapa endpoint Google lain sebelum menyerah.
+ *
+ * Google kadang menolak permintaan pertama (HTTP 403) walau file sudah publik,
+ * jadi urutan cadangan dicoba dulu supaya peserta tetap melihat gambarnya
+ * tanpa harus membuka tab baru.
+ */
+function alamatCadanganGambar_(driveId, percobaan) {
+  if (!driveId) return '';
+  var daftar = [
+    'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1600',
+    'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1000',
+    'https://lh3.googleusercontent.com/d/' + driveId + '=w1600',
+    'https://drive.google.com/uc?export=view&id=' + driveId
+  ];
+  return daftar[percobaan] || '';
+}
+
+/** Bila media gagal dimuat, tampilkan pesan dan tautan cadangan. */
+function bindMediaFallback_() {
+  document.querySelectorAll('[data-media-image="true"]').forEach(function(image) {
+    if (image.dataset.fallbackTerpasang === '1') return;
+    image.dataset.fallbackTerpasang = '1';
+    image.addEventListener('error', function() {
+      var gambar = this;
+      var driveId = gambar.getAttribute('data-drive-id') || '';
+      var percobaan = parseInt(gambar.getAttribute('data-percobaan') || '0', 10) + 1;
+      var berikutnya = alamatCadanganGambar_(driveId, percobaan);
+      if (berikutnya) {
+        gambar.setAttribute('data-percobaan', String(percobaan));
+        window.setTimeout(function() { gambar.src = berikutnya; }, 220 * percobaan);
+        return;
+      }
+      gambar.style.display = 'none';
+      var bingkai = gambar.parentNode;
+      if (bingkai && bingkai.classList) bingkai.classList.add('media-gagal');
+      var fallback = bingkai.querySelector('[data-media-fallback="image"]');
+      if (fallback) {
+        var pesan = fallback.querySelector('p');
+        if (pesan) pesan.textContent = 'Gambar stimulus tidak dapat dimuat.';
+        fallback.hidden = false;
+        fallback.removeAttribute('hidden');
+        fallback.style.display = 'flex';
+      }
+    });
+    image.addEventListener('load', function() {
+      this.style.display = '';
+      var bingkai = this.parentNode;
+      if (bingkai && bingkai.classList) bingkai.classList.remove('media-gagal');
+      var fallback = bingkai.querySelector('[data-media-fallback="image"]');
+      if (fallback) {
+        fallback.hidden = true;
+        fallback.setAttribute('hidden', 'hidden');
+        fallback.style.display = 'none';
+      }
+    });
+    // Gambar yang selesai dimuat sebelum listener terpasang tidak memicu event load.
+    if (image.complete && image.naturalWidth > 0) {
+      var bingkaiAwal = image.parentNode;
+      if (bingkaiAwal && bingkaiAwal.classList) bingkaiAwal.classList.remove('media-gagal');
+      var fbAwal = bingkaiAwal.querySelector('[data-media-fallback="image"]');
+      if (fbAwal) { fbAwal.hidden = true; fbAwal.setAttribute('hidden', 'hidden'); fbAwal.style.display = 'none'; }
+    }
+  });
+  document.querySelectorAll('[data-media-video="true"]').forEach(function(video) {
+    video.addEventListener('error', function() {
+      this.style.display = 'none';
+      var fallback = this.parentNode.querySelector('[data-media-fallback="video"]');
+      if (fallback) { fallback.hidden = false; fallback.removeAttribute('hidden'); fallback.style.display = 'flex'; }
+    }, true);
+  });
+}
+
+/** Chip status pada toolbar: hanya terjawab / belum terjawab. */
+function perbaruiChipStatusJawaban_() {
+  var chip = document.getElementById('answerStateChip');
+  if (!chip) return;
+  var question = currentQuestion();
+  if (!question) return;
+  var answered = jawabanTerisi(question, UJIAN.jawaban[String(question.id_soal)]);
+  chip.className = 'answer-state-chip ' + (answered ? 'answered' : 'empty');
+  chip.innerHTML = answered ?
+    '<i class="fa-solid fa-circle-check"></i> Terjawab' :
+    '<i class="fa-regular fa-circle"></i> Belum terjawab';
+}
+
+function renderAnswerInput(question, value) {
+  var type = String(question.tipe || '').toUpperCase();
+  var options = Array.isArray(question.opsi) ? question.opsi : [];
+  if (type === 'PG' || type === 'PGK_MCMA') {
+    var selected = type === 'PG' ? String(value || '') : (Array.isArray(value) ? value : []);
+    return '<div class="choice-list">' + options.map(function(option) {
+      var label = String(option.label || '');
+      var checked = type === 'PG' ? selected === label : selected.indexOf(label) !== -1;
+      return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
+        '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
+        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' + formatTextInline(option.text) + '</span></label>';
+    }).join('') + '</div>';
+  }
+  if (type === 'PGK') {
+    var objectValue = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return '<table class="pgk-table"><thead><tr><th>Pernyataan</th><th>Jawaban</th></tr></thead><tbody>' + options.map(function(option, index) {
+      var selectedValue = String(objectValue[option.id] || '');
+      return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) + '</td><td><select class="pgk-select" data-answer-input="true" data-statement="' + escapeHtml(option.id) + '">' +
+        '<option value="">Pilih</option><option value="BENAR"' + (selectedValue === 'BENAR' ? ' selected' : '') + '>Benar</option><option value="SALAH"' + (selectedValue === 'SALAH' ? ' selected' : '') + '>Salah</option></select></td></tr>';
+    }).join('') + '</tbody></table>';
+  }
+  if (type === 'MENJODOHKAN') {
+    // Peserta memilih jawaban dari daftar yang sudah diacak server.
+    var jodoh = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    var pilihan = Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : [];
+    return '<table class="pgk-table jodoh-table"><thead><tr><th>Pernyataan</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
+      options.map(function(option, index) {
+        var terpilih = String(jodoh[option.id] || '');
+        var daftar = pilihan.map(function(teks) {
+          return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(teks) + '</option>';
+        }).join('');
+        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) + '</td>' +
+          '<td><select class="pgk-select jodoh-select" data-answer-input="true" data-jodoh="' + escapeHtml(option.id) + '">' +
+          '<option value="">Pilih pasangan</option>' + daftar + '</select></td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  if (type === 'URAIAN') {
+    return '<textarea id="answerText" class="answer-input essay-answer" data-answer-input="true" placeholder="Tuliskan jawaban uraian Anda di sini...">' + escapeHtml(value || '') + '</textarea>';
+  }
+  return '<input id="answerText" class="answer-input" data-answer-input="true" type="text" autocomplete="off" placeholder="Tuliskan jawaban Anda..." value="' + escapeHtml(value || '') + '">';
+}
+
+function bindAnswerInputs() {
+  document.querySelectorAll('[data-answer-input="true"]').forEach(function(input) {
+    input.addEventListener('input', answerChanged);
+    input.addEventListener('change', answerChanged);
+  });
+}
+
+function answerChanged() {
+  var question = currentQuestion();
+  if (!question) return;
+  var id = String(question.id_soal);
+  setLocalAnswer_(id, collectCurrentAnswer());
+  syncChoiceVisualState_();
+  renderNavigation();
+  perbaruiChipStatusJawaban_();
+  setSaveStatus('saving');
+  // REVISI ANTI-LAG: jawaban hanya ditumpuk di memori, lalu dikirim
+  // berkelompok (batch) oleh jadwalkanFlushJawaban_. Tidak ada lagi satu
+  // permintaan server per ketukan tombol maupun per 3 detik.
+  antreKirimJawaban_(id);
+}
+
+/** Menandai satu jawaban sebagai "belum tersimpan" dan menjadwalkan kiriman. */
+function antreKirimJawaban_(questionId) {
+  questionId = String(questionId);
+  if (!UJIAN.aktif) return;
+  var versi = Number(UJIAN.answerVersions[questionId] || 0);
+  if (UJIAN.dirtyAnswers[questionId]) {
+    UJIAN.dirtyAnswers[questionId].versi = versi;
+    UJIAN.dirtyAnswers[questionId].jawaban = cloneAnswer_(UJIAN.jawaban[questionId]);
+  } else {
+    if (Number(UJIAN.savedVersions[questionId] || 0) >= versi) return;
+    UJIAN.dirtyAnswers[questionId] = {
+      versi: versi,
+      jawaban: cloneAnswer_(UJIAN.jawaban[questionId])
+    };
+  }
+  jadwalkanFlushJawaban_();
+}
+
+/** Menjadwalkan pengiriman batch: 1,2 dtk setelah berhenti mengetik + tiap 5 dtk. */
+function jadwalkanFlushJawaban_() {
+  if (!UJIAN.aktif) return;
+  if (UJIAN.flushTimerId) clearTimeout(UJIAN.flushTimerId);
+  UJIAN.flushTimerId = setTimeout(function() {
+    UJIAN.flushTimerId = null;
+    flushJawaban_();
+  }, 1200);
+  if (!UJIAN.flushIntervalId) {
+    UJIAN.flushIntervalId = setInterval(function() {
+      if (Object.keys(UJIAN.dirtyAnswers).length) flushJawaban_();
+    }, 5000);
+  }
+}
+
+/** Mengirim SEMUA jawaban tertunda dalam satu permintaan (simpanJawabanBatch). */
+function flushJawaban_() {
+  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.selesaiDiproses) return Promise.resolve();
+  if (UJIAN.flushBusy) return UJIAN.flushPromise || Promise.resolve();
+  var ids = Object.keys(UJIAN.dirtyAnswers);
+  if (!ids.length) return Promise.resolve();
+  UJIAN.flushBusy = true;
+  var batch = ids.map(function(id) {
+    return {
+      id_soal: id,
+      jawaban: UJIAN.dirtyAnswers[id].jawaban,
+      versiJawaban: UJIAN.dirtyAnswers[id].versi
+    };
+  });
+  UJIAN.flushPromise = (async function() {
+    try {
+      var result = await apiPeserta('simpanJawabanBatch', Object.assign(credentialSesi(), { answers: batch }));
+      if (!result.success) {
+        handleExamErrorResult(result);
+        return result;
+      }
+      if (result.status === 'SELESAI' || result.code === 'SELESAI') return result;
+      batch.forEach(function(item) {
+        var dirty = UJIAN.dirtyAnswers[item.id_soal];
+        if (dirty && Number(dirty.versi) === Number(item.versiJawaban)) {
+          UJIAN.savedVersions[item.id_soal] = Math.max(
+            Number(UJIAN.savedVersions[item.id_soal] || 0), Number(item.versiJawaban));
+          delete UJIAN.dirtyAnswers[item.id_soal];
+        }
+      });
+      setSaveStatus(Object.keys(UJIAN.dirtyAnswers).length ? 'saving' : 'saved');
+      return result;
+    } catch (error) {
+      setSaveStatus('error');
+      pauseForRecovery('Koneksi atau server bermasalah saat menyimpan jawaban. Tampilan dijeda; waktu resmi tetap dihitung oleh server.');
+      throw error;
+    } finally {
+      UJIAN.flushBusy = false;
+      UJIAN.flushPromise = null;
+    }
+  })();
+  return UJIAN.flushPromise;
+}
+
+function setLocalAnswer_(questionId, value) {
+  var before = JSON.stringify(UJIAN.jawaban[questionId] === undefined ? null : UJIAN.jawaban[questionId]);
+  var after = JSON.stringify(value === undefined ? null : value);
+  UJIAN.jawaban[questionId] = value;
+  if (before !== after) UJIAN.answerVersions[questionId] = Number(UJIAN.answerVersions[questionId] || 0) + 1;
+}
+
+function cloneAnswer_(value) {
+  if (value === undefined || value === null || typeof value !== 'object') return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function syncChoiceVisualState_() {
+  document.querySelectorAll('.choice-option').forEach(function(label) {
+    var input = label.querySelector('input[data-answer-input="true"]');
+    label.classList.toggle('checked', !!(input && input.checked));
+  });
+}
+
+function collectCurrentAnswer() {
+  var question = currentQuestion();
+  if (!question) return '';
+  var type = String(question.tipe || '').toUpperCase();
+  if (type === 'PG') {
+    var radio = document.querySelector('input[name="objectiveAnswer"]:checked');
+    return radio ? radio.value : '';
+  }
+  if (type === 'PGK_MCMA') {
+    return Array.prototype.slice.call(document.querySelectorAll('input[name="objectiveAnswer"]:checked')).map(function(input) { return input.value; }).sort();
+  }
+  if (type === 'PGK') {
+    var output = {};
+    document.querySelectorAll('.pgk-select[data-statement]').forEach(function(select) {
+      if (select.value) output[select.dataset.statement] = select.value;
+    });
+    return output;
+  }
+  if (type === 'MENJODOHKAN') {
+    var hasilJodoh = {};
+    document.querySelectorAll('.jodoh-select[data-jodoh]').forEach(function(select) {
+      if (select.value) hasilJodoh[select.dataset.jodoh] = select.value;
+    });
+    return hasilJodoh;
+  }
+  var input = document.getElementById('answerText');
+  return input ? input.value : '';
+}
+
+function jawabanTerisi(question, value) {
+  var type = String(question.tipe || '').toUpperCase();
+  if (type === 'PGK_MCMA') return Array.isArray(value) && value.length > 0;
+  if (type === 'PGK') return value && typeof value === 'object' && Object.keys(value).length > 0;
+  if (type === 'MENJODOHKAN') {
+    // Dianggap terjawab hanya bila SEMUA pernyataan sudah dipasangkan.
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    var daftarOpsi = Array.isArray(question.opsi) ? question.opsi : [];
+    if (!daftarOpsi.length) return false;
+    return daftarOpsi.every(function(option) {
+      return String(value[option.id] || '').trim().length > 0;
+    });
+  }
+  return String(value || '').trim().length > 0;
+}
+
+function pindahSoal(index) {
+  if (index < 0 || index >= UJIAN.soal.length || index === UJIAN.index) return;
+  var previous = currentQuestion();
+  if (previous) {
+    var previousId = String(previous.id_soal);
+    setLocalAnswer_(previousId, collectCurrentAnswer());
+    sendAnswer(previousId).catch(function() {});
+  }
+  UJIAN.index = index;
+  renderNavigation();
+  renderQuestion();
+  document.querySelector('.question-column').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function sendAnswer(questionId) {
+  // Kompatibilitas: panggilan tunggal kini memakai jalur batch yang sama.
+  questionId = String(questionId);
+  if (!UJIAN.aktif) return Promise.resolve();
+  antreKirimJawaban_(questionId);
+  if (UJIAN.flushTimerId) { clearTimeout(UJIAN.flushTimerId); UJIAN.flushTimerId = null; }
+  return flushJawaban_();
+}
+
+function saveAllAnswers() {
+  var current = currentQuestion();
+  if (current) setLocalAnswer_(String(current.id_soal), collectCurrentAnswer());
+  UJIAN.soal.forEach(function(question) {
+    antreKirimJawaban_(String(question.id_soal));
+  });
+  if (UJIAN.flushTimerId) { clearTimeout(UJIAN.flushTimerId); UJIAN.flushTimerId = null; }
+  return flushJawaban_();
+}
+
+function setSaveStatus(status) {
+  var element = document.getElementById('answerSaveStatus');
+  element.className = 'answer-save-status';
+  if (status === 'saving') {
+    element.classList.add('saving');
+    element.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Menyimpan jawaban...';
+  } else if (status === 'error') {
+    element.classList.add('error');
+    element.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Penyimpanan tertunda. Periksa koneksi.';
+  } else {
+    element.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Jawaban tersimpan otomatis';
+  }
+}
+
+function daftarSoalKosong_() {
+  return UJIAN.soal.map(function(question, index) {
+    return { nomor: index + 1, index: index, question: question };
+  }).filter(function(item) {
+    return !jawabanTerisi(item.question, UJIAN.jawaban[String(item.question.id_soal)]);
+  });
+}
+
+/**
+ * Tombol Selesai hanya boleh diproses bila SEMUA soal sudah terisi.
+ * Peserta diarahkan langsung ke soal kosong pertama.
+ */
+function bukaKonfirmasiSelesai() {
+  var current = currentQuestion();
+  if (current) setLocalAnswer_(String(current.id_soal), collectCurrentAnswer());
+  renderNavigation();
+
+  var kosong = daftarSoalKosong_();
+  var textElement = document.getElementById('finishModalText');
+  var listElement = document.getElementById('finishBlockList');
+  var confirmButton = document.getElementById('confirmFinish');
+  var titleElement = document.getElementById('finishModalTitle');
+
+  if (kosong.length) {
+    titleElement.textContent = 'Masih ada jawaban kosong';
+    textElement.innerHTML = '<b>' + kosong.length + ' soal</b> belum dijawab. Semua soal wajib diisi sebelum ujian dapat diselesaikan.';
+    listElement.innerHTML = '<p class="blank-list-title">Klik nomor soal untuk mengisinya:</p><div class="blank-numbers">' +
+      kosong.map(function(item) {
+        return '<button type="button" class="blank-number" data-goto="' + item.index + '">' + item.nomor + '</button>';
+      }).join('') + '</div>';
+    listElement.querySelectorAll('.blank-number').forEach(function(button) {
+      button.addEventListener('click', function() {
+        hideModal('finishModal');
+        pindahSoal(Number(this.dataset.goto));
+      });
+    });
+    listElement.style.display = 'block';
+    confirmButton.style.display = 'none';
+    document.getElementById('cancelFinish').textContent = 'Lengkapi Jawaban';
+    showModal('finishModal');
+    return;
+  }
+
+  titleElement.textContent = 'Selesaikan ujian?';
+  textElement.textContent = 'Semua ' + UJIAN.soal.length + ' soal telah terjawab. Jawaban tidak dapat diubah setelah ujian diselesaikan.';
+  listElement.innerHTML = '';
+  listElement.style.display = 'none';
+  confirmButton.style.display = 'inline-flex';
+  document.getElementById('cancelFinish').textContent = 'Kembali';
+  showModal('finishModal');
+}
+
+async function prosesSelesai(otomatis) {
+  if (UJIAN.selesaiDiproses || !UJIAN.aktif) return;
+  UJIAN.selesaiDiproses = true;
+  // Penyelesaian resmi: tidak dianggap "keluar paksa" oleh penjaga keamanan.
+  GUARD.navigasiResmi = true;
+  bersihkanPenandaKeluarPaksa_();
+  hideModal('finishModal');
+  toggleLoading(true, otomatis ? 'Waktu habis. Menyimpan jawaban...' : 'Menyimpan jawaban akhir...');
+  try {
+    await saveAllAnswers();
+    var result = await apiPeserta('selesaiUjian', Object.assign(credentialSesi(), { otomatis: !!otomatis }));
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    UJIAN.aktif = false;
+    stopExamLoops();
+    exitFullscreenSafe();
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    tampilkanHasil(result);
+  } catch (error) {
+    UJIAN.selesaiDiproses = false;
+    pauseForRecovery('Penyelesaian ujian tertunda karena koneksi. Timer disimpan dan dapat dilanjutkan setelah koneksi stabil.');
+  } finally {
+    toggleLoading(false);
+  }
+}
+
+function selesaikanDariPayloadServer_(result) {
+  UJIAN.aktif = false;
+  UJIAN.jeda = false;
+  UJIAN.selesaiDiproses = false;
+  stopExamLoops();
+  exitFullscreenSafe();
+  sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  hideModal('pauseModal');
+  toggleLoading(false);
+  tampilkanHasil(result);
+}
+
+function tampilkanHasil(result) {
+  var status = String(result.statusKelulusan || '').toUpperCase();
+  var pending = Number(result.belumDinilai || 0);
+  var tuntas = status === 'TUNTAS';
+  var menunggu = status === 'MENUNGGU_PENILAIAN' || pending > 0;
+
+  var iconElement = document.getElementById('resultIcon');
+  var titleElement = document.getElementById('resultTitle');
+  iconElement.className = 'modal-icon ' + (menunggu ? 'amber' : (tuntas ? 'green' : 'red'));
+  iconElement.innerHTML = '<i class="fa-solid ' +
+    (menunggu ? 'fa-hourglass-half' : (tuntas ? 'fa-trophy' : 'fa-triangle-exclamation')) + '"></i>';
+  titleElement.textContent = menunggu ? 'Ujian Selesai — Menunggu Penilaian' :
+    (tuntas ? 'Selamat, Anda TUNTAS!' : 'Ujian Selesai — REMEDIAL');
+
+  var statusLabel = menunggu ? 'MENUNGGU PENILAIAN' : (tuntas ? 'TUNTAS' : 'REMEDIAL');
+  var statusClass = menunggu ? 'pending' : (tuntas ? 'pass' : 'fail');
+
+  var content = '<div class="result-person"><strong>' + escapeHtml(result.nama || '') + '</strong>' +
+    '<span>Kelas ' + escapeHtml(result.kelas || '') + ' · ' + escapeHtml(result.mapel || UJIAN.peserta && UJIAN.peserta.mapel || '') + '</span></div>';
+
+  content += '<div class="result-banner ' + statusClass + '">' +
+    '<span class="result-banner-label">STATUS</span>' +
+    '<strong>' + statusLabel + '</strong>' +
+    '<small>KKM ' + numberFormat(result.kkm || UJIAN.kkm) + '</small></div>';
+
+  content += '<div class="result-score-hero"><span>' + numberFormat(result.skorPersen) + '</span><small>SKOR AKHIR (%)</small></div>';
+
+  content += '<div class="result-summary">' +
+    '<div class="result-stat correct"><span>' + numberFormat(result.totalBenar) + '</span><small>Jawaban Benar</small></div>' +
+    '<div class="result-stat wrong"><span>' + numberFormat(result.totalSalah) + '</span><small>Jawaban Salah</small></div>' +
+    '<div class="result-stat"><span>' + numberFormat(result.totalNilai) + ' / ' + numberFormat(result.totalPoin) + '</span><small>Total Skor Poin</small></div>' +
+    (pending ? '<div class="result-stat pending"><span>' + numberFormat(pending) + '</span><small>Uraian Menunggu Nilai</small></div>' : '') +
+    '</div>';
+
+  content += '<p class="result-note">' + escapeHtml(result.message || '') +
+    (menunggu ? ' Status Tuntas/Remedial ditetapkan setelah guru menilai jawaban uraian.' : '') + '</p>';
+
+  document.getElementById('resultContent').innerHTML = content;
+  showModal('resultModal');
+}
+
+function numberFormat(value) {
+  var numeric = Number(value || 0);
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.00$/, '');
+}
+
+function pauseForRecovery(reason) {
+  // Kebijakan: jeda timer hanya untuk masalah jaringan/server, bukan pindah tab,
+  // split screen, layar sleep, atau perubahan orientasi perangkat.
+  if (!/jaringan|koneksi|internet|offline|server/i.test(String(reason || ''))) return;
+  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.selesaiDiproses) return;
+  UJIAN.jeda = true;
+  UJIAN.lastTick = Date.now();
+  document.getElementById('pauseText').textContent = reason;
+  showModal('pauseModal');
+  apiPeserta('jedaUjian', Object.assign(credentialSesi(), {
+    remainingSeconds: UJIAN.remaining,
+    alasan: reason
+  })).then(function(result) {
+    if (result && result.success && typeof result.remainingSeconds === 'number') {
+      UJIAN.remaining = result.remainingSeconds;
+      updateTimerUI();
+    }
+  }).catch(function() {
+    // Saat benar-benar offline, server akan menjeda sesi ketika heartbeat dianggap stale.
+  });
+}
+
+function tampilkanJeda(reason) {
+  if (!UJIAN.aktif) return;
+  UJIAN.jeda = true;
+  UJIAN.lastTick = Date.now();
+  document.getElementById('pauseText').textContent = reason;
+  showModal('pauseModal');
+}
+
+async function lanjutkanSetelahJeda() {
+  // Klik tombol ini adalah gesture sah untuk kembali ke layar penuh.
+  if (UJIAN.aktif) requestFullscreenSafe(true);
+  toggleLoading(true, 'Melanjutkan sesi...');
+  try {
+    var result = await apiPeserta('lanjutUjian', credentialSesi());
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    if (result.status === 'SELESAI') {
+      selesaikanDariPayloadServer_(result);
+      return;
+    }
+    UJIAN.remaining = Number(result.remainingSeconds || UJIAN.remaining);
+    UJIAN.jeda = false;
+    UJIAN.lastTick = Date.now();
+    updateTimerUI();
+    hideModal('pauseModal');
+    sendHeartbeat();
+  } catch (error) {
+    document.getElementById('pauseText').textContent = 'Koneksi masih belum stabil. Periksa internet lalu coba kembali.';
+  } finally {
+    toggleLoading(false);
+  }
+}
+
+function handleExamErrorResult(result) {
+  if (result && (result.code === 'DISKUALIFIKASI' || result.status === 'DISKUALIFIKASI')) {
+    tampilDiskualifikasi(!!result.jawabanDireset);
+    return;
+  }
+  if (result && /sesi ujian tidak valid|sesi ujian tidak ditemukan|sudah direset|digantikan perangkat|login kembali/i.test(String(result.message || ''))) {
+    kembaliKeLogin(result.message || 'Sesi tidak valid. Silakan login kembali.');
+    return;
+  }
+  if (result && result.code === 'SELESAI') {
+    UJIAN.aktif = false;
+    stopExamLoops();
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    kembaliKeLogin();
+    return;
+  }
+  if (result && result.message) console.warn('Server ujian:', result.message);
+}
+
+/** Pindah tab ke-3: modal singkat, jawaban sudah direset server, lalu keluar otomatis. */
+function tampilDiskualifikasi(autoKeluar) {
+  UJIAN.aktif = false;
+  UJIAN.jeda = false;
+  GUARD.navigasiResmi = true;
+  bersihkanPenandaKeluarPaksa_();
+  stopExamLoops();
+  batalTenggangLayarMati_();
+  exitFullscreenSafe();
+  sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  hideModal('pauseModal');
+  hideModal('warningModal');
+  UJIAN.warningQueue = [];
+  UJIAN.warningVisible = false;
+  document.getElementById('disqualifiedMessage').textContent = autoKeluar ?
+    'Pindah tab ke-3 terdeteksi. Semua jawaban telah direset dan Anda akan keluar dari ujian secara otomatis.' :
+    'Anda telah mencapai batas pelanggaran atau didiskualifikasi oleh pengawas.';
+  showModal('disqualifiedModal');
+
+  if (UJIAN.autoExitDiskualifikasiId) clearTimeout(UJIAN.autoExitDiskualifikasiId);
+  if (autoKeluar) {
+    UJIAN.autoExitDiskualifikasiId = setTimeout(function() {
+      kembaliKeLogin('Pindah tab ke-3 terdeteksi. Jawaban telah direset dan Anda wajib susulan kembali.');
+    }, 3500);
+  }
+}
+
+/* ==================== KEAMANAN TAMPILAN SOAL (v3.4) ====================
+ * Perbaikan fitur keamanan tampilan soal peserta:
+ *   1. BLOK PINDAH TAB      - pintasan tab/jendela baru dicegat, konten soal
+ *                             disamarkan begitu halaman ditinggalkan, dan
+ *                             kepindahan yang benar-benar terjadi tetap
+ *                             dicatat sebagai pelanggaran (1-2 peringatan,
+ *                             ke-3 reset jawaban).
+ *   2. BLOK SCREENSHOT      - PrintScreen, Win+Shift+S, Cmd+Shift+3/4/5,
+ *                             Ctrl+P, dan cetak halaman diblokir; layar
+ *                             ditutup perisai hitam dan papan klip dibersihkan.
+ *   3. BLOK KELUAR APLIKASI - beforeunload, tombol kembali (back), Ctrl+W,
+ *                             Ctrl+R/F5, dan penutupan browser dicegat lalu
+ *                             dicatat sebagai pelanggaran saat peserta kembali.
+ *   4. LAYAR PENUH OTOMATIS - setiap notifikasi peringatan mengembalikan mode
+ *                             layar penuh. Bila browser menolak (butuh
+ *                             gesture), "gerbang layar penuh" menutup soal
+ *                             sampai peserta menekan tombolnya.
+ *
+ * CATATAN JUJUR: browser tidak mengizinkan halaman web mematikan pintasan
+ * sistem (Alt+Tab, tombol Home Android/iOS, tombol screenshot perangkat).
+ * Karena itu lapisan kedua selalu dipakai: konten disamarkan + pelanggaran
+ * dicatat di server, sehingga usaha curang tetap terdeteksi pengawas.
+ * ====================================================================== */
+
+var GUARD = {
+  navigasiResmi: false,
+  gateTampil: false,
+  shieldTimer: null,
+  fsWatchId: null,
+  fsPercobaanTerakhir: 0,
+  historyDipasang: false,
+  jumlahTombolKembali: 0,
+  toastRinganTimer: null,
+  displayMediaDibungkus: false,
+  pendengarPembungkus: false,
+  peringatanCadangan: {},
+  // REVISI 3.5 (smartphone)
+  absenAktif: null,
+  absenSingkat: [],
+  splitBerturut: 0,
+  splitUlangTimer: null,
+  notisMobileTampil: false,
+  // REVISI 3.5b: layar penuh dikelola jendela induk (pembungkus GitHub Pages)
+  // agar notifikasi browser tidak menampilkan alamat googleusercontent.
+  layarPenuhPembungkus: false,
+  standalonePembungkus: false,
+  KEY_KELUAR_PAKSA: 'ao_keluar_paksa_v1'
+};
+
+/* ---------- JEMBATAN KE PEMBUNGKUS (GitHub Pages) ---------- */
+/**
+ * Halaman ujian berjalan di dalam bingkai lintas domain. Sebagian kejadian
+ * hanya terjadi di jendela induk (menutup tab, tombol cetak saat fokus di luar
+ * bingkai, tombol kembali jendela induk), sehingga pembungkus perlu tahu kapan
+ * ujian berlangsung dan perlu bisa melaporkan pelanggaran ke sini.
+ */
+function kabariPembungkus_(status) {
+  if (!adaPembungkus_()) return;
+  try {
+    window.parent.postMessage({ sumber: 'siado', aksi: 'ujian', status: status }, '*');
+  } catch (error) {}
+}
+
+/** Asal (origin) pembungkus resmi; pesan dari asal lain diabaikan. */
+function asalPembungkus_() {
+  try {
+    if (typeof APP_PUBLIC_URL !== 'string' || !APP_PUBLIC_URL) return '';
+    return new URL(APP_PUBLIC_URL).origin;
+  } catch (error) { return ''; }
+}
+
+function pasangPendengarPembungkus_() {
+  if (GUARD.pendengarPembungkus) return;
+  GUARD.pendengarPembungkus = true;
+  window.addEventListener('message', function(event) {
+    if (!event || !event.data || event.data.sumber !== 'siado-pembungkus') return;
+    var asalSah = asalPembungkus_();
+    if (asalSah && String(event.origin || '') !== asalSah) return;
+
+    // Status layar penuh selalu diproses, termasuk sebelum ujian dimulai.
+    if (event.data.aksi === 'statusLayarPenuh') {
+      var sebelumnya = GUARD.layarPenuhPembungkus;
+      GUARD.layarPenuhPembungkus = !!event.data.aktif;
+      GUARD.standalonePembungkus = !!event.data.standalone;
+      if (GUARD.layarPenuhPembungkus) {
+        UJIAN.fullscreenActivated = true;
+        UJIAN.fullscreenRestorePending = false;
+        sembunyikanGerbangLayarPenuh_();
+      } else if (UJIAN.aktif && sebelumnya) {
+        // Peserta keluar dari layar penuh lewat jendela induk.
+        if (bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+        if (!document.hidden && !UJIAN.tabKeluarAktif) {
+          reportViolation('keluar_fullscreen', 'Keluar dari mode layar penuh.');
+        }
+      }
+      return;
+    }
+
+    if (!UJIAN.aktif) return;
+    if (event.data.aksi === 'pelanggaran') {
+      var jenis = String(event.data.jenis || 'pindah_tab');
+      if (jenis === 'screenshot') aktifkanPerisaiLayar_('Tangkapan layar diblokir.');
+      reportViolation(jenis, String(event.data.detail || 'Pelanggaran terdeteksi pada jendela pembungkus.'));
+    }
+  });
+}
+
+/* ---------------------- UTILITAS LAYAR PENUH ---------------------- */
+/**
+ * Pengingat khusus perangkat mobile.
+ *
+ * Safari iPhone tidak mendukung Fullscreen API sama sekali, sehingga gerbang
+ * layar penuh tidak dapat dipakai di sana. Peserta diberi tahu secara terbuka
+ * bahwa perpindahan aplikasi tetap terpantau, agar tidak merasa "aman".
+ */
+function ingatkanKeamananMobile_() {
+  if (!isMobileDevice() || GUARD.notisMobileTampil) return;
+  GUARD.notisMobileTampil = true;
+  if (!fullscreenDidukung_()) {
+    window.setTimeout(function() {
+      if (!UJIAN.aktif) return;
+      tampilkanToastPeserta_('Perangkat ini tidak mendukung layar penuh. Jangan berpindah aplikasi: ' +
+        'setiap perpindahan tetap tercatat dan dilaporkan ke pengawas.', true);
+    }, 900);
+  }
+}
+
+function fullscreenDidukung_() {
+  // Bila dibuka lewat pembungkus, jendela induk yang memiliki kemampuan
+  // layar penuh, jadi tetap dianggap didukung.
+  if (adaPembungkus_()) return true;
+  var element = document.documentElement;
+  return !!(element.requestFullscreen || element.webkitRequestFullscreen);
+}
+
+/**
+ * Mode aplikasi (dipasang ke layar utama / PWA): tidak ada bilah browser,
+ * sehingga layar sudah penuh dan tidak perlu meminta fullscreen sama sekali.
+ * Inilah cara satu-satunya menghilangkan notifikasi bawaan browser
+ * "swipe down to exit full screen", karena notifikasi itu milik browser dan
+ * tidak dapat dihapus oleh halaman web mana pun.
+ */
+function modeAplikasiPenuh_() {
+  if (GUARD.standalonePembungkus) return true;
+  try {
+    if (window.navigator.standalone === true) return true;
+    if (!window.matchMedia) return false;
+    return window.matchMedia('(display-mode: fullscreen)').matches ||
+           window.matchMedia('(display-mode: standalone)').matches;
+  } catch (error) { return false; }
+}
+
+function sedangLayarPenuh_() {
+  // Layar penuh milik jendela induk juga dihitung sebagai layar penuh.
+  if (GUARD.layarPenuhPembungkus || modeAplikasiPenuh_()) return true;
+  return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+    document.mozFullScreenElement || document.msFullscreenElement ||
+    document.webkitIsFullScreen);
+}
+
+/** Dipasang saat ujian dimulai/dipulihkan (dipanggil dari startExamLoops). */
+function aktifkanModeUjianAman_() {
+  GUARD.navigasiResmi = false;
+  document.body.classList.add('ujian-berlangsung');
+  // Kelas pada <html> mematikan tarik-untuk-muat-ulang (pull to refresh) di HP.
+  document.documentElement.classList.add('ujian-berlangsung');
+  ingatkanKeamananMobile_();
+  pasangPerangkapTombolKembali_();
+  pasangBlokirRekamLayar_();
+  pasangPendengarPembungkus_();
+  kabariPembungkus_('mulai');
+  if (adaPembungkus_()) {
+    try { window.parent.postMessage({ sumber: 'siado', aksi: 'cekLayarPenuh' }, '*'); } catch (error) {}
+  }
+  mulaiPengawasLayarPenuh_();
+  laporKeluarPaksaTertunda_();
+  requestFullscreenSafe();
+}
+
+/** Dilepas saat ujian selesai/diskualifikasi/logout (dari stopExamLoops). */
+function matikanModeUjianAman_() {
+  kabariPembungkus_('selesai');
+  Object.keys(GUARD.peringatanCadangan).forEach(batalkanPeringatanCadangan_);
+  document.body.classList.remove('ujian-berlangsung');
+  document.documentElement.classList.remove('ujian-berlangsung');
+  GUARD.absenSingkat = [];
+  GUARD.notisMobileTampil = false;
+  hentikanPengawasLayarPenuh_();
+  sembunyikanGerbangLayarPenuh_();
+  sembunyikanPerisaiLayar_();
+  samarkanKontenUjian_(false);
+}
+
+function mulaiPengawasLayarPenuh_() {
+  if (GUARD.fsWatchId || !fullscreenDidukung_()) return;
+  GUARD.fsWatchId = window.setInterval(periksaLayarPenuh_, 1200);
+}
+
+function hentikanPengawasLayarPenuh_() {
+  if (GUARD.fsWatchId) window.clearInterval(GUARD.fsWatchId);
+  GUARD.fsWatchId = null;
+}
+
+/**
+ * Gerbang hanya boleh menutup soal bila tidak ada dialog lain yang harus
+ * ditekan peserta (peringatan pelanggaran, jeda koneksi, hasil ujian).
+ */
+function bolehTampilGerbang_() {
+  return UJIAN.aktif && !UJIAN.jeda && !UJIAN.selesaiDiproses &&
+    !UJIAN.warningVisible && !document.hidden && fullscreenDidukung_();
+}
+
+function periksaLayarPenuh_() {
+  if (sedangLayarPenuh_()) {
+    UJIAN.fullscreenActivated = true;
+    sembunyikanGerbangLayarPenuh_();
+    return;
+  }
+  if (bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+}
+
+function tampilkanGerbangLayarPenuh_() {
+  var gate = document.getElementById('fullscreenGate');
+  if (!gate || GUARD.gateTampil) return;
+  GUARD.gateTampil = true;
+  gate.classList.add('show');
+  gate.setAttribute('aria-hidden', 'false');
+  var tombol = document.getElementById('fullscreenGateButton');
+  if (tombol) { try { tombol.focus(); } catch (error) {} }
+}
+
+function sembunyikanGerbangLayarPenuh_() {
+  var gate = document.getElementById('fullscreenGate');
+  if (!gate) return;
+  GUARD.gateTampil = false;
+  gate.classList.remove('show');
+  gate.setAttribute('aria-hidden', 'true');
+}
+
+/* ------------------- PENYAMARAN KONTEN & PERISAI ------------------- */
+/** Soal disamarkan saat halaman ditinggalkan agar tidak terekam/terfoto. */
+function samarkanKontenUjian_(samarkan) {
+  var nyalakan = !!samarkan && UJIAN.aktif && !UJIAN.selesaiDiproses;
+  document.body.classList.toggle('konten-disamarkan', nyalakan);
+  var veil = document.getElementById('privacyVeil');
+  if (veil) veil.setAttribute('aria-hidden', nyalakan ? 'false' : 'true');
+}
+
+/**
+ * Pesan peringatan yang WAJIB dilihat peserta untuk jenis pelanggaran berikut.
+ *
+ * REVISI 3.4b: sebelumnya peringatan hanya muncul bila server sempat membalas.
+ * Bila jaringan lambat/putus, percobaan tangkapan layar berlalu tanpa
+ * peringatan apa pun. Sekarang selalu ada peringatan lokal sebagai cadangan.
+ */
+var PESAN_PERINGATAN_LOKAL = {
+  screenshot: 'PERINGATAN! Tangkapan layar atau pencetakan halaman ujian terdeteksi. ' +
+    'Tindakan ini dilarang, telah dicatat sebagai pelanggaran, dan dilaporkan kepada pengawas.',
+  rekam_layar: 'PERINGATAN! Perekaman atau pembagian layar terdeteksi. ' +
+    'Tindakan ini dilarang dan telah dicatat sebagai pelanggaran.',
+  devtools: 'PERINGATAN! Percobaan membuka alat pengembang browser terdeteksi dan dicatat sebagai pelanggaran.',
+  keluar_aplikasi: 'PERINGATAN! Anda terdeteksi menutup atau meninggalkan aplikasi ujian. ' +
+    'Kejadian ini telah dicatat sebagai pelanggaran.',
+  tombol_kembali: 'PERINGATAN! Tombol kembali browser dinonaktifkan selama ujian. ' +
+    'Percobaan ini dicatat sebagai pelanggaran.'
+};
+
+/** Menjamin peserta tetap mendapat peringatan walau server belum membalas. */
+function jadwalkanPeringatanCadangan_(jenis) {
+  var pesan = PESAN_PERINGATAN_LOKAL[jenis];
+  if (!pesan || GUARD.peringatanCadangan[jenis]) return;
+  GUARD.peringatanCadangan[jenis] = window.setTimeout(function() {
+    delete GUARD.peringatanCadangan[jenis];
+    if (!UJIAN.aktif) return;
+    enqueueViolationWarning_(pesan);
+  }, 3200);
+}
+
+function batalkanPeringatanCadangan_(jenis) {
+  if (!GUARD.peringatanCadangan[jenis]) return;
+  window.clearTimeout(GUARD.peringatanCadangan[jenis]);
+  delete GUARD.peringatanCadangan[jenis];
+}
+
+function aktifkanPerisaiLayar_(pesan, durasiMs) {
+  var shield = document.getElementById('screenshotShield');
+  if (shield) {
+    var teks = shield.querySelector('[data-shield-text]');
+    if (teks && pesan) teks.textContent = pesan;
+    shield.classList.add('show');
+    shield.setAttribute('aria-hidden', 'false');
+  }
+  document.body.classList.add('konten-disamarkan');
+  window.clearTimeout(GUARD.shieldTimer);
+  GUARD.shieldTimer = window.setTimeout(function() {
+    sembunyikanPerisaiLayar_();
+    samarkanKontenUjian_(document.hidden);
+  }, Math.max(800, Number(durasiMs || 1600)));
+  bersihkanPapanKlip_();
+}
+
+function sembunyikanPerisaiLayar_() {
+  var shield = document.getElementById('screenshotShield');
+  if (!shield) return;
+  shield.classList.remove('show');
+  shield.setAttribute('aria-hidden', 'true');
+}
+
+/** Isi papan klip ditimpa agar hasil salin/tangkap tidak dapat dipakai. */
+function bersihkanPapanKlip_() {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(' ').catch(function() {});
+    }
+  } catch (error) {}
+}
+
+/** Pemberitahuan singkat tanpa menambah hitungan pelanggaran. */
+function peringatanRingan_(pesan) {
+  if (GUARD.toastRinganTimer) return;
+  GUARD.toastRinganTimer = window.setTimeout(function() { GUARD.toastRinganTimer = null; }, 2500);
+  tampilkanToastPeserta_(pesan, true);
+}
+
+/* ------------- KELUAR APLIKASI / BROWSER (DICATAT ULANG) ------------- */
+function tandaiKeluarPaksa_(detail) {
+  if (!UJIAN.aktif || !UJIAN.peserta) return;
+  try {
+    sessionStorage.setItem(GUARD.KEY_KELUAR_PAKSA, JSON.stringify({
+      sessionId: UJIAN.peserta.sessionId,
+      detail: detail || 'Keluar dari aplikasi/browser saat ujian berlangsung.',
+      waktu: Date.now()
+    }));
+  } catch (error) {}
+}
+
+function bersihkanPenandaKeluarPaksa_() {
+  try { sessionStorage.removeItem(GUARD.KEY_KELUAR_PAKSA); } catch (error) {}
+}
+
+/**
+ * Menutup browser saat ujian tidak dapat dikirim langsung ke server (halaman
+ * sudah mati). Penandanya disimpan lokal, lalu dilaporkan begitu peserta
+ * membuka kembali ujian pada sesi yang sama.
+ */
+function laporKeluarPaksaTertunda_() {
+  var raw = null;
+  try { raw = sessionStorage.getItem(GUARD.KEY_KELUAR_PAKSA); } catch (error) { return; }
+  if (!raw) return;
+  bersihkanPenandaKeluarPaksa_();
+  var data = null;
+  try { data = JSON.parse(raw); } catch (error) { return; }
+  if (!data || !UJIAN.peserta) return;
+  if (String(data.sessionId) !== String(UJIAN.peserta.sessionId)) return;
+  window.setTimeout(function() {
+    if (!UJIAN.aktif) return;
+    reportViolation('keluar_aplikasi', data.detail || 'Aplikasi/browser ditutup saat ujian berlangsung.');
+  }, 1200);
+}
+
+/** Tombol kembali (back) browser & tombol back Android dilumpuhkan. */
+function pasangPerangkapTombolKembali_() {
+  if (GUARD.historyDipasang) return;
+  try {
+    window.history.pushState({ siadoGuard: Date.now() }, document.title, window.location.href);
+  } catch (error) { return; }
+  GUARD.historyDipasang = true;
+  window.addEventListener('popstate', tanganiTombolKembali_);
+}
+
+function tanganiTombolKembali_() {
+  if (!UJIAN.aktif) return;
+  try {
+    window.history.pushState({ siadoGuard: Date.now() }, document.title, window.location.href);
+  } catch (error) {}
+  GUARD.jumlahTombolKembali += 1;
+  if (GUARD.jumlahTombolKembali === 1) {
+    peringatanRingan_('Tombol kembali dinonaktifkan selama ujian. Percobaan berikutnya dicatat sebagai pelanggaran.');
+    return;
+  }
+  reportViolation('tombol_kembali', 'Menekan tombol kembali/back browser saat ujian berlangsung.');
+}
+
+/** Permintaan berbagi/merekam layar ditolak selama ujian aktif. */
+function pasangBlokirRekamLayar_() {
+  if (GUARD.displayMediaDibungkus) return;
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return;
+    var asli = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getDisplayMedia = function() {
+      if (UJIAN.aktif) {
+        aktifkanPerisaiLayar_('Perekaman / berbagi layar diblokir.');
+        reportViolation('rekam_layar', 'Percobaan merekam atau membagikan layar saat ujian.');
+        return Promise.reject(new Error('Perekaman layar diblokir selama ujian.'));
+      }
+      return asli.apply(navigator.mediaDevices, arguments);
+    };
+    GUARD.displayMediaDibungkus = true;
+  } catch (error) {}
+}
+
+/* ======================== PEMASANGAN EVENT ======================== */
+function bindSecurityEvents() {
+  document.addEventListener('visibilitychange', function() {
+    if (!UJIAN.aktif) return;
+    if (document.hidden) {
+      // Soal langsung disamarkan agar tidak terbaca pada pratinjau pengalih
+      // aplikasi (task switcher), rekaman layar, atau jendela berdampingan.
+      samarkanKontenUjian_(true);
+      // Pada mobile, layar HP mati (tombol power / auto-lock) diberi masa
+      // tenggang; bila layar hidup kembali sebelum batas, TIDAK dihitung
+      // pelanggaran. Pindah tab yang benar-benar meninggalkan aplikasi tetap
+      // dihitung setelah masa tenggang berlalu.
+      catatKeluarTampilanSoal_(isMobileDevice() ?
+        'Peserta meninggalkan tampilan soal pada perangkat mobile.' :
+        'Halaman ujian tidak lagi terlihat pada perangkat desktop.');
+    } else {
+      // Perhitungan absen mobile diselesaikan di sini (bukan oleh timer latar
+      // belakang yang dibekukan browser HP).
+      selesaikanAbsenMobile_();
+      samarkanKontenUjian_(false);
+      UJIAN.tabKeluarAktif = false;
+      // Browser mobile menunda request saat aplikasi di background; kirim ulang
+      // event yang belum mendapat respons (eventId mencegah hitung ganda).
+      window.setTimeout(retryPendingViolationEvents_, 300);
+      // Layar penuh dipulihkan; bila browser menolak, gerbang layar penuh
+      // muncul dan peserta wajib menekan tombolnya.
+      if (UJIAN.fullscreenRestorePending || !sedangLayarPenuh_()) requestFullscreenSafe();
+    }
+  });
+
+  window.addEventListener('blur', function() {
+    if (!UJIAN.aktif) return;
+    samarkanKontenUjian_(true);
+    if (isMobileDevice()) return;
+    window.setTimeout(function() {
+      if (UJIAN.aktif && !document.hasFocus()) {
+        catatKeluarTampilanSoal_('Fokus berpindah dari halaman ujian.');
+      }
+    }, 350);
+  });
+
+  window.addEventListener('focus', function() {
+    if (!UJIAN.aktif) return;
+    samarkanKontenUjian_(false);
+    if (document.visibilityState === 'visible') UJIAN.tabKeluarAktif = false;
+  });
+
+  // Halaman ditinggalkan/ditutup: penanda disimpan agar pelanggaran tetap
+  // tercatat ketika peserta membuka ujian kembali.
+  window.addEventListener('pagehide', function() {
+    if (!UJIAN.aktif || GUARD.navigasiResmi) return;
+    samarkanKontenUjian_(true);
+    tandaiKeluarPaksa_('Halaman ujian ditutup atau ditinggalkan (pagehide).');
+  });
+
+  // Konfirmasi bawaan browser saat peserta menutup tab/jendela atau menekan
+  // tombol muat ulang. Dialog ini satu-satunya cara sah menahan penutupan.
+  window.addEventListener('beforeunload', function(event) {
+    if (!UJIAN.aktif || GUARD.navigasiResmi || UJIAN.selesaiDiproses) return;
+    tandaiKeluarPaksa_('Percobaan menutup / meninggalkan halaman ujian.');
+    var pesan = 'Ujian masih berlangsung. Keluar sekarang dicatat sebagai pelanggaran.';
+    event.preventDefault();
+    event.returnValue = pesan;
+    return pesan;
+  });
+
+  window.addEventListener('resize', function() {
+    if (!UJIAN.aktif) return;
+    clearTimeout(splitTimer);
+    // Mobile diberi jeda lebih panjang agar papan ketik/bilah alamat stabil dulu.
+    splitTimer = setTimeout(checkSplitScreen, isMobileDevice() ? 1500 : 900);
+  });
+
+  // Android mengubah visualViewport saat masuk mode layar terbagi.
+  if (window.visualViewport && window.visualViewport.addEventListener) {
+    window.visualViewport.addEventListener('resize', function() {
+      if (!UJIAN.aktif || !isMobileDevice()) return;
+      clearTimeout(splitTimer);
+      splitTimer = setTimeout(checkSplitScreen, 1500);
+    });
+  }
+
+  window.addEventListener('orientationchange', function() {
+    if (UJIAN.aktif && isMobileDevice() && window.matchMedia('(orientation: landscape)').matches) {
+      // CSS orientation lock menutup konten ujian. Tidak membuat JEDA dan tidak menambah pelanggaran.
+      console.warn('Mode landscape diblokir; putar perangkat ke portrait.');
+    }
+  });
+
+  var fullscreenChangeHandler = function() {
+    if (sedangLayarPenuh_()) {
+      UJIAN.fullscreenActivated = true;
+      UJIAN.fullscreenRestorePending = false;
+      sembunyikanGerbangLayarPenuh_();
+      return;
+    }
+    if (!UJIAN.aktif) return;
+    // Keluar dari layar penuh saat ujian: soal ditutup gerbang sampai peserta
+    // kembali ke layar penuh lewat tombol (gesture wajib menurut browser).
+    if (bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+    if (UJIAN.fullscreenActivated && !document.hidden && !UJIAN.tabKeluarAktif &&
+        !UJIAN.fullscreenRestorePending) {
+      reportViolation('keluar_fullscreen', 'Keluar dari mode layar penuh.');
+    }
+  };
+  document.addEventListener('fullscreenchange', fullscreenChangeHandler);
+  document.addEventListener('webkitfullscreenchange', fullscreenChangeHandler);
+
+  // Setiap sentuhan/klik peserta dipakai sebagai gesture untuk memulihkan
+  // layar penuh yang tertinggal (dibatasi 1 permintaan per 1,5 detik).
+  ['pointerdown', 'touchend'].forEach(function(namaEvent) {
+    document.addEventListener(namaEvent, function() {
+      if (!UJIAN.aktif || UJIAN.jeda || UJIAN.selesaiDiproses) return;
+      if (sedangLayarPenuh_() || !fullscreenDidukung_()) return;
+      // Jeda 5 detik: setiap permintaan layar penuh memunculkan notifikasi
+      // bawaan browser, jadi jangan sampai bertubi-tubi.
+      if (Date.now() - GUARD.fsPercobaanTerakhir < 5000) return;
+      GUARD.fsPercobaanTerakhir = Date.now();
+      requestFullscreenSafe(true);
+    }, true);
+  });
+
+  document.addEventListener('keydown', function(event) {
+    if (!UJIAN.aktif) return;
+    var key = String(event.key || '').toLowerCase();
+    var ctrl = !!(event.ctrlKey || event.metaKey);
+    var sedangMengetik = isTextEditing();
+
+    /* 1) TANGKAPAN LAYAR & CETAK ------------------------------------- */
+    var printScreen = event.key === 'PrintScreen' || key === 'printscreen' || event.keyCode === 44;
+    var snipWindows = event.shiftKey && (event.metaKey || event.getModifierState && event.getModifierState('Meta')) && key === 's';
+    var snipMac = event.metaKey && event.shiftKey && ['3', '4', '5'].indexOf(key) !== -1;
+    var cetakHalaman = ctrl && key === 'p';
+    if (printScreen || snipWindows || snipMac || cetakHalaman) {
+      event.preventDefault();
+      event.stopPropagation();
+      aktifkanPerisaiLayar_(cetakHalaman ?
+        'Mencetak halaman ujian diblokir.' : 'Tangkapan layar diblokir.');
+      reportViolation('screenshot', cetakHalaman ?
+        'Percobaan mencetak halaman ujian.' : 'Shortcut tangkapan layar terdeteksi.');
+      return;
+    }
+
+    /* 2) ALAT PENGEMBANG & SIMPAN HALAMAN ---------------------------- */
+    if (event.key === 'F12' || (ctrl && event.shiftKey && ['i', 'j', 'c', 'k'].indexOf(key) !== -1) ||
+        (ctrl && key === 'u')) {
+      event.preventDefault();
+      event.stopPropagation();
+      peringatanRingan_('Alat pengembang dinonaktifkan selama ujian.');
+      reportViolation('devtools', 'Percobaan membuka alat pengembang / kode sumber halaman.');
+      return;
+    }
+    if (ctrl && key === 's' && !sedangMengetik) {
+      event.preventDefault();
+      event.stopPropagation();
+      peringatanRingan_('Menyimpan halaman ujian tidak diizinkan.');
+      return;
+    }
+
+    /* 3) TAB / JENDELA BARU, PINDAH TAB, DAN BARIS ALAMAT ------------ */
+    var tabJendelaBaru = ctrl && ['t', 'n', 'w', 'q'].indexOf(key) !== -1;
+    var pintasanPindahTab = (ctrl && (key === 'tab' || key === 'pageup' || key === 'pagedown')) ||
+      (ctrl && !event.shiftKey && /^[1-9]$/.test(key)) ||
+      (event.altKey && /^[1-9]$/.test(key));
+    var barisAlamat = (ctrl && ['l', 'o', 'e', 'h', 'd'].indexOf(key) !== -1) ||
+      (event.altKey && key === 'd') || event.key === 'F6' || event.key === 'F3';
+    var navigasiSejarah = (event.altKey && (key === 'arrowleft' || key === 'arrowright')) ||
+      (key === 'backspace' && !sedangMengetik);
+    if (tabJendelaBaru || pintasanPindahTab || barisAlamat || navigasiSejarah) {
+      event.preventDefault();
+      event.stopPropagation();
+      peringatanRingan_('Berpindah tab / jendela diblokir selama ujian berlangsung.');
+      return;
+    }
+
+    /* 4) MUAT ULANG: dialihkan ke tombol Refresh internal -------------- */
+    if (event.key === 'F5' || (ctrl && key === 'r')) {
+      event.preventDefault();
+      event.stopPropagation();
+      peringatanRingan_('Gunakan tombol Refresh di dalam aplikasi agar jawaban tidak hilang.');
+      refreshHalamanUjian();
+      return;
+    }
+
+    /* 5) LAYAR PENUH --------------------------------------------------- */
+    if (event.key === 'F11') {
+      event.preventDefault();
+      event.stopPropagation();
+      requestFullscreenSafe(true);
+      return;
+    }
+    if (key === 'escape' && sedangLayarPenuh_()) {
+      // Esc tidak dapat dibatalkan browser. Kejadiannya tetap dicatat oleh
+      // fullscreenchange; di sini hanya gerbang layar penuh yang disiapkan.
+      window.setTimeout(function() {
+        if (UJIAN.aktif && !sedangLayarPenuh_() && bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+      }, 250);
+    }
+
+    /* 6) PAPAN KLIK (kecuali kolom jawaban uraian) --------------------- */
+    if (ctrl && key === 'a' && !sedangMengetik && !clipboardAllowedForEssay(document.activeElement)) {
+      event.preventDefault();
+      return;
+    }
+    if (ctrl && ['c', 'x', 'v'].indexOf(key) !== -1 && !clipboardAllowedForEssay(document.activeElement)) {
+      event.preventDefault();
+      reportViolation(key === 'v' ? 'paste_non_uraian' : (key === 'x' ? 'cut_soal' : 'copy_soal'),
+        'Shortcut clipboard pada tampilan soal.');
+    }
+  }, true);
+
+  // Sebagian browser hanya mengirim PrintScreen pada keyup.
+  document.addEventListener('keyup', function(event) {
+    if (!UJIAN.aktif) return;
+    if (event.key === 'PrintScreen' || String(event.key || '').toLowerCase() === 'printscreen' || event.keyCode === 44) {
+      event.preventDefault();
+      aktifkanPerisaiLayar_('Tangkapan layar diblokir.');
+      reportViolation('screenshot', 'Tombol PrintScreen terdeteksi (keyup).');
+    }
+  }, true);
+
+  // Cetak lewat menu browser: konten disembunyikan oleh CSS @media print,
+  // kejadiannya tetap dicatat sebagai pelanggaran.
+  if (window.matchMedia) {
+    try {
+      var mediaCetak = window.matchMedia('print');
+      var handlerCetak = function(mq) {
+        if (!UJIAN.aktif || !mq.matches) return;
+        aktifkanPerisaiLayar_('Mencetak halaman ujian diblokir.');
+        reportViolation('screenshot', 'Percobaan mencetak halaman ujian dari menu browser.');
+      };
+      if (mediaCetak.addEventListener) mediaCetak.addEventListener('change', handlerCetak);
+      else if (mediaCetak.addListener) mediaCetak.addListener(handlerCetak);
+    } catch (error) {}
+  }
+  window.addEventListener('beforeprint', function() {
+    if (!UJIAN.aktif) return;
+    aktifkanPerisaiLayar_('Mencetak halaman ujian diblokir.');
+    reportViolation('screenshot', 'Percobaan mencetak halaman ujian (beforeprint).');
+  });
+
+  document.addEventListener('copy', function(event) {
+    if (!UJIAN.aktif || clipboardAllowedForEssay(event.target)) return;
+    event.preventDefault();
+    reportViolation('copy_soal', 'Upaya menyalin teks pada halaman ujian.');
+  }, true);
+  document.addEventListener('cut', function(event) {
+    if (!UJIAN.aktif || clipboardAllowedForEssay(event.target)) return;
+    event.preventDefault();
+    reportViolation('cut_soal', 'Upaya memotong teks pada halaman ujian.');
+  }, true);
+  document.addEventListener('paste', function(event) {
+    if (!UJIAN.aktif || clipboardAllowedForEssay(event.target)) return;
+    event.preventDefault();
+    reportViolation('paste_non_uraian', 'Upaya menempel jawaban selain pada soal uraian.');
+  }, true);
+  document.addEventListener('contextmenu', function(event) {
+    if (UJIAN.aktif) event.preventDefault();
+  }, true);
+  document.addEventListener('dragstart', function(event) {
+    if (UJIAN.aktif) event.preventDefault();
+  }, true);
+  document.addEventListener('selectstart', function(event) {
+    if (!UJIAN.aktif) return;
+    var target = event.target;
+    var tag = target && target.tagName ? String(target.tagName).toUpperCase() : '';
+    // Kolom jawaban peserta tetap dapat diseleksi seperti biasa.
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+    if (clipboardAllowedForEssay(target) || isTextEditing()) return;
+    event.preventDefault();
+  }, true);
+
+  window.addEventListener('offline', function() {
+    if (UJIAN.aktif) pauseForRecovery('Koneksi internet terputus. Tampilan dijeda; waktu resmi tetap berjalan.');
+  });
+  window.addEventListener('error', function(event) {
+    // Error antarmuka tidak otomatis menghentikan timer. JEDA dikhususkan untuk jaringan/server.
+    if (UJIAN.aktif && event && event.message) console.warn('Error antarmuka ujian:', event.message);
+  });
+  window.addEventListener('unhandledrejection', function() {
+    // Hanya jadikan JEDA bila browser benar-benar mendeteksi kondisi offline.
+    if (UJIAN.aktif && !UJIAN.jeda && navigator.onLine === false) {
+      pauseForRecovery('Jaringan internet terputus. Tampilan dijeda; waktu resmi tetap berjalan.');
+    }
+  });
+}
+
+function catatKeluarTampilanSoal_(detail) {
+  // blur dan visibilitychange biasanya muncul bersamaan untuk satu perpindahan tab.
+  // Flag ini memastikan satu kali keluar = satu peringatan, lalu reset saat peserta kembali.
+  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.tabKeluarAktif) return;
+
+  // REVISI KEAMANAN: pada perangkat mobile, layar HP mati (tombol power,
+  // auto-lock, notifikasi) BUKAN pelanggaran. Diberi masa tenggang singkat;
+  // hanya bila layar masih mati melewati batas (benar-benar meninggalkan
+  // aplikasi) pelanggaran pindah tab dicatat.
+  if (isMobileDevice()) {
+    antreCekLayarMati_(detail);
+    return;
+  }
+
+  UJIAN.tabKeluarAktif = true;
+  UJIAN.fullscreenRestorePending = true;
+  UJIAN.urutanKeluarTab += 1;
+
+  // Tampilkan hitungan segera; respons server berikutnya menjadi sumber kebenaran.
+  UJIAN.pelanggaranPindahTab = Math.min(3, Number(UJIAN.pelanggaranPindahTab || 0) + 1);
+  document.getElementById('violationCount').textContent = UJIAN.pelanggaranPindahTab;
+
+  var eventId = 'tab-' + UJIAN.urutanKeluarTab + '-' + Date.now();
+  reportViolation('pindah_tab', detail, eventId);
+}
+
+/* ============================================================
+ * ABSEN PERANGKAT MOBILE: LAYAR MATI vs PINDAH APLIKASI
+ *
+ * PERBAIKAN PENTING (REVISI 3.5). Versi sebelumnya menentukan pelanggaran
+ * memakai setTimeout selama masa tenggang. Padahal Android dan iOS
+ * MEMBEKUKAN timer begitu aplikasi berada di latar belakang, sehingga timer
+ * baru berjalan ketika peserta sudah kembali — saat itu document.hidden
+ * sudah false dan pelanggaran TIDAK PERNAH tercatat. Akibatnya blokir pindah
+ * tab praktis tidak berfungsi di HP.
+ *
+ * Sekarang lama absen dihitung dari selisih waktu nyata (Date.now) pada saat
+ * peserta kembali, sehingga tidak bergantung pada timer latar belakang.
+ * ============================================================ */
+function graceLayarMatiMs_() {
+  return Math.max(2, Math.min(30, Number(UJIAN.layarMatiGrace || 5))) * 1000;
+}
+
+function antreCekLayarMati_(detail) {
+  if (!UJIAN.aktif || UJIAN.jeda || GUARD.absenAktif) return;
+  UJIAN.fullscreenRestorePending = true;
+  UJIAN.urutanKeluarTab += 1;
+  GUARD.absenAktif = {
+    mulai: Date.now(),
+    detail: detail || 'Peserta meninggalkan tampilan soal pada perangkat mobile.',
+    // eventId dikunci sejak awal absen supaya pencatatan lewat timer maupun
+    // lewat kepulangan peserta tidak pernah dihitung dua kali oleh server.
+    eventId: 'tab-' + UJIAN.urutanKeluarTab + '-' + Date.now(),
+    dicatat: false
+  };
+  // Timer hanya bonus untuk perangkat yang masih menjalankannya di latar belakang.
+  UJIAN.layarMatiTimer = window.setTimeout(function() {
+    UJIAN.layarMatiTimer = null;
+    if (!UJIAN.aktif || UJIAN.jeda || !document.hidden || !GUARD.absenAktif) return;
+    catatAbsenMobile_(Math.round((Date.now() - GUARD.absenAktif.mulai) / 1000));
+  }, graceLayarMatiMs_());
+}
+
+/** Mencatat satu absen mobile sebagai pelanggaran pindah tab (idempoten). */
+function catatAbsenMobile_(durasiDetik) {
+  var absen = GUARD.absenAktif;
+  if (!absen || absen.dicatat) return;
+  absen.dicatat = true;
+  UJIAN.tabKeluarAktif = true;
+  UJIAN.pelanggaranPindahTab = Math.min(3, Number(UJIAN.pelanggaranPindahTab || 0) + 1);
+  document.getElementById('violationCount').textContent = UJIAN.pelanggaranPindahTab;
+  reportViolation('pindah_tab',
+    absen.detail + ' Meninggalkan aplikasi sekitar ' + Math.max(1, Number(durasiDetik || 0)) + ' detik.',
+    absen.eventId);
+}
+
+/** Dipanggil ketika tampilan soal terlihat kembali pada perangkat mobile. */
+function selesaikanAbsenMobile_() {
+  if (UJIAN.layarMatiTimer) {
+    clearTimeout(UJIAN.layarMatiTimer);
+    UJIAN.layarMatiTimer = null;
+  }
+  var absen = GUARD.absenAktif;
+  if (!absen) return;
+  var durasiDetik = Math.round((Date.now() - absen.mulai) / 1000);
+  if (!absen.dicatat && (durasiDetik * 1000) >= graceLayarMatiMs_()) {
+    catatAbsenMobile_(durasiDetik);       // benar-benar meninggalkan aplikasi
+    GUARD.absenAktif = null;
+    return;
+  }
+  GUARD.absenAktif = null;
+  if (!absen.dicatat) akumulasiAbsenSingkat_(durasiDetik);
+}
+
+/**
+ * Absen singkat (layar mati sekejap, notifikasi masuk) tetap dimaafkan, tetapi
+ * diakumulasi. Bila terjadi berulang kali dalam 3 menit, peserta jelas sedang
+ * bolak-balik meninggalkan aplikasi sehingga dicatat sebagai pelanggaran.
+ */
+function akumulasiAbsenSingkat_(durasiDetik) {
+  var sekarang = Date.now();
+  GUARD.absenSingkat = GUARD.absenSingkat.filter(function(waktu) { return sekarang - waktu < 180000; });
+  GUARD.absenSingkat.push(sekarang);
+  var maks = Math.max(2, Math.min(10, Number(UJIAN.maksAbsenSingkat || 3)));
+  var sisa = maks - GUARD.absenSingkat.length;
+  if (sisa > 0) {
+    peringatanRingan_('Anda meninggalkan tampilan soal ' + Math.max(1, durasiDetik) + ' detik. ' +
+      'Jangan berpindah aplikasi — ' + sisa + ' kali lagi akan dicatat sebagai pelanggaran.');
+    return;
+  }
+  GUARD.absenSingkat = [];
+  UJIAN.urutanKeluarTab += 1;
+  UJIAN.tabKeluarAktif = true;
+  UJIAN.pelanggaranPindahTab = Math.min(3, Number(UJIAN.pelanggaranPindahTab || 0) + 1);
+  document.getElementById('violationCount').textContent = UJIAN.pelanggaranPindahTab;
+  reportViolation('pindah_tab',
+    'Berulang kali meninggalkan tampilan soal dalam waktu singkat (' + maks + ' kali dalam 3 menit).',
+    'tab-' + UJIAN.urutanKeluarTab + '-' + Date.now());
+}
+
+/** Membatalkan pemantauan absen (dipakai saat ujian berakhir). */
+function batalTenggangLayarMati_() {
+  if (UJIAN.layarMatiTimer) {
+    clearTimeout(UJIAN.layarMatiTimer);
+    UJIAN.layarMatiTimer = null;
+  }
+  if (GUARD.splitUlangTimer) {
+    clearTimeout(GUARD.splitUlangTimer);
+    GUARD.splitUlangTimer = null;
+  }
+  GUARD.absenAktif = null;
+  GUARD.splitBerturut = 0;
+}
+
+function checkSplitScreen() {
+  if (!UJIAN.aktif || UJIAN.jeda || document.hidden || isTextEditing()) return;
+  var screenWidth = Math.max(window.screen.width || 0, window.screen.availWidth || 0);
+  var screenHeight = Math.max(window.screen.height || 0, window.screen.availHeight || 0);
+  if (!screenWidth || !screenHeight) return;
+  if (isMobileDevice()) {
+    periksaSplitMobile_(screenWidth, screenHeight);
+    return;
+  }
+  var narrow = window.innerWidth / screenWidth < 0.72;
+  var short = window.innerHeight / screenHeight < 0.67;
+  if (narrow || short) reportViolation('split_screen', 'Ukuran jendela mengindikasikan split screen atau jendela diperkecil.');
+}
+
+/**
+ * Split screen / jendela mengambang pada Android (REVISI 3.5).
+ *
+ * Sebelumnya perangkat mobile dilewati sama sekali, padahal mode layar terbagi
+ * adalah celah menyontek paling mudah di HP. Ambangnya sengaja longgar dan
+ * harus bertahan dua kali pemeriksaan supaya papan ketik virtual, bilah alamat
+ * yang muncul-hilang, dan perangkat lipat tidak salah dihukum.
+ */
+function periksaSplitMobile_(lebarLayar, tinggiLayar) {
+  var vv = window.visualViewport;
+  // Papan ketik virtual sedang terbuka: tinggi visual jauh di bawah tinggi layout.
+  if (vv && vv.height && window.innerHeight && (vv.height / window.innerHeight) < 0.75) return;
+  var rasioLebar = window.innerWidth / lebarLayar;
+  var rasioTinggi = window.innerHeight / tinggiLayar;
+  if (rasioLebar >= 0.72 && rasioTinggi >= 0.55) {
+    GUARD.splitBerturut = 0;
+    return;
+  }
+  GUARD.splitBerturut += 1;
+  if (GUARD.splitBerturut < 2) {
+    // Pastikan sekali lagi setelah tampilan stabil sebelum menghukum.
+    if (GUARD.splitUlangTimer) clearTimeout(GUARD.splitUlangTimer);
+    GUARD.splitUlangTimer = window.setTimeout(function() {
+      GUARD.splitUlangTimer = null;
+      checkSplitScreen();
+    }, 1500);
+    return;
+  }
+  GUARD.splitBerturut = 0;
+  peringatanRingan_('Mode layar terbagi terdeteksi. Gunakan satu aplikasi penuh untuk ujian.');
+  reportViolation('split_screen', 'Layar terbagi (split screen) atau jendela mengambang terdeteksi pada perangkat mobile.');
+}
+
+function retryPendingViolationEvents_() {
+  if (!UJIAN.aktif || UJIAN.jeda || document.hidden) return;
+  Object.keys(UJIAN.pendingViolationEvents).forEach(function(eventId) {
+    var item = UJIAN.pendingViolationEvents[eventId];
+    if (item && !item.retrying) {
+      item.retrying = true;
+      setTimeout(function() {
+        item.retrying = false;
+        if (UJIAN.pendingViolationEvents[eventId]) {
+          reportViolation(item.jenis, item.detail, eventId, true);
+        }
+      }, 150);
+    }
+  });
+}
+
+function enqueueViolationWarning_(message) {
+  UJIAN.warningQueue.push(String(message || 'Pelanggaran keamanan terdeteksi.'));
+  showNextViolationWarning_();
+}
+
+function showNextViolationWarning_() {
+  if (UJIAN.warningVisible || !UJIAN.warningQueue.length || !UJIAN.aktif) return;
+  UJIAN.warningVisible = true;
+  // Gerbang layar penuh disingkirkan agar tombol "Saya Mengerti" bisa ditekan;
+  // tombol itulah yang mengembalikan layar penuh dengan gesture sah.
+  sembunyikanGerbangLayarPenuh_();
+  // REVISI 3.4b: perisai tangkapan layar juga ditutup, kalau tidak notifikasi
+  // peringatan tertutup layar hitam dan peserta tidak melihat apa pun.
+  window.clearTimeout(GUARD.shieldTimer);
+  sembunyikanPerisaiLayar_();
+  samarkanKontenUjian_(false);
+  document.getElementById('warningText').textContent = UJIAN.warningQueue.shift();
+  showModal('warningModal');
+  // Best-effort: layar penuh diminta kembali saat peringatan ditampilkan.
+  // Jika browser menolak (butuh gesture), tombol "Saya Mengerti" yang
+  // memastikan fullscreen dipulihkan.
+  requestFullscreenSafe();
+}
+
+function reportViolation(jenis, detail, eventId, isRetry) {
+  if (!UJIAN.aktif || UJIAN.jeda) return;
+  if (jenis === 'pindah_tab' && eventId && !UJIAN.pendingViolationEvents[eventId]) {
+    UJIAN.pendingViolationEvents[eventId] = { jenis: jenis, detail: detail, retrying: false };
+  }
+  // Cooldown hanya untuk event non-tab. Perpindahan tab memakai eventId unik
+  // sehingga setiap siklus keluar → kembali dapat langsung diberi peringatan.
+  if (jenis !== 'pindah_tab' && UJIAN.cooldown[jenis]) return;
+  if (jenis !== 'pindah_tab') {
+    UJIAN.cooldown[jenis] = true;
+    setTimeout(function() { delete UJIAN.cooldown[jenis]; }, 4200);
+  }
+  // Peringatan lokal disiapkan lebih dulu; dibatalkan begitu server membalas
+  // dengan pesan resminya sehingga peserta tidak menerima dua notifikasi.
+  jadwalkanPeringatanCadangan_(jenis);
+
+  apiPeserta('catatPelanggaran', Object.assign(credentialSesi(), {
+    jenis: jenis,
+    detail: detail,
+    eventId: eventId || ''
+  })).then(function(result) {
+    batalkanPeringatanCadangan_(jenis);
+    if (!result.success) {
+      handleExamErrorResult(result);
+      return;
+    }
+    if (typeof result.jumlahPelanggaran === 'number') UJIAN.pelanggaran = result.jumlahPelanggaran;
+    if (typeof result.jumlahPindahTab === 'number') {
+      UJIAN.pelanggaranPindahTab = Math.max(UJIAN.pelanggaranPindahTab, result.jumlahPindahTab);
+    }
+    document.getElementById('violationCount').textContent = Math.min(3, UJIAN.pelanggaranPindahTab);
+    if (eventId) {
+      delete UJIAN.pendingViolationEvents[eventId];
+      if (UJIAN.processedViolationEvents[eventId]) return;
+      UJIAN.processedViolationEvents[eventId] = true;
+    }
+    if (result.harusDiskualifikasi) {
+      tampilDiskualifikasi(!!result.jawabanDireset);
+      return;
+    }
+    if (result.duplicate && jenis !== 'pindah_tab') return;
+    var warningMessage = result.message;
+    if (!warningMessage && result.duplicate && jenis === 'pindah_tab') {
+      var tabCount = Math.max(1, Number(result.jumlahPindahTab || UJIAN.pelanggaranPindahTab || 1));
+      warningMessage = 'Peringatan pindah tab ke-' + tabCount + ' dari 3. ' + Math.max(0, 3 - tabCount) + ' kesempatan tersisa.';
+    }
+    if (!warningMessage) warningMessage = PESAN_PERINGATAN_LOKAL[jenis] || 'Pelanggaran keamanan terdeteksi.';
+    enqueueViolationWarning_(warningMessage);
+  }).catch(function(error) {
+    console.warn('Pelanggaran belum terkirim:', error);
+  });
+}
+
+function clipboardAllowedForEssay(element) {
+  var question = currentQuestion();
+  if (!question || String(question.tipe || '').toUpperCase() !== 'URAIAN') return false;
+  return !!(element && element.closest && element.closest('.answer-section[data-answer-type="URAIAN"]'));
+}
+
+function isTextEditing() {
+  var element = document.activeElement;
+  return element && ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(element.tagName) !== -1;
+}
+
+function isMobileDevice() {
+  // Jangan memakai lebar viewport saja: desktop yang diperkecil dapat menyamar
+  // sebagai mobile dan melewati deteksi blur/visibility.
+  if (navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')) return true;
+  var coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var shortestSide = Math.min(Number(window.screen.width || 9999), Number(window.screen.height || 9999));
+  return !!coarsePointer && shortestSide <= 1024;
+}
+
+/**
+ * Meminta mode layar penuh.
+ *
+ * REVISI 3.4: mengembalikan Promise sehingga pemanggil tahu apakah browser
+ * menerima permintaan. Bila ditolak (umumnya karena tidak berasal dari
+ * gesture pengguna), gerbang layar penuh ditampilkan agar soal tertutup
+ * sampai peserta menekan tombol "Kembali ke Layar Penuh".
+ */
+function requestFullscreenSafe(dariGestur) {
+  var element = document.documentElement;
+  if (sedangLayarPenuh_()) {
+    UJIAN.fullscreenActivated = true;
+    UJIAN.fullscreenRestorePending = false;
+    sembunyikanGerbangLayarPenuh_();
+    return Promise.resolve(true);
+  }
+  // Jendela induk (pembungkus) yang meminta layar penuh bila tersedia:
+  // notifikasi browser jadi menampilkan domain sekolah, bukan alamat panjang
+  // googleusercontent, dan hanya muncul satu kali.
+  if (adaPembungkus_()) {
+    try {
+      window.parent.postMessage({ sumber: 'siado', aksi: 'layarPenuh' }, '*');
+    } catch (error) {}
+    return new Promise(function(resolve) {
+      var batas = 0;
+      var cek = window.setInterval(function() {
+        batas += 1;
+        if (GUARD.layarPenuhPembungkus) {
+          window.clearInterval(cek);
+          resolve(true);
+          return;
+        }
+        if (batas >= 8) {                     // ± 800 ms
+          window.clearInterval(cek);
+          resolve(mintaLayarPenuhLokal_(dariGestur));
+        }
+      }, 100);
+    });
+  }
+  return Promise.resolve(mintaLayarPenuhLokal_(dariGestur));
+}
+
+/** Permintaan layar penuh langsung dari halaman ujian (tanpa pembungkus). */
+function mintaLayarPenuhLokal_(dariGestur) {
+  var element = document.documentElement;
+  var requestMethod = element.requestFullscreen || element.webkitRequestFullscreen;
+  if (!requestMethod) return false; // mis. Safari iOS
+  var sukses = function() {
+    UJIAN.fullscreenActivated = true;
+    UJIAN.fullscreenRestorePending = false;
+    sembunyikanGerbangLayarPenuh_();
+    // Kunci orientasi hanya diizinkan Android SETELAH masuk layar penuh.
+    if (isMobileDevice()) lockPortraitIfSupported();
+    return true;
+  };
+  var gagal = function() {
+    if (UJIAN.aktif && bolehTampilGerbang_()) tampilkanGerbangLayarPenuh_();
+    return false;
+  };
+  try {
+    var request = requestMethod.call(element, { navigationUI: 'hide' });
+    if (request && request.then) { request.then(sukses).catch(gagal); return true; }
+    return sukses();
+  } catch (error) {
+    return gagal();
+  }
+}
+
+function exitFullscreenSafe() {
+  if (adaPembungkus_()) {
+    try { window.parent.postMessage({ sumber: 'siado', aksi: 'keluarLayarPenuh' }, '*'); } catch (error) {}
+  }
+  GUARD.layarPenuhPembungkus = false;
+  try {
+    var exitMethod = document.exitFullscreen || document.webkitExitFullscreen;
+    if (sedangLayarPenuh_() && exitMethod) exitMethod.call(document);
+  } catch (error) {}
+  UJIAN.fullscreenActivated = false;
+  UJIAN.fullscreenRestorePending = false;
+  sembunyikanGerbangLayarPenuh_();
+}
+
+function lockPortraitIfSupported() {
+  if (!isMobileDevice() || !screen.orientation || !screen.orientation.lock) return;
+  try { screen.orientation.lock('portrait').catch(function() {}); } catch (error) {}
+}
+
+/* ==================== JUDUL, DESKRIPSI, DAN PETUNJUK ==================== */
+
+/** Judul besar di atas nama mata pelajaran pada header ujian. */
+function terapkanJudulUjian_() {
+  var target = document.getElementById('judulUjianHeader');
+  if (target) target.textContent = UJIAN.judulUjian || '';
+  var kicker = document.getElementById('briefingKicker');
+  if (kicker && UJIAN.judulUjian) kicker.textContent = UJIAN.judulUjian;
+}
+
+/** Memecah petunjuk menjadi butir-butir; mendukung baris baru dan penomoran manual. */
+function butirPetunjuk_(teks) {
+  return String(teks || '')
+    .split(/\r?\n+/)
+    .map(function(baris) { return baris.replace(/^\s*(?:\d+[.)]|[-*\u2022])\s*/, '').trim(); })
+    .filter(function(baris) { return baris.length > 0; });
+}
+
+/** Menyiapkan dan menampilkan halaman petunjuk sebelum peserta masuk ke soal. */
+function tampilkanPetunjukUjian_(payload) {
+  UJIAN.payloadTertunda = payload;
+  var teks = function(id, nilai) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = nilai || '-';
+  };
+  teks('briefingNama', (UJIAN.peserta && UJIAN.peserta.nama) || payload.nama);
+  teks('briefingKelas', (UJIAN.peserta && UJIAN.peserta.kelas) || payload.kelas);
+  teks('briefingMapel', payload.mapel);
+  teks('briefingGuru', payload.guruMapel);
+  teks('briefingJumlahSoal', (payload.soal || []).length + ' soal');
+  var menit = Math.max(1, Math.round(Number(payload.remainingSeconds || 0) / 60));
+  teks('briefingDurasi', menit + ' menit');
+
+  var daftar = document.getElementById('briefingList');
+  if (daftar) {
+    var butir = butirPetunjuk_(UJIAN.petunjukUjian);
+    if (!butir.length) butir = ['Kerjakan seluruh soal dengan jujur dan mandiri.'];
+    daftar.innerHTML = butir.map(function(item) {
+      return '<li>' + escapeHtml(item) + '</li>';
+    }).join('');
+  }
+
+  var setuju = document.getElementById('briefingAgree');
+  var mulai = document.getElementById('briefingStart');
+  if (setuju) setuju.checked = false;
+  if (mulai) mulai.disabled = true;
+  terapkanJudulUjian_();
+  switchScreen('briefingScreen');
+}
+
+/**
+ * Melanjutkan dari halaman petunjuk ke halaman soal.
+ *
+ * Timer server baru dijalankan di sini (mulaiSekarang), sehingga waktu yang
+ * dipakai peserta untuk membaca petunjuk tidak memotong durasi ujiannya.
+ */
+async function mulaiDariPetunjuk_() {
+  if (!UJIAN.payloadTertunda) return;
+  var tombol = document.getElementById('briefingStart');
+  if (tombol) tombol.disabled = true;
+  toggleLoading(true, 'Memulai ujian...');
+  try {
+    var payload = credentialSesi();
+    payload.mulaiSekarang = true;
+    var result = await apiPeserta('mulaiUjian', payload);
+    if (!result.success) {
+      if (result.code === 'DISKUALIFIKASI') tampilDiskualifikasi();
+      else setLoginMessage(result.message || 'Ujian tidak dapat dimulai.', 'error');
+      if (tombol) tombol.disabled = false;
+      return;
+    }
+    UJIAN.payloadTertunda = null;
+    terapkanPayloadUjian(result, true);
+    switchScreen('examScreen');
+    UJIAN.aktif = true;
+    UJIAN.jeda = false;
+    UJIAN.selesaiDiproses = false;
+    startExamLoops();
+    lockPortraitIfSupported();
+  } catch (error) {
+    if (tombol) tombol.disabled = false;
+    tampilkanToastPeserta_('Gagal memulai ujian. Periksa koneksi lalu coba lagi.', true);
+  } finally {
+    toggleLoading(false);
+  }
+}
+
+/* ============================= UI HELPERS ============================= */
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+function switchScreen(id) {
+  document.querySelectorAll('.app-screen').forEach(function(screen) { screen.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+}
+function toggleLoading(show, text) {
+  if (text) document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').classList.toggle('show', !!show);
+}
+function setLoginMessage(message, type) {
+  var element = document.getElementById('loginMessage');
+  element.textContent = message || '';
+  element.className = 'form-message ' + (type || 'error') + (message ? ' show' : '');
+}
+function saveSessionLocal() {
+  if (UJIAN.peserta) sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(UJIAN.peserta));
+}
+function kembaliKeLogin(pesanAkhir) {
+  // Event listener browser dapat mengirim PointerEvent sebagai argumen pertama.
+  // Hanya teks eksplisit yang boleh ditampilkan sebagai pesan pada form login.
+  pesanAkhir = typeof pesanAkhir === 'string' ? pesanAkhir : '';
+  if (UJIAN.autoExitDiskualifikasiId) clearTimeout(UJIAN.autoExitDiskualifikasiId);
+  UJIAN.autoExitDiskualifikasiId = null;
+  UJIAN.aktif = false;
+  UJIAN.jeda = false;
+  UJIAN.selesaiDiproses = false;
+  GUARD.navigasiResmi = true;
+  GUARD.jumlahTombolKembali = 0;
+  bersihkanPenandaKeluarPaksa_();
+  stopExamLoops();
+  exitFullscreenSafe();
+  sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  ['resultModal', 'warningModal', 'pauseModal', 'disqualifiedModal', 'finishModal'].forEach(hideModal);
+  UJIAN.peserta = null;
+  UJIAN.soal = [];
+  UJIAN.versiSoal = '';
+  UJIAN.jawaban = {};
+  Object.keys(UJIAN.saveTimers).forEach(function(id) { clearTimeout(UJIAN.saveTimers[id]); });
+  UJIAN.saveTimers = {};
+  UJIAN.savePromises = {};
+  UJIAN.answerVersions = {};
+  UJIAN.savedVersions = {};
+  UJIAN.index = 0;
+  UJIAN.remaining = 0;
+  ['kelasPeserta', 'usernamePeserta', 'passwordPeserta'].forEach(function(id) {
+    var element = document.getElementById(id);
+    if (element) element.value = '';
+  });
+  document.getElementById('passwordPeserta').type = 'password';
+  document.getElementById('togglePassword').querySelector('i').className = 'fa-regular fa-eye';
+  document.getElementById('togglePassword').setAttribute('aria-label', 'Tampilkan password');
+  document.getElementById('violationCount').textContent = '0';
+  UJIAN.pelanggaran = 0;
+  UJIAN.pelanggaranPindahTab = 0;
+  UJIAN.tabKeluarAktif = false;
+  UJIAN.urutanKeluarTab = 0;
+  UJIAN.warningQueue = [];
+  UJIAN.warningVisible = false;
+  UJIAN.fullscreenRestorePending = false;
+  UJIAN.pendingViolationEvents = {};
+  UJIAN.processedViolationEvents = {};
+  setLoginMessage(pesanAkhir || '', pesanAkhir ? 'error' : '');
+  switchScreen('loginScreen');
+}
+function labelTipe(type) {
+  return { PG: 'PG', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', ISIAN: 'ISIAN',
+           URAIAN: 'URAIAN', MENJODOHKAN: 'MENJODOHKAN' }[type] || type;
+}
+function escapeHtml(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+function formatText(value) { return escapeHtml(value).replace(/\n/g, '<br>'); }
+function formatTextInline(value) { return escapeHtml(value).replace(/\n/g, '<br>'); }
+function safeMediaUrl(value) { return /^https:\/\//i.test(String(value || '')) ? String(value) : ''; }
+function safeImageUrl(value) { return safeMediaUrl(value); }
+
+/** Mengambil file id Drive dari berbagai bentuk link. */
+function idDriveDariUrl_(url) {
+  var teks = String(url || '');
+  var pola = [
+    /\/file\/d\/([a-zA-Z0-9_-]{10,})/,
+    /googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/,
+    /[?&]id=([a-zA-Z0-9_-]{10,})/,
+    /\/d\/([a-zA-Z0-9_-]{10,})/
+  ];
+  for (var i = 0; i < pola.length; i++) {
+    var cocok = teks.match(pola[i]);
+    if (cocok) return cocok[1];
+  }
+  return '';
+}
+
+/**
+ * Menyeragamkan URL gambar Drive ke endpoint /thumbnail.
+ *
+ * Link lama (lh3.googleusercontent.com/d/<id> atau uc?export=view) diblokir
+ * Google dengan HTTP 403 ketika disematkan, sehingga gambar soal tidak tampil.
+ * Soal yang sudah terlanjur tersimpan pun ikut diperbaiki di sini.
+ */
+function urlGambarTampil_(url, lebar) {
+  var bersih = safeMediaUrl(url);
+  if (!bersih) return '';
+  if (!/(googleusercontent\.com|drive\.google\.com|docs\.google\.com)/i.test(bersih)) return bersih;
+  var id = idDriveDariUrl_(bersih);
+  if (!id) return bersih;
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w' + (lebar || 1600);
+}
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a345de73dc4b6029',t:'MTc4ODI4MjQyMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

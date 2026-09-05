@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <base target="_top">
-  <meta charset="UTF-8">
+    <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Kelola Ujian | APLIKASI UJIAN ONLINE</title>
-  <link rel="icon" type="image/png" href="<?!= getAppFaviconDataUri_(); ?>">
-  <link rel="apple-touch-icon" href="<?!= getAppEmailLogoDataUri_(); ?>">
+  <title>Kelola Ujian | SIADO V3.3</title>
+  <link rel="icon" type="image/png" href="LGS.png">
+  <link rel="apple-touch-icon" href="LGS.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
-  <?!= include('styles'); ?>
+  <link rel="stylesheet" href="styles.css">
   <style>
     .admin-body{background:#f3f7fb;min-height:100vh}.admin-login-page{min-height:100dvh}.admin-login-card{max-width:445px}.admin-login-card .school-mark{background:linear-gradient(140deg,#b91c1c,#ef6c00)}.admin-login-card .school-mark.brand-logo{background:#fff!important}.admin-brand-icon.brand-logo{border-radius:50%;padding:0;box-shadow:0 3px 9px rgba(16,42,67,.16)}
     .admin-shell{display:none;min-height:100dvh}.admin-shell.show{display:flex;flex-direction:column}.admin-topbar{background:#fff;border-bottom:1px solid #dce5ef;padding:14px clamp(16px,3vw,38px);display:flex;justify-content:space-between;align-items:center;gap:16px;position:sticky;top:0;z-index:100}.admin-brand{display:flex;align-items:center;gap:12px}.admin-brand-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#1f6feb,#1457ad)}.admin-brand h1{font:800 17px var(--heading);margin:0;color:#102a43}.admin-brand p{margin:3px 0 0;color:#668097;font-size:11px;font-weight:700}.admin-top-actions{display:flex;align-items:center;gap:10px}.admin-user-chip{padding:8px 10px;border-radius:9px;background:#edf5ff;color:#235d9f;font-size:12px;font-weight:800}.logout-button{border:1px solid #f3c8c8;background:#fff;color:#b42318;border-radius:9px;min-height:36px;padding:8px 11px;font-size:12px;font-weight:800}
@@ -237,15 +236,18 @@
     html[data-theme="sunset"] .summary-icon{background:#ffedd8;color:#ea580c}
     html[data-theme="sunset"] .admin-card h2 i{color:#ea580c}
   </style>
+  <script src="vendor/supabase.min.js"></script>
+  <script src="siado-config.js"></script>
+  <script src="siado-api.js"></script>
 </head>
 <body class="admin-body">
 
   <!-- LOGIN PANEL (admin & guru mapel, satu tampilan) -->
-  <section id="adminLoginPage" class="admin-login-page login-background" style="background:<?!= getLoginBackgroundCss_(); ?>">
+  <section id="adminLoginPage" class="admin-login-page login-background" style="background:linear-gradient(135deg,#0b2f6b 0%,#1f6feb 45%,#48c6ef 100%)">
     <div class="brand-orb orb-one"></div><div class="brand-orb orb-two"></div>
     <main class="login-card admin-login-card">
       <div class="login-brand">
-        <div class="school-mark brand-logo"><img src="<?!= getAppLogoDataUri_(); ?>" alt="Logo sekolah"></div>
+        <div class="school-mark brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
         <p class="eyebrow eyebrow-panel">KELOLA UJIAN</p>
         <p class="eyebrow eyebrow-sub">SISTEM INFORMASI</p>
         <h1>ASESMEN DIGITALISASI ONLINE</h1>
@@ -278,7 +280,7 @@
       <!-- SIDEBAR KIRI -->
       <aside id="adminSidebar" class="admin-sidebar" aria-label="Menu utama panel">
         <div class="sidebar-brand">
-          <div class="admin-brand-icon brand-logo"><img src="<?!= getAppLogoDataUri_(); ?>" alt="Logo sekolah"></div>
+          <div class="admin-brand-icon brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
           <div><h1>SIADO V3.3</h1><p>SMP LABSCHOOL UNTAD</p></div>
         </div>
 
@@ -745,7 +747,7 @@
               <form id="brandingLogoForm">
                 <div class="branding-editor">
                   <div class="branding-preview-wrap">
-                    <div class="branding-preview-frame"><img id="brandingLogoPreview" src="<?!= getAppEmailLogoDataUri_(); ?>" alt="Pratinjau logo aplikasi"></div>
+                    <div class="branding-preview-frame"><img id="brandingLogoPreview" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Pratinjau logo aplikasi"></div>
                     <span id="brandingLogoStatus" class="branding-status"><i class="fa-solid fa-circle-check"></i> Logo bawaan aktif</span>
                   </div>
                   <div class="branding-controls">
@@ -934,15 +936,13 @@
   <script>
     /* URL asli Web App dari server; window.location di iframe Apps Script
        menunjuk ke userCodeAppPanel dan tidak bisa dipakai berpindah halaman. */
-    var APP_WEB_URL = '<?!= getWebAppUrl_(); ?>';
+    /* APP_WEB_URL / APP_PUBLIC_URL / SESI_HANDOFF disediakan siado-api.js */
     /* Alamat pembungkus publik (mis. GitHub Pages). Bila diisi, perpindahan
        halaman memakai alamat ini agar kolom alamat browser tetap rapi. */
-    var APP_PUBLIC_URL = '<?!= urlPesertaPublik_(); ?>';
     /* Sesi panel yang dititipkan server lewat kode sekali pakai pada URL,
        supaya login guru/proktor tidak diminta dua kali. */
-    var SESI_HANDOFF = <?!= (typeof SESI_HANDOFF !== 'undefined' && SESI_HANDOFF) ? SESI_HANDOFF : 'null'; ?>;
   </script>
-  <?!= include('admin-script'); ?>
+  <script src="admin-script.js"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -984,5 +984,6 @@
     }, 1500);
   })();
   </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a345515c69fe91b7',t:'MTc4ODI3NjY0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3680b14ad9cd437',t:'MTc4ODY0MDc2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
 </html>

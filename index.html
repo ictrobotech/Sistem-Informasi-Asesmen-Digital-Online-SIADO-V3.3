@@ -1,489 +1,311 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <!-- Judul tab browser. Nilai ini ditimpa oleh JUDUL_APLIKASI / JUDUL_PANEL
-       pada blok skrip di bawah, jadi cukup ubah di satu tempat itu saja. -->
+    <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SIADO V3.3</title>
-
   <meta name="description" content="Aplikasi Ujian Online SMP Labschool Untad Palu." />
   <meta name="theme-color" content="#0f172a" />
   <meta name="robots" content="noindex" />
-
-  <!-- ============================================================
-       MODE APLIKASI (menghilangkan notifikasi layar penuh browser).
-       Bila peserta memasang aplikasi ini lewat menu browser
-       "Tambahkan ke Layar Utama", aplikasi terbuka tanpa bilah alamat
-       sehingga notifikasi "swipe down to exit full screen" TIDAK pernah
-       muncul lagi (tidak ada mode layar penuh yang perlu diumumkan).
-       ============================================================ -->
   <link rel="manifest" href="manifest.json" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SIADO" />
-
-  <!-- Ikon aplikasi di tab browser. LGS.png harus berada di folder yang sama. -->
-  <link rel="icon" type="image/png" href="LGS.png" />
-  <link rel="shortcut icon" type="image/png" href="LGS.png" />
-  <link rel="apple-touch-icon" href="LGS.png" />
-
+  <link rel="icon" type="image/png" href="LGS.png">
+  <link rel="apple-touch-icon" href="LGS.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #0f172a;
-      overflow: hidden; /* Mencegah scroll ganda */
-      /* Android: matikan tarik-untuk-muat-ulang agar sesi ujian tidak terputus
-         hanya karena peserta mengusap layar ke bawah. */
-      overscroll-behavior: none;
-      overscroll-behavior-y: contain;
-    }
-
-    .iframe-container {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-    }
-
-    iframe {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    #memuat {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 18px;
-      background: #0f172a;
-      color: #e2e8f0;
-      font: 500 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      text-align: center;
-      padding: 24px;
-      z-index: 2;
-      transition: opacity .35s ease;
-    }
-    #memuat.sembunyi { opacity: 0; pointer-events: none; }
-    #memuat img { width: 72px; height: 72px; border-radius: 12px; }
-    .putar {
-      width: 26px; height: 26px;
-      border: 3px solid rgba(226,232,240,.25);
-      border-top-color: #e2e8f0;
-      border-radius: 50%;
-      animation: putar 1s linear infinite;
-    }
-    @keyframes putar { to { transform: rotate(360deg); } }
-
-    /* ================================================================
-     * REVISI 3.4 - LAPISAN KEAMANAN PADA PEMBUNGKUS
-     * Bingkai aplikasi berbeda domain, sehingga sebagian kejadian
-     * (menutup tab, tombol cetak saat fokus di luar bingkai, tombol
-     * kembali jendela induk) HANYA dapat ditangani di halaman ini.
-     * ================================================================ */
-    /* Tidak ada teks pembungkus yang bisa diseleksi/diklik kanan. */
-    body { -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none; }
-
-    /* Perisai hitam saat percobaan tangkapan layar / cetak. */
-    #perisai {
-      position: fixed; inset: 0; z-index: 9999; display: none;
-      background: #04070d; color: #fff; text-align: center;
-      align-items: center; justify-content: center; padding: 26px;
-      font: 500 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    #perisai.tampil { display: flex; }
-    #perisai h2 { font-size: 21px; font-weight: 800; margin: 0 0 10px; }
-    #perisai p { margin: 0 auto; max-width: 380px; color: #ffd9d9; }
-    #perisai small { display: block; margin-top: 10px; color: #93a7bd; }
-
-    /* Isi bingkai disamarkan saat jendela ditinggalkan (lapisan kedua; */
-    /* aplikasi di dalam bingkai juga melakukan hal yang sama).          */
-    body.samarkan .iframe-container { filter: blur(24px) grayscale(.5) brightness(.7); }
-    body.samarkan .iframe-container::after {
-      content: ""; position: absolute; inset: 0; background: rgba(6, 20, 36, .55);
-    }
-
-    /* Mencetak halaman pembungkus tidak menghasilkan isi soal. */
-    @media print {
-      body > * { display: none !important; }
-      body::before {
-        display: block !important;
-        content: "Mencetak atau menyimpan halaman ujian tidak diizinkan. Aktivitas ini tercatat sebagai pelanggaran.";
-        font: 700 16px/1.6 sans-serif; color: #000; padding: 40px; text-align: center;
-      }
-    }
+    /* Background login diterapkan langsung dari server agar tidak berkedip. */
+    .login-background{background:linear-gradient(135deg,#0b2f6b 0%,#1f6feb 45%,#48c6ef 100%)}
   </style>
+  <script>
+    /* URL asli Web App disuntikkan server. Di dalam iframe Apps Script,
+       window.location menunjuk ke userCodeAppPanel sehingga tidak dapat
+       dipakai untuk berpindah halaman (hasilnya layar putih). */
+    /* APP_WEB_URL / APP_PUBLIC_URL / SESI_HANDOFF disediakan siado-api.js */
+    /* Alamat pembungkus publik (mis. GitHub Pages). Bila diisi, perpindahan
+       halaman memakai alamat ini agar kolom alamat browser tetap rapi. */
+  </script>
+  <script>
+    /* Tema tampilan: terapkan yang tersimpan secepatnya (server akan
+       menegaskan tema resmi lewat getKonfigurasiPublik). */
+    try { var __temaTersimpan = localStorage.getItem('siado_tema'); if (__temaTersimpan) document.documentElement.setAttribute('data-theme', __temaTersimpan); } catch (e) {}
+  </script>
+  <script src="vendor/supabase.min.js"></script>
+  <script src="siado-config.js"></script>
+  <script src="siado-api.js"></script>
 </head>
-<body>
-  <div id="memuat">
-    <img src="LGS.png" alt="Logo SMP Labschool Untad Palu" />
-    <div class="putar"></div>
-    <div id="pesanMuat">Memuat aplikasi&hellip;</div>
-  </div>
+<body class="peserta-body">
 
-  <div class="iframe-container">
-    <!--
-      REVISI 3.4 - IZIN BINGKAI DIPERKETAT.
-      Sebelumnya bingkai diberi izin "camera; microphone; display-capture;
-      geolocation; clipboard-read". Izin display-capture JUSTRU MENGIZINKAN
-      perekaman/berbagi layar dari dalam halaman ujian, dan clipboard-read
-      memungkinkan isi papan klip dibaca. Ketiganya tidak dipakai aplikasi
-      ujian, sehingga dicabut. Yang tersisa:
-        - fullscreen      : wajib, agar mode layar penuh peserta berfungsi.
-        - clipboard-write : dipakai untuk MENGOSONGKAN papan klip setelah
-                            percobaan tangkapan layar.
-    -->
-    <iframe
-      id="app"
-      title="Aplikasi Ujian Online"
-      scrolling="yes"
-      allowfullscreen
-      webkitallowfullscreen="true"
-      mozallowfullscreen="true"
-      referrerpolicy="no-referrer"
-      allow="fullscreen; clipboard-write">
-    </iframe>
-  </div>
+  <!-- LOGIN TERPADU: peserta, guru mapel, dan proktor/admin dalam satu tampilan -->
+  <section id="loginScreen" class="app-screen active" aria-labelledby="loginTitle">
+    <div class="login-background" id="loginBackground">
+      <div class="brand-orb orb-one"></div>
+      <div class="brand-orb orb-two"></div>
+      <main class="login-card participant-login-card">
+        <div class="login-brand">
+          <div class="school-mark brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+          <p class="eyebrow" id="loginEyebrow">SISTEM INFORMASI</p>
+          <p class="eyebrow eyebrow-sub" id="loginEyebrowSub" hidden>SISTEM INFORMASI</p>
+          <h1 id="loginTitle">ASESMEN DIGITALISASI ONLINE</h1>
+          <p class="school-name">SMP LABSCHOOL UNTAD PALU</p>
+          <div class="brand-rule"></div>
+          <p class="login-intro" id="loginIntro">Masukkan username, rombel, dan token ujian dari pengawas untuk memulai ujian.</p>
+        </div>
 
-  <div id="perisai" aria-hidden="true">
-    <div>
-      <h2>PERINGATAN &mdash; Tangkapan Layar Diblokir</h2>
-      <p id="perisaiTeks">Tangkapan layar dan pencetakan halaman ujian tidak diizinkan.</p>
-      <small>Aktivitas ini dicatat sebagai pelanggaran dan dilaporkan ke pengawas.</small>
+        <form id="loginForm" autocomplete="off" novalidate>
+          <div class="form-grid">
+            <div class="field-group field-full">
+              <label for="usernamePeserta"><i class="fa-regular fa-id-badge" id="usernameIcon"></i> Username</label>
+              <input id="usernamePeserta" type="text" maxlength="120" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Masukkan username Anda" required>
+              <small class="field-hint" id="usernameHint">Isi <b>username</b> yang diberikan guru/pengawas: <b>huruf kecil, tanpa spasi, tanpa titik</b> (angka dan simbol _ / - boleh).</small>
+            </div>
+
+            <div class="field-group field-full" id="rombelWrapper">
+              <label for="kelasPeserta"><i class="fa-solid fa-users"></i> Rombel / kelas</label>
+              <select id="kelasPeserta" class="rombel-select">
+                <option value="">Pilih rombel Anda</option>
+              </select>
+              <small class="field-hint">Pilih rombel sesuai kelas Anda.</small>
+            </div>
+
+            <div class="field-group field-full" id="ujianWrapper">
+              <label for="ujianPeserta"><i class="fa-solid fa-book-open"></i> Mata pelajaran yang diujikan</label>
+              <select id="ujianPeserta" class="rombel-select">
+                <option value="">Pilih ujian yang akan dikerjakan</option>
+              </select>
+              <small class="field-hint" id="ujianHint">Pilih ujian sesuai jadwal dari pengawas.</small>
+            </div>
+
+            <div class="field-group field-full">
+              <label for="passwordPeserta"><i class="fa-solid fa-lock"></i> <span id="passwordLabelText">Token ujian</span></label>
+              <div class="password-field">
+                <input id="passwordPeserta" type="password" maxlength="300" autocomplete="off" placeholder="Token ujian dari pengawas" required>
+                <button id="togglePassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button>
+              </div>
+            </div>
+          </div>
+          <label class="role-switch" for="modePanel">
+            <input id="modePanel" type="checkbox">
+            <span class="role-switch-box"><i class="fa-solid fa-check"></i></span>
+            <span class="role-switch-text">
+              <strong>Guru / Proktor</strong>
+              <small>Centang untuk masuk ke panel pengelolaan ujian. Biarkan kosong bila Anda peserta.</small>
+            </span>
+          </label>
+          <div id="loginMessage" class="form-message" role="alert" aria-live="polite"></div>
+          <button id="loginButton" class="primary-button login-button" type="submit">
+            <span id="loginButtonText">Mulai Ujian</span><i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </form>
+
+        <div class="login-security-note" id="loginSecurityNote"><i class="fa-solid fa-shield-halved"></i> <span id="loginSecurityText">Jawaban tersimpan otomatis dan sesi terlindungi.</span></div>
+        <footer class="login-copyright">Copyright © 2026 ICT-ROBOTECH. All rights reserved</footer>
+      </main>
+    </div>
+  </section>
+
+  <!-- LAYAR UJIAN -->
+  <!-- ================= PETUNJUK UJIAN ================= -->
+  <section id="briefingScreen" class="app-screen" aria-labelledby="briefingTitle">
+    <div class="briefing-wrap">
+      <article class="briefing-card">
+        <header class="briefing-head">
+          <div class="briefing-mark"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+          <p id="briefingKicker" class="briefing-kicker">SISTEM ASESMEN DIGITAL</p>
+          <h1 id="briefingTitle" class="briefing-title">PETUNJUK UJIAN</h1>
+          <p id="briefingSchool" class="briefing-school">SMP LABSCHOOL UNTAD PALU</p>
+        </header>
+
+        <div class="briefing-meta">
+          <div class="briefing-meta-item"><span>Peserta</span><strong id="briefingNama">-</strong></div>
+          <div class="briefing-meta-item"><span>Kelas</span><strong id="briefingKelas">-</strong></div>
+          <div class="briefing-meta-item"><span>Mata Pelajaran</span><strong id="briefingMapel">-</strong></div>
+          <div class="briefing-meta-item"><span>Guru Mapel</span><strong id="briefingGuru">-</strong></div>
+          <div class="briefing-meta-item"><span>Jumlah Soal</span><strong id="briefingJumlahSoal">-</strong></div>
+          <div class="briefing-meta-item"><span>Waktu Pengerjaan</span><strong id="briefingDurasi">-</strong></div>
+        </div>
+
+        <section class="briefing-body">
+          <h2 class="briefing-subtitle"><i class="fa-solid fa-clipboard-list"></i> Tata Tertib dan Petunjuk Pengerjaan</h2>
+          <ol id="briefingList" class="briefing-list"></ol>
+        </section>
+
+        <label class="briefing-agree" for="briefingAgree">
+          <input id="briefingAgree" type="checkbox">
+          <span>Saya telah membaca dan memahami seluruh petunjuk serta bersedia mengikuti ujian dengan jujur.</span>
+        </label>
+
+        <div class="briefing-actions">
+          <button id="briefingBack" class="secondary-button" type="button"><i class="fa-solid fa-arrow-left"></i> Kembali</button>
+          <button id="briefingStart" class="primary-button" type="button" disabled><i class="fa-solid fa-play"></i> Mulai Mengerjakan</button>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="examScreen" class="app-screen" aria-label="Halaman ujian">
+    <header class="exam-header">
+      <div class="exam-brand-block">
+        <div class="compact-mark brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+        <div>
+          <p class="header-overline">SIADO V3.3</p>
+          <p id="judulUjianHeader" class="exam-title-big"></p>
+          <h2 id="mapelTitle">Mata Pelajaran</h2>
+          <p id="guruMapelLabel" class="header-teacher"><i class="fa-solid fa-chalkboard-user"></i> <span id="guruMapelName">-</span></p>
+          <p id="examMeta" class="header-meta">SMP LABSCHOOL UNTAD PALU</p>
+        </div>
+      </div>
+      <div class="exam-profile">
+        <div class="candidate-block">
+          <span class="candidate-icon"><i class="fa-regular fa-user"></i></span>
+          <div><strong id="displayNama">-</strong><small id="displayKelas">Kelas -</small></div>
+        </div>
+        <div id="timerBox" class="timer-box" aria-label="Sisa waktu">
+          <i class="fa-regular fa-clock"></i><span id="timerDisplay">00:00</span>
+        </div>
+        <button id="refreshPageButton" class="refresh-button" type="button" title="Muat ulang halaman ujian tanpa kehilangan jawaban">
+          <i class="fa-solid fa-arrows-rotate"></i><span>Refresh</span>
+        </button>
+        <div class="violation-pill" title="Pelanggaran pindah tab: peringatan ke-1 dan ke-2, reset jawaban pada ke-3"><i class="fa-solid fa-shield-halved"></i><span id="violationCount">0</span>/3</div>
+      </div>
+    </header>
+
+    <main class="exam-layout">
+      <section class="question-column">
+        <div class="question-toolbar">
+          <div>
+            <span id="questionNumber" class="question-number">SOAL 1</span>
+            <span id="questionType" class="question-type">PG</span>
+          </div>
+          <span id="answerStateChip" class="answer-state-chip empty"><i class="fa-regular fa-circle"></i> Belum terjawab</span>
+        </div>
+
+        <article id="questionCard" class="question-card">
+          <div class="question-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat soal...</div>
+        </article>
+
+        <div class="answer-save-status" id="answerSaveStatus" aria-live="polite"><i class="fa-solid fa-cloud-arrow-up"></i> Jawaban tersimpan otomatis</div>
+      </section>
+
+      <aside class="navigation-column" aria-label="Navigasi soal">
+        <div class="navigation-head">
+          <div><p class="panel-kicker">NAVIGASI</p><h3>Daftar Soal</h3></div>
+          <span id="answeredSummary" class="answered-summary">0 / 0 terjawab</span>
+        </div>
+        <div class="nav-legend" aria-label="Keterangan warna navigasi">
+          <span><b class="legend-dot current"></b>Aktif</span>
+          <span><b class="legend-dot answered"></b>Terjawab</span>
+          <span><b class="legend-dot empty"></b>Belum terjawab</span>
+        </div>
+        <div id="questionNav" class="question-nav"></div>
+        <div class="nav-progress"><b id="navProgressBar" style="width:0%"></b></div>
+        <div class="nav-tip"><i class="fa-regular fa-lightbulb"></i> Gunakan nomor soal untuk berpindah. Semua soal wajib dijawab sebelum menekan Selesai.</div>
+      </aside>
+    </main>
+
+    <footer class="exam-footer">
+      <p id="questionPosition" class="question-position">Soal 1 dari 1</p>
+      <div class="footer-actions">
+        <button id="nextButton" class="secondary-button" type="button">Selanjutnya <i class="fa-solid fa-chevron-right"></i></button>
+        <button id="finishButton" class="finish-button" type="button"><i class="fa-solid fa-paper-plane"></i> Selesaikan Ujian</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- KONFIRMASI SELESAI -->
+  <div id="finishModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="finishModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon blue"><i class="fa-regular fa-circle-question"></i></div>
+      <h3 id="finishModalTitle">Selesaikan ujian?</h3>
+      <p id="finishModalText">Pastikan semua jawaban sudah diperiksa.</p>
+      <div id="finishBlockList" class="blank-list"></div>
+      <div class="modal-actions">
+        <button id="cancelFinish" class="modal-cancel" type="button">Kembali</button>
+        <button id="confirmFinish" class="finish-button" type="button">Ya, Selesaikan</button>
+      </div>
     </div>
   </div>
 
+  <!-- PERINGATAN PELANGGARAN -->
+  <div id="warningModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="warningTitle">
+    <div class="modal-card warning-card">
+      <div class="modal-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <h3 id="warningTitle">Peringatan Keamanan</h3>
+      <p id="warningText"></p>
+      <button id="closeWarning" class="primary-button" type="button">Saya Mengerti</button>
+    </div>
+  </div>
+
+  <!-- JEDA/RECOVERY -->
+  <div id="pauseModal" class="modal-backdrop permanent-modal" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+    <div class="modal-card">
+      <div class="modal-icon amber"><i class="fa-solid fa-circle-pause"></i></div>
+      <h3 id="pauseTitle">Ujian Dijeda Sementara</h3>
+      <p id="pauseText">Pastikan koneksi kembali stabil, lalu lanjutkan ujian. Waktu resmi tetap dihitung oleh server.</p>
+      <button id="resumeButton" class="primary-button" type="button"><i class="fa-solid fa-play"></i> Lanjutkan Ujian</button>
+    </div>
+  </div>
+
+  <!-- HASIL -->
+  <div id="resultModal" class="modal-backdrop permanent-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+    <div class="modal-card result-card">
+      <div id="resultIcon" class="modal-icon green"><i class="fa-solid fa-circle-check"></i></div>
+      <h3 id="resultTitle">Ujian Selesai</h3>
+      <div id="resultContent"></div>
+      <button id="resultLogout" class="primary-button" type="button">Kembali ke Login</button>
+    </div>
+  </div>
+
+  <!-- DISKUALIFIKASI -->
+  <div id="disqualifiedModal" class="modal-backdrop permanent-modal" role="dialog" aria-modal="true" aria-labelledby="disqualifiedTitle">
+    <div class="modal-card disqualified-card">
+      <div class="modal-icon red"><i class="fa-solid fa-ban"></i></div>
+      <h3 id="disqualifiedTitle">Peserta Didiskualifikasi</h3>
+      <p id="disqualifiedMessage">Anda telah mencapai batas pelanggaran atau didiskualifikasi oleh pengawas.</p>
+      <p class="strong-red">Anda wajib susulan kembali.</p>
+      <button id="disqualifiedLogout" class="primary-button danger-button" type="button">Kembali ke Login</button>
+    </div>
+  </div>
+
+  <!-- PENGUNCI ORIENTASI MOBILE -->
+  <div id="orientationLock" aria-live="assertive">
+    <div><i class="fa-solid fa-mobile-screen-button"></i><h2>Gunakan Mode Portrait</h2><p>Putar perangkat Anda ke posisi tegak untuk melanjutkan ujian.</p></div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loadingOverlay" class="loading-overlay" aria-live="polite"><div><i class="fa-solid fa-circle-notch fa-spin"></i><p id="loadingText">Memproses...</p></div></div>
+
+
+  <!-- KEAMANAN TAMPILAN SOAL (SIADO V3.3 revisi 3.4) — elemen yang dirujuk script.js -->
+  <div id="privacyVeil" class="privacy-veil" aria-hidden="true">
+    <div><i class="fa-solid fa-eye-slash"></i><h2>Soal disamarkan</h2><p>Kembali ke halaman ujian untuk melanjutkan. Meninggalkan halaman dicatat sebagai pelanggaran.</p></div>
+  </div>
+  <div id="screenshotShield" class="screenshot-shield" aria-hidden="true">
+    <div><i class="fa-solid fa-ban"></i><h2>PERINGATAN &mdash; Tangkapan Layar Diblokir</h2><p data-shield-text>Tangkapan layar dan pencetakan halaman ujian tidak diizinkan.</p><small>Aktivitas ini dicatat sebagai pelanggaran dan dilaporkan ke pengawas.</small></div>
+  </div>
+  <div id="fullscreenGate" class="fullscreen-gate" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="fullscreen-gate-card">
+      <div class="modal-icon amber"><i class="fa-solid fa-expand"></i></div>
+      <h3>Mode Layar Penuh Diperlukan</h3>
+      <p>Anda keluar dari mode layar penuh. Tekan tombol di bawah untuk kembali ke layar penuh dan melanjutkan ujian.</p>
+      <button id="fullscreenGateButton" class="primary-button" type="button"><i class="fa-solid fa-expand"></i> Kembali ke Layar Penuh</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
   <script>
-    (function () {
-      // ================================================================
-      // Ganti baris ini bila Deploy menghasilkan URL /exec yang baru.
-      // ================================================================
-      var URL_APLIKASI = 'https://script.google.com/macros/s/AKfycbymk-ciHeoVd9qpSAddQElo8wnVK5UpnXNK657gKL7UPkCBbZyg2Xsn7V2p00GGAD0BqA/exec';
-
-      // ================================================================
-      // TEKS PADA TAB BROWSER. Cukup ubah dua baris di bawah ini.
-      // Contoh: 'SMP LABSCHOOL UNTAD PALU' atau 'Ujian Online SMP Labschool'.
-      // ================================================================
-      var JUDUL_APLIKASI = 'SIADO V3.3';
-      var JUDUL_PANEL = 'Kelola Ujian | SIADO V3.3';
-
-      var ASAL_APLIKASI = 'https://script.google.com';
-      var bingkai = document.getElementById('app');
-      var tirai = document.getElementById('memuat');
-      var pesan = document.getElementById('pesanMuat');
-      var perisai = document.getElementById('perisai');
-      var perisaiTeks = document.getElementById('perisaiTeks');
-
-      // Status ujian dikirim aplikasi lewat postMessage ('mulai' / 'selesai').
-      var ujianBerlangsung = false;
-      var perisaiTimer = null;
-      var toastTimer = null;
-      var jumlahTombolKembali = 0;
-
-      /** Menyusun alamat aplikasi lengkap dengan parameternya. */
-      function alamatAplikasi(halaman, kode) {
-        var bagian = [];
-        if (halaman) bagian.push('page=' + encodeURIComponent(halaman));
-        if (kode) bagian.push('hs=' + encodeURIComponent(kode));
-        return URL_APLIKASI + (bagian.length ? '?' + bagian.join('&') : '');
-      }
-
-      /** Menampilkan kembali tirai pemuatan saat berpindah halaman. */
-      function tampilkanTirai(teks) {
-        pesan.textContent = teks;
-        tirai.classList.remove('sembunyi');
-      }
-
-      function sembunyikanTirai() { tirai.classList.add('sembunyi'); }
-
-      /* ============================================================
-       * KOMUNIKASI DENGAN APLIKASI DI DALAM BINGKAI
-       * ============================================================ */
-
-      /** Mengirim perintah/laporan ke aplikasi ujian di dalam bingkai. */
-      function kirimKeAplikasi(data) {
-        try {
-          if (bingkai && bingkai.contentWindow) {
-            bingkai.contentWindow.postMessage(
-              Object.assign({ sumber: 'siado-pembungkus' }, data || {}), '*');
-          }
-        } catch (error) {}
-      }
-
-      /* ============================================================
-       * LAYAR PENUH DIKELOLA PEMBUNGKUS
-       *
-       * Sebelumnya bingkai Apps Script yang meminta layar penuh, sehingga
-       * notifikasi browser menampilkan alamat panjang
-       * "...-script.googleusercontent.com - To exit full screen...".
-       * Dengan permintaan dipindah ke jendela induk, notifikasi itu
-       * menampilkan domain sekolah yang rapi, muncul sekali saja, dan
-       * TIDAK muncul sama sekali bila aplikasi dijalankan dari ikon
-       * layar utama (mode aplikasi).
-       * ============================================================ */
-      function modeAplikasiPenuh() {
-        try {
-          if (window.navigator.standalone === true) return true;
-          if (!window.matchMedia) return false;
-          return window.matchMedia('(display-mode: fullscreen)').matches ||
-                 window.matchMedia('(display-mode: standalone)').matches;
-        } catch (error) { return false; }
-      }
-
-      function sedangLayarPenuh() {
-        return !!(document.fullscreenElement || document.webkitFullscreenElement) || modeAplikasiPenuh();
-      }
-
-      function kirimStatusLayarPenuh() {
-        kirimKeAplikasi({
-          aksi: 'statusLayarPenuh',
-          aktif: sedangLayarPenuh(),
-          standalone: modeAplikasiPenuh()
-        });
-      }
-
-      function mintaLayarPenuh() {
-        // Mode aplikasi sudah tanpa bilah browser: tidak perlu layar penuh.
-        if (modeAplikasiPenuh() || sedangLayarPenuh()) { kirimStatusLayarPenuh(); return; }
-        var el = document.documentElement;
-        var minta = el.requestFullscreen || el.webkitRequestFullscreen;
-        if (!minta) { kirimStatusLayarPenuh(); return; }
-        try {
-          var hasil = minta.call(el, { navigationUI: 'hide' });
-          if (hasil && hasil.then) hasil.then(kirimStatusLayarPenuh).catch(kirimStatusLayarPenuh);
-          else kirimStatusLayarPenuh();
-        } catch (error) { kirimStatusLayarPenuh(); }
-      }
-
-      function keluarLayarPenuh() {
-        try {
-          var keluar = document.exitFullscreen || document.webkitExitFullscreen;
-          if ((document.fullscreenElement || document.webkitFullscreenElement) && keluar) keluar.call(document);
-        } catch (error) {}
-        kirimStatusLayarPenuh();
-      }
-
-      ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (nama) {
-        document.addEventListener(nama, kirimStatusLayarPenuh);
-      });
-
-      /** Melaporkan pelanggaran yang terdeteksi pembungkus agar dicatat server. */
-      function laporPelanggaran(jenis, detail) {
-        if (!ujianBerlangsung) return;
-        kirimKeAplikasi({ aksi: 'pelanggaran', jenis: jenis, detail: detail });
-      }
-
-      /* ============================================================
-       * PERISAI TANGKAPAN LAYAR & PENYAMARAN ISI BINGKAI
-       * ============================================================ */
-      function tampilkanPerisai(teks) {
-        if (teks) perisaiTeks.textContent = teks;
-        perisai.classList.add('tampil');
-        perisai.setAttribute('aria-hidden', 'false');
-        window.clearTimeout(perisaiTimer);
-        perisaiTimer = window.setTimeout(function () {
-          perisai.classList.remove('tampil');
-          perisai.setAttribute('aria-hidden', 'true');
-        }, 1600);
-        // Papan klip ditimpa agar hasil tangkapan tidak dapat ditempel.
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(' ').catch(function () {});
-          }
-        } catch (error) {}
-      }
-
-      function samarkanBingkai(samarkan) {
-        document.body.classList.toggle('samarkan', !!samarkan && ujianBerlangsung);
-      }
-
-      /* ============================================================
-       * BLOKIR KELUAR DARI APLIKASI / BROWSER
-       * Bingkai Apps Script berbeda domain; dialog konfirmasi dari dalam
-       * bingkai sering diabaikan browser. Penjaga di jendela induk inilah
-       * yang menahan penutupan tab/jendela selama ujian berlangsung.
-       * ============================================================ */
-      window.addEventListener('beforeunload', function (ev) {
-        if (!ujianBerlangsung) return;
-        var teks = 'Ujian masih berlangsung. Keluar sekarang dicatat sebagai pelanggaran.';
-        ev.preventDefault();
-        ev.returnValue = teks;
-        return teks;
-      });
-
-      // Tombol kembali (back) jendela induk dilumpuhkan selama ujian.
-      try {
-        window.history.pushState({ siado: 1 }, document.title, window.location.href);
-      } catch (error) {}
-      window.addEventListener('popstate', function () {
-        if (!ujianBerlangsung) return;
-        try {
-          window.history.pushState({ siado: 1 }, document.title, window.location.href);
-        } catch (error) {}
-        jumlahTombolKembali += 1;
-        if (jumlahTombolKembali > 1) {
-          laporPelanggaran('tombol_kembali', 'Tombol kembali browser ditekan pada halaman pembungkus.');
-        }
-      });
-
-      /* ============================================================
-       * BLOKIR TANGKAPAN LAYAR, CETAK, DEVTOOLS, DAN TAB BARU
-       * Berlaku ketika fokus keyboard sedang berada di jendela induk
-       * (di luar bingkai) - kondisi yang tidak terjangkau aplikasi.
-       * ============================================================ */
-      function tanganiTombol(ev) {
-        if (!ujianBerlangsung) return;
-        var key = String(ev.key || '').toLowerCase();
-        var ctrl = !!(ev.ctrlKey || ev.metaKey);
-
-        var printScreen = ev.key === 'PrintScreen' || key === 'printscreen' || ev.keyCode === 44;
-        var snipWindows = ev.shiftKey && ev.metaKey && key === 's';
-        var snipMac = ev.metaKey && ev.shiftKey && ['3', '4', '5'].indexOf(key) !== -1;
-        var cetak = ctrl && key === 'p';
-        if (printScreen || snipWindows || snipMac || cetak) {
-          ev.preventDefault();
-          tampilkanPerisai(cetak ? 'Mencetak halaman ujian diblokir.' : 'Tangkapan layar diblokir.');
-          laporPelanggaran('screenshot', cetak ?
-            'Percobaan mencetak halaman ujian (jendela pembungkus).' :
-            'Shortcut tangkapan layar pada jendela pembungkus.');
-          return;
-        }
-        if (ev.key === 'F12' || (ctrl && ev.shiftKey && ['i', 'j', 'c', 'k'].indexOf(key) !== -1) ||
-            (ctrl && key === 'u')) {
-          ev.preventDefault();
-          laporPelanggaran('devtools', 'Percobaan membuka alat pengembang pada jendela pembungkus.');
-          return;
-        }
-        // Tab/jendela baru, pindah tab, baris alamat, dan navigasi riwayat.
-        if ((ctrl && ['t', 'n', 'w', 'q', 's', 'l', 'o', 'h', 'd'].indexOf(key) !== -1) ||
-            (ctrl && (key === 'tab' || key === 'pageup' || key === 'pagedown')) ||
-            (ctrl && /^[1-9]$/.test(key)) ||
-            (ev.altKey && (key === 'arrowleft' || key === 'arrowright' || key === 'd')) ||
-            ev.key === 'F6' || ev.key === 'F3') {
-          ev.preventDefault();
-          return;
-        }
-        // Muat ulang: dicegah agar sesi ujian tidak terputus paksa.
-        if (ev.key === 'F5' || (ctrl && key === 'r')) {
-          ev.preventDefault();
-          return;
-        }
-      }
-      window.addEventListener('keydown', tanganiTombol, true);
-      window.addEventListener('keyup', function (ev) {
-        if (!ujianBerlangsung) return;
-        if (ev.key === 'PrintScreen' || String(ev.key || '').toLowerCase() === 'printscreen' || ev.keyCode === 44) {
-          ev.preventDefault();
-          tampilkanPerisai('Tangkapan layar diblokir.');
-          laporPelanggaran('screenshot', 'Tombol PrintScreen pada jendela pembungkus.');
-        }
-      }, true);
-
-      window.addEventListener('beforeprint', function () {
-        if (!ujianBerlangsung) return;
-        tampilkanPerisai('Mencetak halaman ujian diblokir.');
-        laporPelanggaran('screenshot', 'Percobaan mencetak halaman dari menu browser (pembungkus).');
-      });
-
-      document.addEventListener('contextmenu', function (ev) {
-        if (ujianBerlangsung) ev.preventDefault();
-      }, true);
-      document.addEventListener('dragstart', function (ev) {
-        if (ujianBerlangsung) ev.preventDefault();
-      }, true);
-
-      // Jendela ditinggalkan: isi bingkai disamarkan (lapisan kedua).
-      document.addEventListener('visibilitychange', function () {
-        samarkanBingkai(document.hidden);
-      });
-      window.addEventListener('blur', function () { samarkanBingkai(true); });
-      window.addEventListener('focus', function () { samarkanBingkai(false); });
-
-      // --- Muat halaman awal -------------------------------------------
-      // Parameter page/hs tetap didukung agar tautan lama tidak rusak,
-      // tetapi TIDAK diperlukan: pemilihan guru/proktor dilakukan lewat
-      // kotak centang pada layar login.
-      document.title = JUDUL_APLIKASI;
-
-      var params = new URLSearchParams(window.location.search);
-      var halamanAwal = params.get('page');
-      var kodeAwal = params.get('hs');
-
-      bingkai.src = alamatAplikasi(halamanAwal, kodeAwal);
-      if (halamanAwal === 'admin') {
-        document.title = JUDUL_PANEL;
-        pesan.textContent = 'Memuat Kelola Ujian\u2026';
-      }
-
-      // Kode sesi tidak dibiarkan tertinggal di kolom alamat.
-      if (kodeAwal && window.history && window.history.replaceState) {
-        params.delete('hs');
-        var sisa = params.toString();
-        window.history.replaceState({}, document.title,
-          window.location.pathname + (sisa ? '?' + sisa : ''));
-      }
-
-      // --- Pesan dari aplikasi di dalam bingkai --------------------------
-      // Aplikasi di dalam bingkai tidak dapat menavigasi jendela induk karena
-      // beda domain. Karena itu aplikasi cukup mengirim pesan, dan pembungkus
-      // yang mengganti isi bingkainya sendiri.
-      window.addEventListener('message', function (ev) {
-        if (!ev || !ev.data || ev.data.sumber !== 'siado') return;
-        if (String(ev.origin || '').indexOf(ASAL_APLIKASI) !== 0) return;
-
-        // Permintaan layar penuh dari aplikasi di dalam bingkai.
-        if (ev.data.aksi === 'layarPenuh') { mintaLayarPenuh(); return; }
-        if (ev.data.aksi === 'keluarLayarPenuh') { keluarLayarPenuh(); return; }
-        if (ev.data.aksi === 'cekLayarPenuh') { kirimStatusLayarPenuh(); return; }
-
-        // REVISI 3.4: status ujian menghidupkan/mematikan penjaga keamanan.
-        if (ev.data.aksi === 'ujian') {
-          ujianBerlangsung = String(ev.data.status || '') === 'mulai';
-          kirimStatusLayarPenuh();
-          if (!ujianBerlangsung) {
-            jumlahTombolKembali = 0;
-            samarkanBingkai(false);
-          }
-          return;
-        }
-
-        if (ev.data.aksi !== 'pindah') return;
-
-        var keAdmin = ev.data.halaman === 'admin';
-        // Berpindah ke panel = keluar dari ruang ujian secara sah.
-        ujianBerlangsung = false;
-        samarkanBingkai(false);
-        tampilkanTirai(keAdmin ? 'Membuka Kelola Ujian\u2026' : 'Membuka halaman ujian\u2026');
-        document.title = keAdmin ? JUDUL_PANEL : JUDUL_APLIKASI;
-
-        // Alamat dari aplikasi dipakai hanya bila benar menunjuk ke Apps Script.
-        var tujuan = String(ev.data.url || '');
-        if (tujuan.indexOf(ASAL_APLIKASI) !== 0) tujuan = alamatAplikasi(keAdmin ? 'admin' : '', '');
-        bingkai.src = tujuan;
-      });
-
-      bingkai.addEventListener('load', function () {
-        sembunyikanTirai();
-        window.setTimeout(kirimStatusLayarPenuh, 400);
-      });
-
-      // Service worker sederhana (tanpa cache) agar browser mengenali halaman
-      // ini sebagai aplikasi yang dapat dipasang ke layar utama.
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('sw.js').catch(function () {});
-        });
-      }
-      window.setTimeout(sembunyikanTirai, 10000); // jaring pengaman
-    })();
+    // Service worker tanpa cache (sw.js dari repo) agar halaman dapat dipasang ke layar utama
+    // (mode aplikasi = tanpa bilah alamat; notifikasi "swipe down to exit full screen" tidak muncul).
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
   </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a345e24a6d024cbf',t:'MTc4ODI4MjU3OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3680b550e06d437',t:'MTc4ODY0MDc3Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

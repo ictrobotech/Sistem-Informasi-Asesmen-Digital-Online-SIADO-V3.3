@@ -1827,8 +1827,11 @@ async function loadQuestions() {
   try {
     var result = await adminApi('getAllSoal', {});
     if (!guardAdminResult(result)) return;
-    ADMIN.questions = result.soal || [];
-    renderQuestionTable(ADMIN.questions);
+    ADMIN.questions = result.soal || result.data || [];
+    // Sumber data filter ikut diperbarui, supaya daftar yang tampil dan daftar yang dipakai
+    // tombol Edit/Hapus selalu sama (sebelumnya filter memakai salinan lama dari bootstrap).
+    DATA_MENTAH.soal = ADMIN.questions;
+    terapkanFilterSoal_();
   } catch (error) {
     setTableMessage('questionTable', 'Gagal memuat bank soal.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.questions = false; }
@@ -1875,7 +1878,7 @@ function renderQuestionTable(rows) {
 }
 
 function openEditQuestion(id) {
-  var question = ADMIN.questions.filter(function(item) { return String(item.id_soal) === String(id); })[0];
+  var question = ADMIN.questions.concat(DATA_MENTAH.soal || []).filter(function(item) { return String(item.id_soal) === String(id); })[0];
   if (!question) {
     hasilGagal_('Soal Tidak Ditemukan', 'Data soal #' + id + ' tidak ada pada daftar. Tekan Refresh lalu coba lagi.');
     return;

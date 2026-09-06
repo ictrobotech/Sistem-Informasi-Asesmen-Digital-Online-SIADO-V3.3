@@ -123,29 +123,95 @@
     location.replace(base + 'admin.html' + location.hash);
   }
 
-  /* --- Upload media/branding lewat Edge Function (pengganti Drive) --- */
+  /* --- Upload media/branding: LANGSUNG ke Supabase Storage (tanpa Edge Function) ---
+   * Browser -> POST {SUPABASE_URL}/storage/v1/object/{bucket}/{username}/{nama}
+   * dengan publishable key + header x-siado-token (token panel). Policy RLS di
+   * storage.objects (sql/04) memverifikasi token itu lewat siado.storage_boleh_tulis();
+   * tanpa token valid unggahan ditolak "row-level security". Untuk logo/background,
+   * URL hasil unggah disimpan ke pengaturan lewat api() (updateBrandingLogo /
+   * updateLoginBackground) — sama seperti perilaku Edge Function "media" sebelumnya. */
+  function urlStorage_(bagian) {
+    return String(cfg.SUPABASE_URL || '').replace(/\/+$/, '') + '/storage/v1/object/' + bagian;
+  }
+  function namaAman_(nama) {
+    var ext = (String(nama || '').split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+    var acak = Math.random().toString(36).slice(2, 10);
+    return Date.now() + '-' + acak + '.' + ext;
+  }
+  function pesanStorage_(res, teks) {
+    var m = '';
+    try { var j = JSON.parse(teks || '{}'); m = j.message || j.error || ''; } catch (e) { m = teks || ''; }
+    if (/row-level security|AccessDenied|Unauthorized/i.test(m)) {
+      return 'Unggahan ditolak Storage (policy belum terpasang atau sesi panel berakhir). ' +
+             'Jalankan ulang sql/04_fungsi_panel.sql, atau buat policy Storage sesuai PETUNJUK Langkah 4.2, lalu login ulang.';
+    }
+    if (/exceeded the maximum allowed size|Payload too large|413/i.test(m + res.status)) return 'Ukuran berkas melebihi batas bucket.';
+    if (/mime type|not supported/i.test(m)) return 'Jenis berkas tidak diizinkan bucket: ' + m;
+    return m || ('Storage menjawab HTTP ' + res.status + '.');
+  }
   w.siadoUploadMedia = function (file, opsi) {
     opsi = opsi || {};
-    var form = new FormData();
-    form.append('aksi', 'upload');
-    form.append('adminToken', opsi.adminToken || (w.ADMIN && w.ADMIN.token) || '');
-    form.append('jenis', opsi.jenis || 'gambar');
-    form.append('file', file, file.name);
-    return fetch(cfg.SUPABASE_URL + '/functions/v1/media', {
-      method: 'POST', body: form, headers: { apikey: cfg.SUPABASE_ANON_KEY }
-    }).then(function (r) { return r.json(); });
+    var token = opsi.adminToken || (w.ADMIN && w.ADMIN.token) || '';
+    var jenis = opsi.jenis || 'gambar';
+    var isVideo = jenis === 'video';
+    var bucket = (jenis === 'logo' || jenis === 'background') ? 'branding' : 'media-soal';
+    var info;
+    return panggilApi({ action: 'infoUploadMedia', adminToken: token }).then(function (r) {
+      if (!r || !r.success) throw new Error((r && r.message) || 'Sesi panel tidak valid.');
+      info = r;
+      if (bucket === 'branding' && r.role !== 'ADMIN') throw new Error('Hanya admin yang boleh mengubah logo/background.');
+      var maksMb = bucket === 'branding' ? (r.maksBrandingMb || 2) : (isVideo ? (r.maksVideoMb || 50) : (r.maksUploadMb || 5));
+      if (file.size > maksMb * 1024 * 1024) throw new Error('Ukuran berkas melebihi ' + maksMb + ' MB.');
+      var path = r.username + '/' + namaAman_(file.name);
+      var url = urlStorage_(bucket + '/' + path.split('/').map(encodeURIComponent).join('/'));
+      return fetch(url, {
+        method: 'POST',
+        headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY,
+                   'x-siado-token': token, 'Content-Type': file.type || 'application/octet-stream',
+                   'x-upsert': 'false', 'cache-control': 'max-age=31536000' },
+        body: file
+      }).then(function (res) {
+        return res.text().then(function (teks) {
+          if (!res.ok) throw new Error(pesanStorage_(res, teks));
+          var publik = urlStorage_('public/' + bucket + '/' + path.split('/').map(encodeURIComponent).join('/'));
+          var simpan = Promise.resolve({ success: true });
+          if (jenis === 'logo') simpan = panggilApi({ action: 'updateBrandingLogo', adminToken: token, url: publik });
+          if (jenis === 'background') simpan = panggilApi({ action: 'updateLoginBackground', adminToken: token, mode: 'gambar', url: publik });
+          return simpan.then(function (hasil) {
+            if (hasil && hasil.success === false) throw new Error(hasil.message || 'URL berkas gagal disimpan.');
+            return { success: true, url: publik, path: path, bucket: bucket, embedKind: isVideo ? 'video' : 'image',
+                     message: 'Berkas terunggah.', branding: hasil && hasil.branding, background: hasil && hasil.background };
+          });
+        });
+      });
+    }).catch(function (e) {
+      var pesan = e && e.message ? e.message : String(e);
+      if (/Failed to fetch|NetworkError|Load failed/i.test(pesan)) {
+        pesan = 'Tidak dapat menghubungi Supabase Storage. Periksa koneksi internet, lalu coba lagi.';
+      }
+      return { success: false, message: pesan };
+    });
   };
   w.siadoHapusMedia = function (url, opsi) {
     opsi = opsi || {};
-    var form = new FormData();
-    form.append('aksi', 'hapus');
-    form.append('adminToken', opsi.adminToken || (w.ADMIN && w.ADMIN.token) || '');
-    form.append('jenis', opsi.jenis || 'gambar');
-    form.append('url', url || '');
-    if (opsi.idSoal) form.append('idSoal', String(opsi.idSoal));
-    return fetch(cfg.SUPABASE_URL + '/functions/v1/media', {
-      method: 'POST', body: form, headers: { apikey: cfg.SUPABASE_ANON_KEY }
-    }).then(function (r) { return r.json(); });
+    var token = opsi.adminToken || (w.ADMIN && w.ADMIN.token) || '';
+    var m = /\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/.exec(String(url || ''));
+    if (!m) return Promise.resolve({ success: true, dihapus: false, message: 'Bukan berkas Storage; tidak ada yang dihapus.' });
+    var bucket = m[1], path = decodeURIComponent(m[2]);
+    return panggilApi({ action: 'cekMediaDipakai', adminToken: token, url: url, idSoal: opsi.idSoal || null }).then(function (cek) {
+      if (cek && cek.dipakai) return { success: true, dihapus: false, message: 'Berkas masih dipakai soal lain; tidak dihapus.' };
+      return fetch(urlStorage_(bucket), {
+        method: 'DELETE',
+        headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + cfg.SUPABASE_ANON_KEY,
+                   'x-siado-token': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefixes: [path] })
+      }).then(function (res) {
+        return res.text().then(function (teks) {
+          if (!res.ok) return { success: false, dihapus: false, message: pesanStorage_(res, teks) };
+          return { success: true, dihapus: true, message: 'Berkas dihapus.' };
+        });
+      });
+    }).catch(function (e) { return { success: false, dihapus: false, message: (e && e.message) || String(e) }; });
   };
 
   /* --- Realtime monitor (opsional, HANYA panel admin; peserta tetap polling) --- */

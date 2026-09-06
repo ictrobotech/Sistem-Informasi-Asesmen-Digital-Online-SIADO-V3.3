@@ -1479,26 +1479,26 @@ async function mintaKosongkanMedia_(box) {
     return;
   }
   var setuju = await konfirmasi_('Kosongkan ' + nama + ' stimulus yang sudah diproses? ' +
-    'Berkasnya juga akan dihapus dari folder Google Drive aplikasi.',
+    'Berkasnya juga akan dihapus dari penyimpanan aplikasi (Supabase Storage) bila tidak dipakai soal lain.',
     { judul: 'Kosongkan ' + (kind === 'video' ? 'Video' : 'Gambar'), nada: 'warn', teksOk: 'Ya, Kosongkan' });
   if (!setuju) return;
 
   // Berkas dibuang lebih dulu selagi URL-nya masih diketahui.
   var hapus = { dihapus: false, message: '' };
   try {
-    /* [SIADO v5] berkas dihapus dari Supabase Storage lewat Edge Function "media" */
+    /* [SIADO v5] berkas dihapus dari Supabase Storage langsung (siadoHapusMedia, policy RLS storage.objects) */
     hapus = await window.siadoHapusMedia(nilai, {
       jenis: kind, adminToken: ADMIN.token,
       idSoal: (box.dataset && box.dataset.mediaSoalId) || ''
     }) || hapus;
   } catch (error) {
-    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Drive: ' + (error.message || 'kesalahan jaringan') };
+    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Storage: ' + (error.message || 'kesalahan jaringan') };
   }
 
   kosongkanMediaBox_(box);
   await hasilSukses_('Kotak Dikosongkan',
     'Media ' + nama + ' pada soal ini telah dilepas.', [
-      { label: 'Berkas Drive', nilai: hapus.dihapus
+      { label: 'Berkas Storage', nilai: hapus.dihapus
         ? 'Dihapus' + (hapus.nama ? ' — ' + hapus.nama : '') : (hapus.message || 'Tidak ada yang dihapus') }
     ]);
 }
@@ -1506,6 +1506,8 @@ async function mintaKosongkanMedia_(box) {
 function kosongkanMediaBox_(box) {
   var key = box.dataset.mediaBox;
   MEDIA_STATE[key].url = '';
+  MEDIA_STATE[key].berkasTerunggah = null;
+  MEDIA_STATE[key].urlBerkas = '';
   box.querySelector('[data-media-value]').value = '';
   var fileInput = box.querySelector('[data-media-file]');
   if (fileInput) fileInput.value = '';
@@ -1574,7 +1576,17 @@ async function prosesMediaBox_(box, diam) {
         return;
       }
       MEDIA_FOLDER_TERAKHIR = '';
-      url = await unggahFileMedia_(box, file, kind);
+      if (state.berkasTerunggah === file && state.urlBerkas) {
+        // Berkas yang sama sudah diunggah saat dipilih (event change) — pakai ulang URL-nya,
+        // jangan unggah dua kali ke Storage.
+        url = state.urlBerkas;
+        MEDIA_FOLDER_TERAKHIR = state.folderBerkas || '';
+      } else {
+        url = await unggahFileMedia_(box, file, kind);
+        state.berkasTerunggah = file;
+        state.urlBerkas = url;
+        state.folderBerkas = MEDIA_FOLDER_TERAKHIR;
+      }
     } else if (sumber === 'drive') {
       var driveLink = box.querySelector('[data-media-drive]').value.trim();
       if (!driveLink) {
@@ -1609,7 +1621,7 @@ async function prosesMediaBox_(box, diam) {
         { label: 'Sumber', nilai: labelSumberMedia_(sumber) },
         { label: 'Jenis', nilai: kind === 'video' ? 'Video' : 'Gambar' }
       ].concat(MEDIA_FOLDER_TERAKHIR
-        ? [{ label: 'Folder Drive', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
+        ? [{ label: 'Penyimpanan', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
     MEDIA_FOLDER_TERAKHIR = '';
   } catch (error) {
     mediaProgress_(box, null);
@@ -1631,7 +1643,7 @@ var MEDIA_FOLDER_TERAKHIR = '';
  * agar batas payload Apps Script tidak terlampaui.
  */
 async function unggahFileMedia_(box, file, kind) {
-  /* [SIADO v5] Upload langsung ke Supabase Storage lewat Edge Function "media"
+  /* [SIADO v5] Upload langsung ke Supabase Storage (siadoUploadMedia, policy RLS storage.objects — tanpa Edge Function)
    * (pengganti uploadMediaInline / getUploadTicket / finalisasiUploadDrive Google Drive). */
   var maxImageMb = Math.min(25, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumUploadMb || 5)));
   var maxVideoMb = Math.min(50, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumVideoMb || 50)));
@@ -1925,7 +1937,7 @@ async function deleteQuestion(id) {
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     var rincianHapus = [{ label: 'Nomor soal', nilai: '#' + String(id) }];
     if (result.berkasDihapus && result.berkasDihapus.length) {
-      rincianHapus.push({ label: 'Berkas Drive dihapus', nilai: result.berkasDihapus.join(', ') });
+      rincianHapus.push({ label: 'Berkas Storage dihapus', nilai: result.berkasDihapus.join(', ') });
     }
     if (result.berkasDilewati && result.berkasDilewati.length) {
       rincianHapus.push({ label: 'Tidak ikut dihapus', nilai: result.berkasDilewati.join('; ') });
@@ -2631,7 +2643,7 @@ async function updateBrandingLogo(event) {
   setBrandingMessage_('Memproses dan mengunggah logo...', '');
   try {
     /* [SIADO v5] Logo diverifikasi/dinormalisasi di browser (seperti versi lama), lalu
-     * berkas WEBP 256x256 diunggah ke bucket "branding" lewat Edge Function "media".
+     * berkas WEBP 256x256 diunggah ke bucket "branding" langsung (siadoUploadMedia, khusus ADMIN).
      * Server menyimpan URL-nya di pengaturan (Branding_Logo_Url) — bukan base64 lagi. */
     if (!file) throw new Error('Pilih berkas logo terlebih dahulu.');
     var loaded = await readBrandingImage_(file);
@@ -2640,7 +2652,7 @@ async function updateBrandingLogo(event) {
     var berkas = new File([blob], 'logo-' + Date.now() + '.webp', { type: ui.mime });
     var unggah = await window.siadoUploadMedia(berkas, { jenis: 'logo', adminToken: ADMIN.token });
     if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Logo gagal diunggah.');
-    var result = await adminApi('getBrandingPublik', {
+    var result = unggah.branding ? { success: true, branding: unggah.branding } : await adminApi('getBrandingPublik', {
       knownVersion: '', knownBgVersion: (ADMIN.background && ADMIN.background.version) || ''
     });
     if (!guardAdminResult(result)) {
@@ -3983,10 +3995,15 @@ async function applyBackgroundImage() {
   ADMIN.operationBusy.background = true;
   try {
     setBgStatus_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengompres dan menyimpan background...', 'info');
-    /* [SIADO v5] background diunggah sebagai berkas ke bucket "branding" */
-    var unggah = await window.siadoUploadMedia(file, { jenis: 'background', adminToken: ADMIN.token });
+    /* [SIADO v5] gambar dikompres (JPEG, lebar maks 1600 px, < 300 KB) lalu diunggah ke bucket
+     * "branding" (batas 2 MB). siadoUploadMedia sekaligus menyimpan URL-nya (updateLoginBackground). */
+    var dataUri = await kompresBackground_(file);
+    var blobBg = await (await fetch(dataUri)).blob();
+    var berkasBg = new File([blobBg], 'background-' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    var unggah = await window.siadoUploadMedia(berkasBg, { jenis: 'background', adminToken: ADMIN.token });
     if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Background gagal diunggah.');
-    var result = await adminApi('updateLoginBackground', { mode: 'gambar', url: unggah.url, fileName: file.name });
+    var result = unggah.background ? { success: true, background: unggah.background, message: 'Background login diperbarui.' }
+      : await adminApi('updateLoginBackground', { mode: 'gambar', url: unggah.url, fileName: file.name });
     if (!guardAdminResult(result)) return;
     if (!result.success) throw new Error(result.message || 'Background gagal disimpan.');
     applyBackgroundData_(result.background);

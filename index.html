@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SIADO" />
   <link rel="icon" type="image/png" href="LGS.png">
-  <link rel="apple-touch-icon" href="LGS.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
        menegaskan tema resmi lewat getKonfigurasiPublik). */
     try { var __temaTersimpan = localStorage.getItem('siado_tema'); if (__temaTersimpan) document.documentElement.setAttribute('data-theme', __temaTersimpan); } catch (e) {}
   </script>
-  <script src="vendor/supabase.min.js"></script>
+  <script src="supabase.min.js"></script>
   <script src="siado-config.js"></script>
   <script src="siado-api.js"></script>
 </head>
@@ -49,7 +49,7 @@
       <div class="brand-orb orb-two"></div>
       <main class="login-card participant-login-card">
         <div class="login-brand">
-          <div class="school-mark brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+          <div class="school-mark brand-logo"><img src="logo.png" alt="Logo sekolah"></div>
           <p class="eyebrow" id="loginEyebrow">SISTEM INFORMASI</p>
           <p class="eyebrow eyebrow-sub" id="loginEyebrowSub" hidden>SISTEM INFORMASI</p>
           <h1 id="loginTitle">ASESMEN DIGITALISASI ONLINE</h1>
@@ -116,7 +116,7 @@
     <div class="briefing-wrap">
       <article class="briefing-card">
         <header class="briefing-head">
-          <div class="briefing-mark"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+          <div class="briefing-mark"><img src="logo.png" alt="Logo sekolah"></div>
           <p id="briefingKicker" class="briefing-kicker">SISTEM ASESMEN DIGITAL</p>
           <h1 id="briefingTitle" class="briefing-title">PETUNJUK UJIAN</h1>
           <p id="briefingSchool" class="briefing-school">SMP LABSCHOOL UNTAD PALU</p>
@@ -152,7 +152,7 @@
   <section id="examScreen" class="app-screen" aria-label="Halaman ujian">
     <header class="exam-header">
       <div class="exam-brand-block">
-        <div class="compact-mark brand-logo"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%231f6feb'/><path d='M48 18 20 32v14c0 17 12 30 28 34 16-4 28-17 28-34V32L48 18z' fill='%23fff' opacity='.95'/><path d='M35 50l9 9 17-19' fill='none' stroke='%231f6feb' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/></svg>" alt="Logo sekolah"></div>
+        <div class="compact-mark brand-logo"><img src="logo.png" alt="Logo sekolah"></div>
         <div>
           <p class="header-overline">SIADO V3.3</p>
           <p id="judulUjianHeader" class="exam-title-big"></p>
@@ -306,6 +306,5 @@
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
     }
   </script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3680b550e06d437',t:'MTc4ODY0MDc3Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

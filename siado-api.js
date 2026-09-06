@@ -3,7 +3,7 @@
  *
  * Meniru google.script.run.handleApiRequest(data) dengan supabase.rpc('api').
  * Sertakan SEBELUM script.js / admin-script.js:
- *   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+ *   <script src="supabase.min.js"></script>   (salinan lokal supabase-js v2; fallback CDN otomatis)
  *   <script src="siado-config.js"></script>
  *   <script src="siado-api.js"></script>
  *
@@ -32,12 +32,41 @@
   if (/^sb_secret_/.test(String(cfg.SUPABASE_ANON_KEY || ''))) {
     throw new Error('[SIADO] SUPABASE_ANON_KEY berisi secret key! Ganti dengan publishable key (sb_publishable_…) atau anon key.');
   }
-  var client = w.supabase && w.supabase.createClient
-    ? w.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },   // tidak memakai Supabase Auth
-        global: { headers: { 'x-siado-client': cfg.APP_VERSION || 'v5' } }
-      })
-    : null;
+  /* --- Pustaka supabase-js ---
+   * Normalnya sudah termuat dari supabase.min.js (tag <script> sebelum file ini).
+   * Bila berkas itu lupa diunggah ke hosting, pustaka dimuat otomatis dari CDN jsDelivr
+   * (versi yang sama) supaya aplikasi tetap berjalan, dan kesalahannya dilaporkan dengan jelas. */
+  var SUPABASE_JS_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js';
+  var client = null, clientPromise = null;
+  function buatClient_() {
+    client = w.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },   // tidak memakai Supabase Auth
+      global: { headers: { 'x-siado-client': cfg.APP_VERSION || 'v5' } }
+    });
+    w.siadoClient = client;
+    return client;
+  }
+  if (w.supabase && w.supabase.createClient) buatClient_();
+  function ambilClient_() {
+    if (client) return Promise.resolve(client);
+    if (clientPromise) return clientPromise;
+    clientPromise = new Promise(function (resolve, reject) {
+      console.warn('[SIADO] supabase.min.js tidak termuat (berkas belum diunggah ke hosting?). Memuat dari CDN: ' + SUPABASE_JS_CDN);
+      var s = document.createElement('script');
+      s.src = SUPABASE_JS_CDN; s.async = true;
+      s.onload = function () {
+        if (w.supabase && w.supabase.createClient) resolve(buatClient_());
+        else reject(new Error('Pustaka Supabase tidak dapat diinisialisasi. Muat ulang halaman.'));
+      };
+      s.onerror = function () {
+        clientPromise = null;   // boleh dicoba lagi pada permintaan berikutnya
+        reject(new Error('Pustaka Supabase belum termuat: berkas supabase.min.js tidak ada di hosting ' +
+          'dan CDN tidak terjangkau. Unggah berkas supabase.min.js (lihat PETUNJUK Langkah 5.3) atau periksa koneksi internet.'));
+      };
+      document.head.appendChild(s);
+    });
+    return clientPromise;
+  }
 
   /** Panggil router SQL public.api(action, data). Selalu resolve {success, ...}. */
   function panggilApi(data) {
@@ -45,8 +74,9 @@
     var action = String(data.action || '');
     var payload = Object.assign({}, data);
     delete payload.action;
-    if (!client) return Promise.reject(new Error('Supabase client belum termuat.'));
-    return client.rpc('api', { action: action, data: payload }).then(function (res) {
+    return ambilClient_().then(function (c) {
+      return c.rpc('api', { action: action, data: payload });
+    }).then(function (res) {
       if (res.error) {
         var pesan = res.error.message || 'Permintaan ke server gagal.';
         if (/Failed to fetch|NetworkError|Load failed/i.test(pesan)) {
@@ -128,5 +158,5 @@
   };
 
   w.siadoApi = panggilApi;
-  w.siadoClient = client;
+  w.siadoClient = client;   // null bila pustaka masih dimuat dari CDN; diisi ulang oleh buatClient_()
 })(window);

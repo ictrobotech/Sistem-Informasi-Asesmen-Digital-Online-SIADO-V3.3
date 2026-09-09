@@ -3002,7 +3002,7 @@ async function exportLaporanFile(format) {
       if (!laporan.nilai.length && !laporan.pelanggaran.length) {
         throw new Error('Belum ada data nilai atau pelanggaran untuk diexport.');
       }
-      var blob = format === 'pdf' ? buatPdfLaporan_(laporan) : buatExcelLaporan_(laporan);
+      var blob = format === 'pdf' ? buatPdfLaporan_(laporan) : await buatExcelLaporan_(laporan);
       fileName = namaBerkasLaporan_(format, laporan.filterKelas);
       unduhBlob_(blob, fileName);
     }
@@ -3149,55 +3149,248 @@ function namaBerkasLaporan_(format, filterKelas) {
   return 'Laporan-Ujian-' + (kelas ? kelas + '-' : '') + stamp + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
 }
 
-function buatExcelLaporan_(laporan) {
-  if (!window.XLSX || !window.XLSX.utils) {
-    throw new Error('Pustaka Excel belum dimuat. Pastikan folder vendor/ diunggah bersama admin.html.');
+async function buatExcelLaporan_(laporan) {
+  /*
+   * SheetJS CE membentuk .xlsx dengan baik, tetapi tidak menjamin penulisan
+   * style sel. ExcelJS dipakai di sini agar warna, font, border, lebar kolom,
+   * freeze pane, filter, dan tata cetak benar-benar tersimpan di Excel.
+   */
+  if (!window.ExcelJS || !window.ExcelJS.Workbook) {
+    throw new Error('Pustaka ExcelJS belum dimuat. Unggah exceljs.min.js di root repository bersama admin.html.');
   }
-  var XLSX = window.XLSX;
-  var workbook = XLSX.utils.book_new();
+  var ExcelJS = window.ExcelJS;
+  var workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIADO — Sistem Informasi Asesmen Digitalisasi Online';
+  workbook.lastModifiedBy = laporan.guru || 'SIADO';
+  workbook.created = new Date(laporan.dibuat || Date.now());
+  workbook.modified = new Date();
+  workbook.properties.title = 'Laporan Ujian ' + laporan.sekolah;
+  workbook.properties.subject = laporan.mapel || 'Laporan Ujian';
+  workbook.properties.description = 'Laporan nilai, pelanggaran, dan rekap hasil ujian.';
+
   var headerNilai = ['No', 'Nama Peserta', 'Kelas', 'Username', 'Kehadiran', 'Mata Pelajaran', 'Guru Mapel',
     'Benar', 'Salah', 'Nilai', 'Poin Maks', 'Persen (%)', 'KKM', 'Status', 'Pelanggaran', 'Selesai'];
   var headerPelanggaran = ['No', 'Waktu', 'Nama Peserta', 'Kelas', 'Username', 'Jenis Pelanggaran',
     'Detail', 'Pelanggaran Ke', 'Tindakan', 'Status Email'];
   var headerRekap = ['No', 'Kelas', 'Mata Pelajaran', 'Peserta', 'Selesai', 'Tuntas', 'Remedial',
     'Menunggu Penilaian', 'Rata-rata (%)', 'Tertinggi (%)', 'Terendah (%)', 'Pelanggaran'];
-  var nilai = dataNilaiLaporan_(laporan);
-  var pelanggaran = dataPelanggaranLaporan_(laporan);
-  var rekap = dataRekapLaporan_(laporan);
 
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Nilai', 'LAPORAN NILAI UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerNilai, nilai, '#1F6FEB', [5, 26, 16, 17, 14, 22, 22, 9, 9, 10, 11, 12, 8, 22, 13, 19]);
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Pelanggaran', 'LAPORAN PELANGGARAN UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerPelanggaran, pelanggaran, '#B42318', [5, 21, 26, 16, 17, 28, 42, 15, 22, 17]);
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Rekap', 'REKAP HASIL UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerRekap, rekap, '#146C94', [5, 16, 22, 11, 10, 10, 11, 20, 16, 16, 16, 14]);
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Nilai',
+    judul: 'LAPORAN NILAI UJIAN',
+    laporan: laporan,
+    header: headerNilai,
+    rows: dataNilaiLaporan_(laporan),
+    warnaUtama: 'FF1F4E78',
+    warnaAksen: 'FFD9EAF7',
+    lebar: [6, 29, 18, 18, 15, 23, 23, 9, 9, 11, 12, 13, 9, 23, 14, 21],
+    tipe: 'nilai'
+  });
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Pelanggaran',
+    judul: 'LAPORAN PELANGGARAN UJIAN',
+    laporan: laporan,
+    header: headerPelanggaran,
+    rows: dataPelanggaranLaporan_(laporan),
+    warnaUtama: 'FF9E2A2B',
+    warnaAksen: 'FFFBE1E1',
+    lebar: [6, 22, 29, 18, 18, 30, 48, 16, 23, 18],
+    tipe: 'pelanggaran'
+  });
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Rekap',
+    judul: 'REKAP HASIL UJIAN',
+    laporan: laporan,
+    header: headerRekap,
+    rows: dataRekapLaporan_(laporan),
+    warnaUtama: 'FF0B6E69',
+    warnaAksen: 'FFD8F0EC',
+    lebar: [6, 18, 23, 12, 12, 12, 13, 23, 17, 17, 17, 15],
+    tipe: 'rekap'
+  });
 
-  var output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', compression: true });
-  return new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  var output = await workbook.xlsx.writeBuffer();
+  return new Blob([output], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
 }
 
-function tambahSheetExcelLaporan_(XLSX, workbook, nama, judul, keterangan, header, rows, warna, lebar) {
-  var data = [[judul], [keterangan], [], header].concat(rows.length ? rows : [['Belum ada data.']]);
-  var sheet = XLSX.utils.aoa_to_sheet(data);
-  sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: header.length - 1 } }];
-  sheet['!cols'] = lebar.map(function(w) { return { wch: w }; });
-  sheet['!rows'] = [{ hpt: 24 }, { hpt: 18 }, { hpt: 8 }, { hpt: 32 }];
-  sheet['!autofilter'] = { ref: 'A4:' + XLSX.utils.encode_col(header.length - 1) + Math.max(4, rows.length + 4) };
-  sheet['!freeze'] = { xSplit: 0, ySplit: 4 };
-  // SheetJS Community tetap menghasilkan file XLSX valid bila style diabaikan;
-  // style ini dipakai oleh build yang mendukung cell styles.
-  var titleStyle = { font: { bold: true, sz: 14, color: { rgb: '102A43' } }, alignment: { horizontal: 'center' } };
-  var infoStyle = { font: { sz: 9, color: { rgb: '555555' } }, alignment: { horizontal: 'center', wrapText: true } };
-  var headStyle = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: warna.replace('#', '') } },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
-  if (sheet.A1) sheet.A1.s = titleStyle;
-  if (sheet.A2) sheet.A2.s = infoStyle;
-  for (var c = 0; c < header.length; c++) {
-    var cell = sheet[XLSX.utils.encode_cell({ r: 3, c: c })];
-    if (cell) cell.s = headStyle;
+/* Palet SIADO yang konsisten pada seluruh worksheet Excel. */
+var GAYA_EXCEL_LAPORAN = {
+  putih: 'FFFFFFFF',
+  teks: 'FF183B56',
+  teksSekunder: 'FF5D7285',
+  garis: 'FFD5E2EC',
+  garisLembut: 'FFE8EFF5',
+  abuMuda: 'FFF4F8FB',
+  hijau: 'FFE2F3E8',
+  teksHijau: 'FF147A3D',
+  merah: 'FFFBE5E5',
+  teksMerah: 'FFB42318',
+  kuning: 'FFFFF3D6',
+  teksKuning: 'FF9A6700'
+};
+
+function warnaPolaExcel_(argb) {
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb: argb } };
+}
+
+function garisExcel_(warna) {
+  var sisi = { style: 'thin', color: { argb: warna || GAYA_EXCEL_LAPORAN.garis } };
+  return { top: sisi, left: sisi, bottom: sisi, right: sisi };
+}
+
+function tambahSheetExcelProfesional_(workbook, opsi) {
+  var sheet = workbook.addWorksheet(opsi.nama, {
+    properties: { defaultRowHeight: 19 },
+    pageSetup: {
+      orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 }
+    },
+    views: [{ state: 'frozen', ySplit: 4, showGridLines: false }]
+  });
+  var panjang = opsi.header.length;
+  var akhirKolom = nomorKolomExcel_(panjang);
+  sheet.columns = opsi.lebar.map(function(lebar) { return { width: lebar }; });
+  sheet.mergeCells(1, 1, 1, panjang);
+  sheet.mergeCells(2, 1, 2, panjang);
+
+  var selJudul = sheet.getCell('A1');
+  selJudul.value = opsi.judul + ' — ' + opsi.laporan.sekolah;
+  selJudul.font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+  selJudul.fill = warnaPolaExcel_(opsi.warnaUtama);
+  selJudul.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 33;
+
+  var selInfo = sheet.getCell('A2');
+  selInfo.value = infoLaporan_(opsi.laporan);
+  selInfo.font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  selInfo.fill = warnaPolaExcel_(opsi.warnaAksen);
+  selInfo.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  sheet.getRow(2).height = 25;
+  sheet.getRow(3).height = 9;
+
+  var headerRow = sheet.getRow(4);
+  headerRow.values = opsi.header;
+  headerRow.height = 34;
+  headerRow.eachCell(function(cell) {
+    cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+    cell.fill = warnaPolaExcel_(opsi.warnaUtama);
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = garisExcel_(opsi.warnaUtama);
+  });
+
+  var rows = opsi.rows || [];
+  if (!rows.length) {
+    var kosong = sheet.addRow(['Belum ada data pada laporan ini.']);
+    sheet.mergeCells(5, 1, 5, panjang);
+    kosong.height = 28;
+    kosong.getCell(1).font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+    kosong.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    kosong.getCell(1).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+    kosong.getCell(1).border = garisExcel_();
+  } else {
+    rows.forEach(function(data, index) {
+      var row = sheet.addRow(data);
+      row.height = 22;
+      row.eachCell(function(cell, nomor) {
+        cell.font = { name: 'Aptos', size: 10, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = garisExcel_(GAYA_EXCEL_LAPORAN.garisLembut);
+        if (index % 2 === 1) cell.fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+        if (nomor === 1 || nomor >= panjang - 4) cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+      formatBarisExcelLaporan_(row, opsi.tipe, data, index);
+    });
   }
-  XLSX.utils.book_append_sheet(workbook, sheet, nama);
+
+  var barisAkhir = 4 + Math.max(rows.length, 1);
+  sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: panjang } };
+  var ringkasan = ringkasanExcelLaporan_(opsi.tipe, rows);
+  var summaryRow = sheet.addRow([ringkasan]);
+  sheet.mergeCells(summaryRow.number, 1, summaryRow.number, panjang);
+  summaryRow.height = 26;
+  var summaryCell = summaryRow.getCell(1);
+  summaryCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+  summaryCell.fill = warnaPolaExcel_(opsi.warnaAksen);
+  summaryCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  summaryCell.border = garisExcel_(opsi.warnaUtama);
+
+  var catatan = sheet.addRow(['Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online']);
+  sheet.mergeCells(catatan.number, 1, catatan.number, panjang);
+  catatan.height = 21;
+  catatan.getCell(1).font = { name: 'Aptos', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  catatan.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+
+  sheet.pageSetup.printTitlesRow = '1:4';
+  sheet.pageSetup.printArea = 'A1:' + akhirKolom + catatan.number;
+  sheet.headerFooter.oddFooter = '&L' + opsi.nama + '&C&D &T&RHalaman &P dari &N';
+  sheet.getColumn(1).alignment = { horizontal: 'center', vertical: 'middle' };
+  return sheet;
+}
+
+function formatBarisExcelLaporan_(row, tipe, data) {
+  /* Kolom angka disejajarkan serta diberi format angka yang bersih. */
+  if (tipe === 'nilai') {
+    [8, 9, 10, 11, 12, 13, 15].forEach(function(kolom) {
+      row.getCell(kolom).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    [10, 11, 12].forEach(function(kolom) { row.getCell(kolom).numFmt = '0.00'; });
+    [8, 9, 13, 15].forEach(function(kolom) { row.getCell(kolom).numFmt = '0'; });
+    var kehadiran = teksLaporan_(data[4]).toUpperCase();
+    var status = teksLaporan_(data[13]).toUpperCase();
+    if (kehadiran !== 'HADIR') {
+      row.getCell(5).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.kuning);
+      row.getCell(5).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksKuning } };
+    }
+    if (status === 'TUNTAS') {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.hijau);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksHijau } };
+    } else if (status === 'REMEDIAL') {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    } else {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.kuning);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksKuning } };
+    }
+    if (angkaLaporan_(data[14], 0) > 0) {
+      row.getCell(15).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(15).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    }
+  } else if (tipe === 'pelanggaran') {
+    [1, 8].forEach(function(kolom) { row.getCell(kolom).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; });
+    if (teksLaporan_(data[8]).toUpperCase().indexOf('DISKUALIFIKASI') !== -1) {
+      row.getCell(9).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(9).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    }
+  } else if (tipe === 'rekap') {
+    for (var kolomRekap = 4; kolomRekap <= 12; kolomRekap++) {
+      row.getCell(kolomRekap).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      row.getCell(kolomRekap).numFmt = kolomRekap >= 9 && kolomRekap <= 11 ? '0.00' : '0';
+    }
+  }
+}
+
+function ringkasanExcelLaporan_(tipe, rows) {
+  if (tipe === 'nilai') {
+    var tuntas = rows.filter(function(row) { return teksLaporan_(row[13]).toUpperCase() === 'TUNTAS'; }).length;
+    var remedial = rows.filter(function(row) { return teksLaporan_(row[13]).toUpperCase() === 'REMEDIAL'; }).length;
+    var rata = rows.length ? rows.reduce(function(total, row) { return total + angkaLaporan_(row[11], 0); }, 0) / rows.length : 0;
+    return 'RINGKASAN • Peserta: ' + rows.length + '  |  Tuntas: ' + tuntas + '  |  Remedial: ' + remedial + '  |  Rata-rata: ' + rata.toFixed(2) + '%';
+  }
+  if (tipe === 'pelanggaran') return 'RINGKASAN • Total pelanggaran tercatat: ' + rows.length;
+  var totalPeserta = rows.reduce(function(total, row) { return total + angkaLaporan_(row[3], 0); }, 0);
+  return 'RINGKASAN • Kelas/Mapel: ' + rows.length + '  |  Total peserta: ' + totalPeserta;
+}
+
+function nomorKolomExcel_(nomor) {
+  var hasil = '';
+  while (nomor > 0) {
+    var sisa = (nomor - 1) % 26;
+    hasil = String.fromCharCode(65 + sisa) + hasil;
+    nomor = Math.floor((nomor - 1) / 26);
+  }
+  return hasil;
 }
 
 function buatPdfLaporan_(laporan) {

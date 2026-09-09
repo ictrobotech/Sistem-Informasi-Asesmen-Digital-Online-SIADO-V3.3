@@ -1,3 +1,4 @@
+<script>
 /* ================================================================
  * admin-script.html - Panel admin realtime
  * ================================================================ */
@@ -51,10 +52,7 @@ var ADMIN = {
   background: null,
   brandingVersion: '',
   brandingSyncId: null,
-  brandingBusy: false,
-  // PERBAIKAN 3.4: tema aktif dan daftar tema dari server (Pengaturan -> Tema).
-  tema: 'navy',
-  daftarTema: []
+  brandingBusy: false
 };
 
 var TAB_META = {
@@ -168,109 +166,23 @@ function terapkanTemaPanel_() {
 
 /** Daftar tema profesional yang tersedia di panel. */
 var DAFTAR_TEMA_ = [
-  { id: 'navy', nama: 'Navy Profesional', warna: '#1f6feb', gelap: '#0b1f36' },
-  { id: 'emerald', nama: 'Emerald Modern', warna: '#0e9f6e', gelap: '#0b3d2e' },
-  { id: 'royal', nama: 'Royal Violet', warna: '#6d28d9', gelap: '#2b1060' },
-  { id: 'ocean', nama: 'Ocean Teal', warna: '#0d9488', gelap: '#083344' },
-  { id: 'sunset', nama: 'Sunset Coral', warna: '#ea580c', gelap: '#431407' }
+  { id: 'navy', nama: 'Navy Profesional' },
+  { id: 'emerald', nama: 'Emerald Modern' },
+  { id: 'royal', nama: 'Royal Violet' },
+  { id: 'ocean', nama: 'Ocean Teal' },
+  { id: 'sunset', nama: 'Sunset Coral' }
 ];
-
-/** Warna kartu tema (dipakai bila server tidak mengirim kode warnanya). */
-function warnaTema_(id) {
-  var bawaan = DAFTAR_TEMA_.filter(function(item) { return item.id === String(id).toLowerCase(); })[0];
-  return bawaan || { warna: '#1f6feb', gelap: '#0b1f36' };
-}
-
-/**
- * PERBAIKAN 3.4: mengisi menu "Tema" pada Pengaturan.
- *
- * Sebelumnya <select id="sTema"> dibiarkan kosong di admin.html dan tidak ada
- * kode yang mengisinya, sehingga 5 pilihan tema tidak pernah muncul. Daftar
- * diambil dari server (result.daftarTema) bila tersedia, dengan cadangan
- * DAFTAR_TEMA_ di sisi panel.
- */
-function isiPilihanTema_(temaTerpilih) {
-  var pilih = document.getElementById('sTema');
-  if (!pilih) return;
-  var daftar = (ADMIN.daftarTema && ADMIN.daftarTema.length) ? ADMIN.daftarTema : DAFTAR_TEMA_;
-  var aktif = String(temaTerpilih || ADMIN.tema || pilih.value || 'navy').toLowerCase();
-  var adaAktif = daftar.some(function(item) { return String(item.id).toLowerCase() === aktif; });
-  if (!adaAktif) aktif = String(daftar[0].id).toLowerCase();
-  pilih.innerHTML = daftar.map(function(item) {
-    var id = String(item.id || '').toLowerCase();
-    var nama = escapeAdmin(item.nama || id);
-    return '<option value="' + escapeAdmin(id) + '"' + (id === aktif ? ' selected' : '') + '>' + nama + '</option>';
-  }).join('');
-  pilih.value = aktif;
-  gambarKartuTema_(daftar, aktif);
-}
-
-/**
- * Menggambar kartu warna tema.
- *
- * PERBAIKAN 3.4b: <select> saja ternyata tidak terlihat jelas di panel
- * (apalagi ketika kosong), sehingga pilihan tema ditampilkan sebagai kartu
- * warna yang dapat diklik. Kartu dan <select> selalu disinkronkan.
- */
-function gambarKartuTema_(daftar, aktif) {
-  var wadah = document.getElementById('temaGrid');
-  if (!wadah) return;
-  daftar = (daftar && daftar.length) ? daftar : DAFTAR_TEMA_;
-  aktif = String(aktif || ADMIN.tema || 'navy').toLowerCase();
-  wadah.innerHTML = daftar.map(function(item) {
-    var id = String(item.id || '').toLowerCase();
-    var referensi = warnaTema_(id);
-    var warna = String(item.warna || referensi.warna);
-    var gelap = String(item.gelap || referensi.gelap);
-    var terpilih = id === aktif;
-    return '<button type="button" class="tema-chip' + (terpilih ? ' aktif' : '') + '"' +
-      ' data-tema="' + escapeAdmin(id) + '" role="radio" aria-checked="' + (terpilih ? 'true' : 'false') + '"' +
-      ' style="--tema-warna:' + escapeAdmin(warna) + ';--tema-gelap:' + escapeAdmin(gelap) + '">' +
-      '<span class="tema-bulat"></span>' +
-      '<span class="tema-teks"><span class="tema-nama">' + escapeAdmin(item.nama || id) + '</span>' +
-      '<span class="tema-status">' + (terpilih ? 'Sedang dipakai' : 'Pilih tema') + '</span></span>' +
-      '<i class="fa-solid fa-circle-check tema-centang"></i></button>';
-  }).join('');
-}
-
-/** Klik kartu tema: menyorot pilihan, menyamakan select, dan pratinjau langsung. */
-function pilihKartuTema_(id) {
-  var pilih = document.getElementById('sTema');
-  var tema = String(id || '').toLowerCase();
-  if (!tema) return;
-  if (pilih) pilih.value = tema;
-  gambarKartuTema_((ADMIN.daftarTema && ADMIN.daftarTema.length) ? ADMIN.daftarTema : DAFTAR_TEMA_, tema);
-  document.documentElement.setAttribute('data-theme', tema);
-}
-
-/** Pratinjau tema langsung saat pilihan diganti (belum disimpan ke server). */
-function pratinjauTemaAdmin_() {
-  var pilih = document.getElementById('sTema');
-  if (!pilih || !pilih.value) return;
-  pilihKartuTema_(pilih.value);
-}
 
 /** Menyimpan tema pilihan admin ke server dan menerapkannya langsung. */
 async function simpanTemaAdmin_() {
   var pilih = document.getElementById('sTema');
   if (!pilih) return;
-  if (!pilih.value) {
-    isiPilihanTema_();
-    if (!pilih.value) {
-      showToast('Daftar tema belum siap. Muat ulang panel lalu coba lagi.', 'error');
-      return;
-    }
-  }
   try {
     var result = await apiWajib_('simpanTema', { tema: pilih.value });
     ADMIN.tema = result.tema || pilih.value;
-    isiPilihanTema_(ADMIN.tema);
     terapkanTemaPanel_();
     showToast(result.message || 'Tema tampilan diterapkan.', 'success');
   } catch (error) {
-    // Kembalikan tampilan ke tema resmi bila penyimpanan gagal.
-    isiPilihanTema_(ADMIN.tema);
-    terapkanTemaPanel_();
     showToast('Tema gagal disimpan: ' + (error.message || ''), 'error');
   }
 }
@@ -515,17 +427,6 @@ function bindAdminInterface() {
   if (btnResetSatu) btnResetSatu.addEventListener('click', resetWaktuSatuPeserta_);
   var btnResetSemua = document.getElementById('btnResetWaktuSemua');
   if (btnResetSemua) btnResetSemua.addEventListener('click', resetWaktuSemuaPeserta_);
-  // PERBAIKAN 3.4: isi 5 pilihan tema segera saat panel dibuka, lalu
-  // pratinjau langsung ketika pilihan diganti.
-  isiPilihanTema_();
-  var pilihTema = document.getElementById('sTema');
-  if (pilihTema) pilihTema.addEventListener('change', pratinjauTemaAdmin_);
-  var gridTema = document.getElementById('temaGrid');
-  if (gridTema) gridTema.addEventListener('click', function(event) {
-    var kartu = event.target && event.target.closest ? event.target.closest('.tema-chip') : null;
-    if (!kartu) return;
-    pilihKartuTema_(kartu.getAttribute('data-tema'));
-  });
   var btnTema = document.getElementById('btnSimpanTema');
   if (btnTema) btnTema.addEventListener('click', simpanTemaAdmin_);
   document.getElementById('closeEditModal').addEventListener('click', closeEditQuestion);
@@ -1277,8 +1178,6 @@ async function loadAdminBootstrap() {
       terapkanHakAkses_();
     }
     ADMIN.tema = result.tema || ADMIN.tema || 'navy';
-    if (result.daftarTema && result.daftarTema.length) ADMIN.daftarTema = result.daftarTema;
-    isiPilihanTema_(ADMIN.tema);
     terapkanTemaPanel_();
     ADMIN.notifications = result.notifikasi || [];
     applyNotificationBadge_(result.notifikasiBelumDibaca || 0);
@@ -1479,26 +1378,27 @@ async function mintaKosongkanMedia_(box) {
     return;
   }
   var setuju = await konfirmasi_('Kosongkan ' + nama + ' stimulus yang sudah diproses? ' +
-    'Berkasnya juga akan dihapus dari penyimpanan aplikasi (Supabase Storage) bila tidak dipakai soal lain.',
+    'Berkasnya juga akan dihapus dari folder Google Drive aplikasi.',
     { judul: 'Kosongkan ' + (kind === 'video' ? 'Video' : 'Gambar'), nada: 'warn', teksOk: 'Ya, Kosongkan' });
   if (!setuju) return;
 
   // Berkas dibuang lebih dulu selagi URL-nya masih diketahui.
   var hapus = { dihapus: false, message: '' };
   try {
-    /* [SIADO v5] berkas dihapus dari Supabase Storage langsung (siadoHapusMedia, policy RLS storage.objects) */
-    hapus = await window.siadoHapusMedia(nilai, {
-      jenis: kind, adminToken: ADMIN.token,
+    hapus = await adminApi('hapusMediaStimulus', {
+      url: nilai,
+      jenis: kind,
+      // Kotak form soal baru belum punya id; modal edit menyimpannya di dataset.
       idSoal: (box.dataset && box.dataset.mediaSoalId) || ''
     }) || hapus;
   } catch (error) {
-    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Storage: ' + (error.message || 'kesalahan jaringan') };
+    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Drive: ' + (error.message || 'kesalahan jaringan') };
   }
 
   kosongkanMediaBox_(box);
   await hasilSukses_('Kotak Dikosongkan',
     'Media ' + nama + ' pada soal ini telah dilepas.', [
-      { label: 'Berkas Storage', nilai: hapus.dihapus
+      { label: 'Berkas Drive', nilai: hapus.dihapus
         ? 'Dihapus' + (hapus.nama ? ' — ' + hapus.nama : '') : (hapus.message || 'Tidak ada yang dihapus') }
     ]);
 }
@@ -1506,8 +1406,6 @@ async function mintaKosongkanMedia_(box) {
 function kosongkanMediaBox_(box) {
   var key = box.dataset.mediaBox;
   MEDIA_STATE[key].url = '';
-  MEDIA_STATE[key].berkasTerunggah = null;
-  MEDIA_STATE[key].urlBerkas = '';
   box.querySelector('[data-media-value]').value = '';
   var fileInput = box.querySelector('[data-media-file]');
   if (fileInput) fileInput.value = '';
@@ -1576,17 +1474,7 @@ async function prosesMediaBox_(box, diam) {
         return;
       }
       MEDIA_FOLDER_TERAKHIR = '';
-      if (state.berkasTerunggah === file && state.urlBerkas) {
-        // Berkas yang sama sudah diunggah saat dipilih (event change) — pakai ulang URL-nya,
-        // jangan unggah dua kali ke Storage.
-        url = state.urlBerkas;
-        MEDIA_FOLDER_TERAKHIR = state.folderBerkas || '';
-      } else {
-        url = await unggahFileMedia_(box, file, kind);
-        state.berkasTerunggah = file;
-        state.urlBerkas = url;
-        state.folderBerkas = MEDIA_FOLDER_TERAKHIR;
-      }
+      url = await unggahFileMedia_(box, file, kind);
     } else if (sumber === 'drive') {
       var driveLink = box.querySelector('[data-media-drive]').value.trim();
       if (!driveLink) {
@@ -1621,7 +1509,7 @@ async function prosesMediaBox_(box, diam) {
         { label: 'Sumber', nilai: labelSumberMedia_(sumber) },
         { label: 'Jenis', nilai: kind === 'video' ? 'Video' : 'Gambar' }
       ].concat(MEDIA_FOLDER_TERAKHIR
-        ? [{ label: 'Penyimpanan', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
+        ? [{ label: 'Folder Drive', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
     MEDIA_FOLDER_TERAKHIR = '';
   } catch (error) {
     mediaProgress_(box, null);
@@ -1643,25 +1531,54 @@ var MEDIA_FOLDER_TERAKHIR = '';
  * agar batas payload Apps Script tidak terlampaui.
  */
 async function unggahFileMedia_(box, file, kind) {
-  /* [SIADO v5] Upload langsung ke Supabase Storage (siadoUploadMedia, policy RLS storage.objects — tanpa Edge Function)
-   * (pengganti uploadMediaInline / getUploadTicket / finalisasiUploadDrive Google Drive). */
   var maxImageMb = Math.min(25, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumUploadMb || 5)));
-  var maxVideoMb = Math.min(50, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumVideoMb || 50)));
+  var maxVideoMb = Math.min(1024, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumVideoMb || 1024)));
+
   if (kind === 'gambar') {
     if (!/^image\//i.test(file.type)) throw new Error('Pilih berkas gambar (PNG, JPG, GIF, atau WEBP).');
     if (file.size > maxImageMb * 1024 * 1024) throw new Error('Ukuran gambar melebihi ' + maxImageMb + ' MB.');
   } else {
     if (!/^video\//i.test(file.type)) throw new Error('Pilih berkas video (MP4, WEBM, OGG, atau MOV).');
-    if (file.size > maxVideoMb * 1024 * 1024) throw new Error('Ukuran video melebihi ' + maxVideoMb + ' MB (batas paket Supabase Free). Unggah ke YouTube (unlisted) lalu tempel tautannya.');
+    if (file.size > maxVideoMb * 1024 * 1024) throw new Error('Ukuran video melebihi ' + maxVideoMb + ' MB (maksimal 1 GB).');
   }
-  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Mengunggah ' + escapeAdmin(file.name) + '...', 'info');
-  mediaProgress_(box, 30);
-  var result = await window.siadoUploadMedia(file, { jenis: kind, adminToken: ADMIN.token });
-  mediaProgress_(box, 100);
-  setTimeout(function() { mediaProgress_(box, null); }, 700);
-  if (!result || !result.success) throw new Error((result && result.message) || 'Upload gagal.');
-  MEDIA_FOLDER_TERAKHIR = 'Supabase Storage / ' + (result.bucket || 'media-soal');
-  return result.url;
+
+  var inlineLimit = kind === 'gambar' ? maxImageMb * 1024 * 1024 : 8 * 1024 * 1024;
+  if (file.size <= inlineLimit) {
+    mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Mengunggah ' + escapeAdmin(file.name) + '...', 'info');
+    mediaProgress_(box, 35);
+    var dataUrl = await readFileAsDataUrl(file);
+    mediaProgress_(box, 70);
+    var result = await adminApi('uploadMediaInline', {
+      fileName: file.name,
+      mimeType: file.type,
+      jenis: kind,
+      base64: dataUrl.split(',')[1]
+    });
+    mediaProgress_(box, 100);
+    setTimeout(function() { mediaProgress_(box, null); }, 700);
+    if (!result.success) throw new Error(result.message || 'Upload gagal.');
+    // Server melaporkan folder tujuan agar dapat ditampilkan ke pengguna.
+    MEDIA_FOLDER_TERAKHIR = result.folder || '';
+    return result.url;
+  }
+
+  // Upload besar: minta tiket resumable lalu kirim langsung ke Google Drive.
+  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyiapkan upload video besar...', 'info');
+  var ticket = await adminApi('getUploadTicket', {
+    fileName: file.name,
+    mimeType: file.type,
+    jenis: kind,
+    ukuranBytes: file.size
+  });
+  if (!ticket.success) throw new Error(ticket.message || 'Tiket upload gagal dibuat.');
+
+  var fileId = await kirimResumable_(box, file, ticket);
+  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyelesaikan berkas di Google Drive...', 'info');
+  var finalize = await adminApi('finalisasiUploadDrive', { fileId: fileId, jenis: kind, fileName: file.name });
+  if (!finalize.success) throw new Error(finalize.message || 'Finalisasi upload gagal.');
+  MEDIA_FOLDER_TERAKHIR = finalize.folder || '';
+  mediaProgress_(box, null);
+  return finalize.url;
 }
 
 function kirimResumable_(box, file, ticket) {
@@ -1827,11 +1744,8 @@ async function loadQuestions() {
   try {
     var result = await adminApi('getAllSoal', {});
     if (!guardAdminResult(result)) return;
-    ADMIN.questions = result.soal || result.data || [];
-    // Sumber data filter ikut diperbarui, supaya daftar yang tampil dan daftar yang dipakai
-    // tombol Edit/Hapus selalu sama (sebelumnya filter memakai salinan lama dari bootstrap).
-    DATA_MENTAH.soal = ADMIN.questions;
-    terapkanFilterSoal_();
+    ADMIN.questions = result.soal || [];
+    renderQuestionTable(ADMIN.questions);
   } catch (error) {
     setTableMessage('questionTable', 'Gagal memuat bank soal.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.questions = false; }
@@ -1878,7 +1792,7 @@ function renderQuestionTable(rows) {
 }
 
 function openEditQuestion(id) {
-  var question = ADMIN.questions.concat(DATA_MENTAH.soal || []).filter(function(item) { return String(item.id_soal) === String(id); })[0];
+  var question = ADMIN.questions.filter(function(item) { return String(item.id_soal) === String(id); })[0];
   if (!question) {
     hasilGagal_('Soal Tidak Ditemukan', 'Data soal #' + id + ' tidak ada pada daftar. Tekan Refresh lalu coba lagi.');
     return;
@@ -1940,7 +1854,7 @@ async function deleteQuestion(id) {
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     var rincianHapus = [{ label: 'Nomor soal', nilai: '#' + String(id) }];
     if (result.berkasDihapus && result.berkasDihapus.length) {
-      rincianHapus.push({ label: 'Berkas Storage dihapus', nilai: result.berkasDihapus.join(', ') });
+      rincianHapus.push({ label: 'Berkas Drive dihapus', nilai: result.berkasDihapus.join(', ') });
     }
     if (result.berkasDilewati && result.berkasDilewati.length) {
       rincianHapus.push({ label: 'Tidak ikut dihapus', nilai: result.berkasDilewati.join('; ') });
@@ -2645,18 +2559,18 @@ async function updateBrandingLogo(event) {
   resetButton.disabled = true;
   setBrandingMessage_('Memproses dan mengunggah logo...', '');
   try {
-    /* [SIADO v5] Logo diverifikasi/dinormalisasi di browser (seperti versi lama), lalu
-     * berkas WEBP 256x256 diunggah ke bucket "branding" langsung (siadoUploadMedia, khusus ADMIN).
-     * Server menyimpan URL-nya di pengaturan (Branding_Logo_Url) — bukan base64 lagi. */
-    if (!file) throw new Error('Pilih berkas logo terlebih dahulu.');
     var loaded = await readBrandingImage_(file);
     var ui = createBrandingAsset_(loaded.image, 256, 'image/webp', 0.9);
-    var blob = await (await fetch(ui.dataUri)).blob();
-    var berkas = new File([blob], 'logo-' + Date.now() + '.webp', { type: ui.mime });
-    var unggah = await window.siadoUploadMedia(berkas, { jenis: 'logo', adminToken: ADMIN.token });
-    if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Logo gagal diunggah.');
-    var result = unggah.branding ? { success: true, branding: unggah.branding } : await adminApi('getBrandingPublik', {
-      knownVersion: '', knownBgVersion: (ADMIN.background && ADMIN.background.version) || ''
+    var email = createBrandingAsset_(loaded.image, 256, 'image/png', 1);
+    var faviconAsset = createBrandingAsset_(loaded.image, 64, 'image/png', 1);
+    if (ui.base64.length + email.base64.length + faviconAsset.base64.length > 200000) {
+      throw new Error('Logo terlalu kompleks setelah diproses. Gunakan file dengan detail atau warna lebih sederhana.');
+    }
+    var result = await adminApi('updateBrandingLogo', {
+      logoUiMime: ui.mime,
+      logoUiBase64: ui.base64,
+      logoEmailBase64: email.base64,
+      faviconBase64: faviconAsset.base64
     });
     if (!guardAdminResult(result)) {
       setBrandingMessage_((result && result.message) || 'Logo gagal diterapkan.', 'error');
@@ -2664,11 +2578,11 @@ async function updateBrandingLogo(event) {
     }
     input.value = '';
     applyBrandingData_(result.branding);
-    setBrandingMessage_('Logo diperbarui.', 'success');
+    setBrandingMessage_(result.message, 'success');
     await hasilSukses_('Logo Diterapkan',
-      'Logo baru langsung dipakai pada halaman login, panel, dan layar ujian.', [
-        { label: 'Ukuran', nilai: '256 × 256 piksel (WEBP)' },
-        { label: 'Penyimpanan', nilai: 'Supabase Storage / bucket branding' }
+      'Logo baru langsung dipakai pada halaman login, panel, layar ujian, dan email pelanggaran.', [
+        { label: 'Ukuran panel', nilai: '256 × 256 piksel' },
+        { label: 'Favicon', nilai: '64 × 64 piksel' }
       ]);
   } catch (error) {
     setBrandingMessage_(error.message || 'Logo gagal diproses.', 'error');
@@ -4259,15 +4173,13 @@ async function applyBackgroundImage() {
   ADMIN.operationBusy.background = true;
   try {
     setBgStatus_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengompres dan menyimpan background...', 'info');
-    /* [SIADO v5] gambar dikompres (JPEG, lebar maks 1600 px, < 300 KB) lalu diunggah ke bucket
-     * "branding" (batas 2 MB). siadoUploadMedia sekaligus menyimpan URL-nya (updateLoginBackground). */
     var dataUri = await kompresBackground_(file);
-    var blobBg = await (await fetch(dataUri)).blob();
-    var berkasBg = new File([blobBg], 'background-' + Date.now() + '.jpg', { type: 'image/jpeg' });
-    var unggah = await window.siadoUploadMedia(berkasBg, { jenis: 'background', adminToken: ADMIN.token });
-    if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Background gagal diunggah.');
-    var result = unggah.background ? { success: true, background: unggah.background, message: 'Background login diperbarui.' }
-      : await adminApi('updateLoginBackground', { mode: 'gambar', url: unggah.url, fileName: file.name });
+    var result = await adminApi('updateLoginBackground', {
+      mode: 'gambar',
+      imageBase64: dataUri,
+      imageMime: 'image/jpeg',
+      fileName: file.name
+    });
     if (!guardAdminResult(result)) return;
     if (!result.success) throw new Error(result.message || 'Background gagal disimpan.');
     applyBackgroundData_(result.background);
@@ -4661,3 +4573,5 @@ function formatDate(value) { if (!value) return '-'; var date = new Date(value);
 function escapeAdmin(value) { return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a34440bfca225724',t:'MTc4ODI2NTQ3Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

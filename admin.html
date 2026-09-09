@@ -555,7 +555,7 @@
           <!-- ================= EXPORT ================= -->
           <section id="pane-export" class="admin-pane">
             <article class="admin-card">
-              <div class="admin-card-head"><div><h2><i class="fa-solid fa-file-export"></i> Export Laporan Nilai &amp; Pelanggaran</h2><p>Laporan berisi dua lembar: <b>Nilai</b> (benar, salah, skor, KKM, status Tuntas/Remedial) dan <b>Pelanggaran</b> selama ujian. Format sudah dirapikan dan siap dicetak.</p></div></div>
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-file-export"></i> Export Laporan Nilai &amp; Pelanggaran</h2><p>Laporan Excel berisi tiga lembar: <b>Nilai</b> (benar, salah, skor, KKM, status Tuntas/Remedial), <b>Pelanggaran</b>, dan <b>Rekap</b> kelas. PDF memuat Nilai dan Pelanggaran dalam format A4 landscape.</p></div></div>
               <div class="filter-bar">
                 <div class="admin-field"><label for="exportKelas">Filter kelas (kosongkan untuk semua)</label><input id="exportKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div>
               </div>
@@ -942,6 +942,10 @@
     /* Sesi panel yang dititipkan server lewat kode sekali pakai pada URL,
        supaya login guru/proktor tidak diminta dua kali. */
   </script>
+  <!-- Pustaka lokal untuk export browser. Jangan hapus saat deploy. -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="admin-script.js"></script>
   <script>
   /* ================================================================

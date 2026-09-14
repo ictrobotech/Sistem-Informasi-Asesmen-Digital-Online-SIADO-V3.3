@@ -20,5 +20,5 @@ window.SIADO_CONFIG = {
   SUPABASE_ANON_KEY: 'sb_publishable_Lje2JVps3HhpNhkKayngZw_AsRgukzo',
   PUBLIC_BASE_URL: '',            // kosongkan = otomatis (mis. https://ictrobotech.github.io/SIADO-V3.3/)
   REALTIME_MONITOR: false,        // true = monitor admin memakai Supabase Realtime (maks 200 koneksi di paket Free)
-  APP_VERSION: 'siado-v5-r3.5'  // frontend = repo SIADO-V3.3 commit 1 Sep 2026 (revisi 3.4/3.5) + jembatan Supabase
+  APP_VERSION: 'siado-v5-r3.6'  // frontend = repo SIADO-V3.3 commit 1 Sep 2026 (revisi 3.4/3.5) + jembatan Supabase
 };

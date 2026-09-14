@@ -608,6 +608,57 @@ function isiPilihanRombel_(list, selected) {
  * memilih mata pelajaran mana yang akan dikerjakan. Bila hanya ada satu
  * ujian yang dibuka, pilihan itu langsung terpilih.
  */
+/** Tingkat (VII/VIII/IX) dari nama rombel, mis. "VII KH DEWANTARA" -> VII. */
+function tingkatDariRombel_(nama) {
+  var teks = String(nama || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  var m = teks.match(/(VIII|VII|IX)/);
+  if (m) return m[1];
+  if (teks.charAt(0) === '7') return 'VII';
+  if (teks.charAt(0) === '8') return 'VIII';
+  if (teks.charAt(0) === '9') return 'IX';
+  return '';
+}
+
+/** Jumlah soal untuk satu tingkat menurut server (termasuk soal SEMUA). */
+function jumlahSoalTingkat_(item, tingkat) {
+  var per = item && item.jumlahSoalPerTingkat;
+  if (!per || typeof per !== 'object') return null;
+  var milik = Number(per[tingkat] || 0);
+  var semua = Number(per.SEMUA || 0);
+  return milik + semua;
+}
+
+/** Hint login mengikuti rombel yang dipilih peserta (bila server mengirim
+ *  jumlahSoalPerTingkat); tanpa data itu, pakai jumlah global seperti semula. */
+function perbaruiHintUjian_() {
+  var hint = document.getElementById('ujianHint');
+  var select = document.getElementById('ujianPeserta');
+  if (!hint || !select) return;
+  var item = (UJIAN.daftarUjian || []).filter(function(x) {
+    return String(x.pemilik) === String(select.value);
+  })[0];
+  if (!item) return;
+  var dasar = 'Ujian tersedia: ' + item.mapel +
+    (item.durasiMenit ? ' — ' + item.durasiMenit + ' menit' : '');
+  if (!item.jumlahSoalPerTingkat) {
+    hint.textContent = dasar + (item.jumlahSoal ? ', ' + item.jumlahSoal + ' soal.' : '.');
+    return;
+  }
+  var rombel = (document.getElementById('kelasPeserta') || {}).value || '';
+  var tingkat = tingkatDariRombel_(rombel);
+  if (rombel && tingkat) {
+    var n = jumlahSoalTingkat_(item, tingkat);
+    hint.textContent = dasar + '. Rombel ' + rombel + ' (kelas ' + tingkat + '): ' +
+      (n === null ? '-' : n) + ' soal.';
+  } else {
+    var bagian = ['VII', 'VIII', 'IX'].map(function(t) {
+      var n = jumlahSoalTingkat_(item, t);
+      return t + ': ' + (n === null ? '-' : n) + ' soal';
+    });
+    hint.textContent = dasar + '. Jumlah soal per tingkat — ' + bagian.join(' · ') + '.';
+  }
+}
+
 function isiPilihanUjian_(list, selected) {
   var select = document.getElementById('ujianPeserta');
   if (!select) return;
@@ -629,18 +680,19 @@ function isiPilihanUjian_(list, selected) {
   if (daftar.length === 1) select.value = String(daftar[0].pemilik);
 
   var hint = document.getElementById('ujianHint');
-  if (hint) {
-    if (!daftar.length) {
-      hint.textContent = 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.';
-    } else if (daftar.length === 1) {
-      var satu = daftar[0];
-      hint.textContent = 'Ujian tersedia: ' + satu.mapel +
-        (satu.durasiMenit ? ' — ' + satu.durasiMenit + ' menit' : '') +
-        (satu.jumlahSoal ? ', ' + satu.jumlahSoal + ' soal.' : '.');
-    } else {
-      hint.textContent = 'Tersedia ' + daftar.length + ' ujian. Pilih sesuai jadwal dari pengawas.';
-    }
+  if (hint && !daftar.length) {
+    hint.textContent = 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.';
+  } else if (hint) {
+    perbaruiHintUjian_();
   }
+  // Hint diperbarui setiap peserta mengganti rombel atau pilihan ujian.
+  ['kelasPeserta', 'ujianPeserta'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && !el.dataset.hintBound) {
+      el.dataset.hintBound = '1';
+      el.addEventListener('change', perbaruiHintUjian_);
+    }
+  });
 }
 
 /** Refresh halaman ujian: simpan jawaban lalu ambil ulang data dari server. */

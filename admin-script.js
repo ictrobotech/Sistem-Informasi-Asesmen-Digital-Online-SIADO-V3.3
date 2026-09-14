@@ -484,6 +484,13 @@ function bindAdminInterface() {
 
   // Nilai uraian massal
   bindClick_('saveAllEssayScores', saveAllEssayScores);
+  // Peringatan bila admin menutup/memuat ulang halaman padahal masih ada
+  // nilai uraian yang diketik tetapi belum disimpan.
+  window.addEventListener('beforeunload', function(event) {
+    if (!Object.keys(ADMIN.essayDrafts || {}).length) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
 
   // Password sendiri
 
@@ -1097,7 +1104,9 @@ function startAdminAutoRefresh() {
     if (ADMIN.activeTab === 'monitor') loadMonitor();
     if (ADMIN.activeTab === 'pelanggaran') loadViolations();
     if (ADMIN.activeTab === 'hasil') loadResults();
-    if (ADMIN.activeTab === 'uraian') loadEssays();
+    // Jangan menyegarkan Nilai Uraian selama admin masih mengisi nilai;
+    // penyegaran akan berjalan sendiri pada siklus berikutnya setelah disimpan.
+    if (ADMIN.activeTab === 'uraian' && !adaNilaiUraianDiedit_()) loadEssays();
     if (ADMIN.activeTab === 'notifikasi') loadNotifications();
     else loadNotificationBadge_();
   }, 10000);
@@ -1116,6 +1125,9 @@ function switchAdminTab(tab) {
       ]);
     return;
   }
+  // Meninggalkan tab Nilai Uraian berarti ketikan yang belum disimpan dibuang,
+  // agar tidak muncul lagi sebagai angka basi saat tab dibuka kembali.
+  if (tab !== 'uraian') ADMIN.essayDrafts = {};
   ADMIN.activeTab = tab;
   document.querySelectorAll('.sidebar-link').forEach(function(button) { button.classList.toggle('active', button.dataset.tab === tab); });
   document.querySelectorAll('.admin-pane').forEach(function(pane) { pane.classList.toggle('show', pane.id === 'pane-' + tab); });
@@ -2311,6 +2323,53 @@ async function loadEssays() {
   }
 }
 
+/* ==================================================================
+ * NILAI URAIAN — DRAFT KETIKAN ADMIN
+ *
+ * Tabel Nilai Uraian disegarkan otomatis setiap 10 detik. Sebelumnya
+ * renderEssayTable() menulis ulang innerHTML tabel, sehingga angka yang
+ * sedang diketik admin lenyap dan kembali ke nilai tersimpan di server
+ * (0 bila belum dinilai) — bahkan sebelum tombol Simpan ditekan.
+ * Ketikan kini disimpan sebagai draft per jawaban dan dipulihkan setiap
+ * kali tabel digambar ulang. Penyegaran otomatis 10 detik juga dilewati
+ * selama masih ada nilai yang belum disimpan.
+ * ================================================================== */
+
+/** Kunci unik satu baris jawaban uraian. */
+function kunciBarisUraian_(sessionId, idSoal) {
+  return String(sessionId === undefined || sessionId === null ? '' : sessionId) +
+    '#' + String(idSoal === undefined || idSoal === null ? '' : idSoal);
+}
+
+/** Benar bila ada kolom nilai yang sedang diketik atau belum disimpan. */
+function adaNilaiUraianDiedit_() {
+  var aktif = document.activeElement;
+  if (aktif && aktif.classList && aktif.classList.contains('essay-score')) return true;
+  return Object.keys(ADMIN.essayDrafts || {}).length > 0;
+}
+
+/** Memasang kembali ketikan admin setelah tabel digambar ulang. */
+function pulihkanDraftUraian_() {
+  var draft = ADMIN.essayDrafts || {};
+  if (!Object.keys(draft).length) return;
+  document.querySelectorAll('#essayTable tbody tr').forEach(function(tr) {
+    var tombol = tr.querySelector('[data-grade-session]');
+    var input = tr.querySelector('.essay-score');
+    if (!tombol || !input) return;
+    var kunci = kunciBarisUraian_(tombol.dataset.gradeSession, tombol.dataset.gradeQuestion);
+    if (!(kunci in draft)) return;
+    input.value = draft[kunci];
+    tr.classList.add('essay-row-draft');
+    var penanda = tr.querySelector('.essay-draft-flag');
+    if (penanda) penanda.style.display = 'inline';
+  });
+}
+
+/** Membuang draft satu jawaban setelah nilainya tersimpan di server. */
+function hapusDraftUraian_(sessionId, idSoal) {
+  delete ADMIN.essayDrafts[kunciBarisUraian_(sessionId, idSoal)];
+}
+
 /** Menyaring jawaban uraian berdasarkan nama atau username peserta. */
 function terapkanFilterUraian_() {
   var kueri = kueriFilter_('cariUraian');
@@ -2332,11 +2391,18 @@ function renderEssayTable(rows) {
   }
   var html = '<table class="admin-table"><thead><tr><th>Peserta</th><th>Soal / Rubrik</th><th>Jawaban</th><th>Status</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
-    var numericScore = isFinite(Number(row.nilai)) ? Number(row.nilai) : '';
+    // Nilai yang belum diisi (null/undefined/kosong) harus tampil KOSONG.
+    // Sebelumnya Number(null) menghasilkan 0 sehingga kolom nilai seolah
+    // sudah berisi 0 padahal jawabannya belum dinilai.
+    var nilaiTersimpan = row.nilai;
+    var numericScore = (nilaiTersimpan === null || nilaiTersimpan === undefined ||
+      String(nilaiTersimpan).trim() === '')
+      ? ''
+      : (isFinite(Number(nilaiTersimpan)) ? Number(nilaiTersimpan) : '');
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong><br>' + badge(row.kelas, 'blue') + '<br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
       '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(row.pertanyaan) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
       '<td><div class="essay-answer">' + escapeAdmin(row.jawaban || '-') + '</div></td><td>' + statusBadge(row.status) + '</td>' +
-      '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small></td>' +
+      '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" inputmode="decimal" autocomplete="off" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small> <small class="essay-draft-flag" style="display:none;color:#b45309;font-weight:700">belum disimpan</small></td>' +
       '<td><button class="mini-button edit" type="button" data-grade-session="' + escapeAdmin(row.session_id) + '" data-grade-question="' + escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-floppy-disk"></i> Simpan</button></td></tr>';
   });
   html += '</tbody></table>';
@@ -2344,6 +2410,21 @@ function renderEssayTable(rows) {
   document.querySelectorAll('[data-grade-session]').forEach(function(button) {
     button.addEventListener('click', function() { saveEssayScore(this); });
   });
+  // Rekam setiap ketikan sebagai draft, lalu pasang kembali draft yang ada.
+  document.querySelectorAll('#essayTable .essay-score').forEach(function(input) {
+    input.addEventListener('input', function() {
+      var baris = input.closest('tr');
+      var tombol = baris ? baris.querySelector('[data-grade-session]') : null;
+      if (!tombol) return;
+      var kunci = kunciBarisUraian_(tombol.dataset.gradeSession, tombol.dataset.gradeQuestion);
+      if (String(input.value).trim() === '') delete ADMIN.essayDrafts[kunci];
+      else ADMIN.essayDrafts[kunci] = String(input.value);
+      baris.classList.add('essay-row-draft');
+      var penanda = baris.querySelector('.essay-draft-flag');
+      if (penanda) penanda.style.display = 'inline';
+    });
+  });
+  pulihkanDraftUraian_();
 }
 
 async function saveEssayScore(button) {
@@ -2365,6 +2446,7 @@ async function saveEssayScore(button) {
       nilai: score
     });
     if (!guardAdminResult(result)) return;
+    hapusDraftUraian_(button.dataset.gradeSession, button.dataset.gradeQuestion);
     showToast(result.message || 'Nilai tersimpan.', 'success');
     await segarkanSenyap_([loadEssays, loadResults, loadRecap, loadDashboard]);
   } catch (error) {
@@ -4400,6 +4482,7 @@ async function saveAllEssayScores() {
   ADMIN.operationBusy.bulkEssay = true;
   try {
     var result = await apiWajib_('nilaiUraianMassal', { items: items });
+    ADMIN.essayDrafts = {};
     await segarkanSenyap_([loadEssays, loadResults, loadRecap, loadDashboard]);
     await hasilSukses_('Semua Nilai Tersimpan', result.message || 'Nilai uraian berhasil disimpan.', [
       { label: 'Jumlah nilai', nilai: String(items.length) },

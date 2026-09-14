@@ -1185,6 +1185,12 @@ function applySettingsData(setting) {
   }
   setNilaiInput_('sJudulUjian', setting.judulUjian);
   setNilaiInput_('sPetunjukUjian', setting.petunjukUjian);
+  // Nama sekolah di sidebar panel mengikuti pengaturan server, supaya tidak
+  // lagi menjadi teks statis yang ketinggalan (sebelumnya "SMP LABSCHOOL UNTAD").
+  var namaSekolah = document.getElementById('sidebarSchoolName');
+  if (namaSekolah && String(setting.sekolah || '').trim()) {
+    namaSekolah.textContent = String(setting.sekolah).trim();
+  }
   perbaruiJudulUjian_();
   perbaruiMenuKartuSoal_();
 }

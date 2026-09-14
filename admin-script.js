@@ -2143,12 +2143,22 @@ function terapkanFilterPelanggaran_() {
   renderViolationTable(rows);
 }
 
+/** Badge jenis pelanggaran; indikasi AI disorot khusus untuk pengawas. */
+function badgeJenisPelanggaran_(row) {
+  var jenis = String(row.jenis || '');
+  var label = String(row.jenis_label || jenis.replace(/_/g, ' ') || '-');
+  if (/indikasi_ai|indikasi ai/i.test(jenis + label)) {
+    return '<span class="badge red"><i class="fa-solid fa-robot"></i> INDIKASI AI</span> ' + escapeAdmin(label);
+  }
+  return escapeAdmin(label);
+}
+
 function renderViolationTable(rows) {
   if (!rows.length) { setTableMessage('violationTable', 'Belum ada pelanggaran tercatat.', 'fa-shield-heart'); return; }
   var html = '<table class="admin-table"><thead><tr><th>Waktu</th><th>Peserta</th><th>Kelas</th><th>Jenis Pelanggaran</th><th>Detail</th><th>Ke-</th><th>Tindakan</th><th>Email</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td>' + escapeAdmin(formatDate(row.timestamp)) + '</td><td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + escapeAdmin(row.jenis_label) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
+      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
       '<td>' + badge(String(row.jumlah), row.jumlah >= 3 ? 'red' : 'amber') + '</td><td>' + statusBadge(row.tindakan) + '</td><td><div class="cell-wrap">' + escapeAdmin(row.email_status || '-') + '</div></td></tr>';
   });
   html += '</tbody></table>';
@@ -3205,6 +3215,7 @@ function labelKelulusanLaporan_(row, kkmDefault) {
 function labelPelanggaranLaporan_(row) {
   if (row && (row.jenis_label || row.label)) return teksLaporan_(row.jenis_label || row.label);
   var labels = {
+    INDIKASI_AI: 'Indikasi jawaban dari aplikasi AI (tersembunyi dari peserta)',
     PINDAH_TAB: 'Berpindah tab / aplikasi',
     KELUAR_FULLSCREEN: 'Keluar layar penuh',
     CETAK_HALAMAN: 'Mencetak halaman',

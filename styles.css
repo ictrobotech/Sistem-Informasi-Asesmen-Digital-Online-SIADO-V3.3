@@ -92,6 +92,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
 
 /* Catatan salin-tempel khusus uraian */
 .paste-allowed{display:inline-flex;align-items:center;gap:5px;margin-left:9px;padding:3px 8px;border-radius:99px;background:#e8f9ee;color:#15803d;font-size:10px;font-weight:800;text-transform:none;letter-spacing:0}
+.paste-allowed.paste-blocked{background:#fdecec;color:#b91c1c}
 
 /* Progres navigasi */
 .nav-progress{height:6px;width:100%;margin-top:12px;background:#e8eff5;border-radius:99px;overflow:hidden}

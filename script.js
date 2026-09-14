@@ -974,7 +974,7 @@ function renderQuestion() {
 
   questionHtml += '<section class="answer-section" data-answer-type="' + escapeHtml(type) + '">' +
     '<p class="answer-label"><i class="fa-solid fa-pen-to-square"></i> Jawaban Anda' +
-    (type === 'URAIAN' ? '<span class="paste-allowed"><i class="fa-solid fa-paste"></i> Salin-tempel diizinkan pada soal uraian</span>' : '') +
+    (type === 'URAIAN' ? '<span class="paste-allowed paste-blocked"><i class="fa-solid fa-ban"></i> Tempel dari luar diblokir — ketik jawaban sendiri</span>' : '') +
     '</p>' + renderAnswerInput(question, UJIAN.jawaban[id]) + '</section>';
 
   document.getElementById('questionCard').innerHTML = questionHtml;
@@ -986,6 +986,13 @@ function renderQuestion() {
   perbaruiChipStatusJawaban_();
   bindAnswerInputs();
   bindMediaFallback_();
+  // Kalibrasi telemetri: panjang jawaban yang dipulihkan dari server tidak
+  // boleh dihitung sebagai "sisipan besar".
+  if (type === 'URAIAN') {
+    var areaJawaban = document.getElementById('answerText');
+    var statKini = aiStat_(id);
+    statKini.panjangSebelum = areaJawaban ? String(areaJawaban.value || '').length : 0;
+  }
 }
 
 /**
@@ -1181,6 +1188,7 @@ function answerChanged() {
   // berkelompok (batch) oleh jadwalkanFlushJawaban_. Tidak ada lagi satu
   // permintaan server per ketukan tombol maupun per 3 detik.
   antreKirimJawaban_(id);
+  if (String((question.tipe || '')).toUpperCase() === 'URAIAN') jadwalkanEvaluasiAI_(id);
 }
 
 /** Menandai satu jawaban sebagai "belum tersimpan" dan menjadwalkan kiriman. */
@@ -2015,6 +2023,7 @@ function pasangBlokirRekamLayar_() {
 
 /* ======================== PEMASANGAN EVENT ======================== */
 function bindSecurityEvents() {
+  pasangTelemetriAI_();
   document.addEventListener('visibilitychange', function() {
     if (!UJIAN.aktif) return;
     if (document.hidden) {
@@ -2217,9 +2226,20 @@ function bindSecurityEvents() {
       event.preventDefault();
       return;
     }
-    if (ctrl && ['c', 'x', 'v'].indexOf(key) !== -1 && !clipboardAllowedForEssay(document.activeElement)) {
+    /* 6b) TEMPEL DIBLOKIR TOTAL — termasuk jawaban uraian. Jawaban wajib
+       diketik sendiri; menyalin dari aplikasi lain (ChatGPT dsb.) dicegat. */
+    if ((ctrl && key === 'v') || (event.shiftKey && event.key === 'Insert')) {
       event.preventDefault();
-      reportViolation(key === 'v' ? 'paste_non_uraian' : (key === 'x' ? 'cut_soal' : 'copy_soal'),
+      event.stopPropagation();
+      catatPercobaanTempel_(document.activeElement);
+      peringatanRingan_('Menempel teks dinonaktifkan selama ujian. Ketik jawaban Anda sendiri.');
+      reportViolation('paste_non_uraian',
+        'Percobaan paste saat ujian (dinonaktifkan, termasuk soal uraian).');
+      return;
+    }
+    if (ctrl && ['c', 'x'].indexOf(key) !== -1 && !clipboardAllowedForEssay(document.activeElement)) {
+      event.preventDefault();
+      reportViolation(key === 'x' ? 'cut_soal' : 'copy_soal',
         'Shortcut clipboard pada tampilan soal.');
     }
   }, true);
@@ -2265,9 +2285,23 @@ function bindSecurityEvents() {
     reportViolation('cut_soal', 'Upaya memotong teks pada halaman ujian.');
   }, true);
   document.addEventListener('paste', function(event) {
-    if (!UJIAN.aktif || clipboardAllowedForEssay(event.target)) return;
+    if (!UJIAN.aktif) return;
     event.preventDefault();
-    reportViolation('paste_non_uraian', 'Upaya menempel jawaban selain pada soal uraian.');
+    catatPercobaanTempel_(event.target);
+    reportViolation('paste_non_uraian',
+      clipboardAllowedForEssay(event.target)
+        ? 'Upaya menempel teks dari luar aplikasi pada jawaban uraian (diblokir).'
+        : 'Upaya menempel jawaban selain pada soal uraian.');
+  }, true);
+  // Seret-lepas teks dari aplikasi lain juga dicegat.
+  document.addEventListener('dragover', function(event) {
+    if (UJIAN.aktif) event.preventDefault();
+  }, true);
+  document.addEventListener('drop', function(event) {
+    if (!UJIAN.aktif) return;
+    event.preventDefault();
+    catatPercobaanTempel_(event.target);
+    reportViolation('paste_non_uraian', 'Upaya menyeret-lepas teks ke kolom jawaban (diblokir).');
   }, true);
   document.addEventListener('contextmenu', function(event) {
     if (UJIAN.aktif) event.preventDefault();
@@ -2521,7 +2555,7 @@ function showNextViolationWarning_() {
   requestFullscreenSafe();
 }
 
-function reportViolation(jenis, detail, eventId, isRetry) {
+function reportViolation(jenis, detail, eventId, isRetry, senyap) {
   if (!UJIAN.aktif || UJIAN.jeda) return;
   if (jenis === 'pindah_tab' && eventId && !UJIAN.pendingViolationEvents[eventId]) {
     UJIAN.pendingViolationEvents[eventId] = { jenis: jenis, detail: detail, retrying: false };
@@ -2535,14 +2569,15 @@ function reportViolation(jenis, detail, eventId, isRetry) {
   }
   // Peringatan lokal disiapkan lebih dulu; dibatalkan begitu server membalas
   // dengan pesan resminya sehingga peserta tidak menerima dua notifikasi.
-  jadwalkanPeringatanCadangan_(jenis);
+  // Jenis senyap (indikasi AI) tidak boleh memunculkan apa pun di sisi peserta.
+  if (!senyap) jadwalkanPeringatanCadangan_(jenis);
 
   apiPeserta('catatPelanggaran', Object.assign(credentialSesi(), {
     jenis: jenis,
     detail: detail,
     eventId: eventId || ''
   })).then(function(result) {
-    batalkanPeringatanCadangan_(jenis);
+    if (!senyap) batalkanPeringatanCadangan_(jenis);
     if (!result.success) {
       handleExamErrorResult(result);
       return;
@@ -2561,6 +2596,9 @@ function reportViolation(jenis, detail, eventId, isRetry) {
       tampilDiskualifikasi(!!result.jawabanDireset);
       return;
     }
+    // Pelanggaran senyap: tercatat di server & log pengawas, tetapi peserta
+    // tidak menerima peringatan, toast, maupun perubahan tampilan apa pun.
+    if (senyap) return;
     if (result.duplicate && jenis !== 'pindah_tab') return;
     var warningMessage = result.message;
     if (!warningMessage && result.duplicate && jenis === 'pindah_tab') {
@@ -2572,6 +2610,135 @@ function reportViolation(jenis, detail, eventId, isRetry) {
   }).catch(function(error) {
     console.warn('Pelanggaran belum terkirim:', error);
   });
+}
+
+
+/* ==================================================================
+ * DETEKSI INDIKASI JAWABAN AI (SENYAP)
+ *
+ * Telemetri diketik/disisipkan hanya di perangkat peserta. Bila analisis
+ * melewati ambang, pelanggaran jenis 'indikasi_ai' dikirim ke server
+ * dengan senyap=true: peserta TIDAK melihat peringatan apa pun; hanya
+ * proktor/admin dan guru mapel yang melihatnya di log Pelanggaran.
+ * ================================================================== */
+var AIWATCH = { stat: {}, timer: {} };
+
+function aiStat_(id) {
+  if (!AIWATCH.stat[id]) {
+    AIWATCH.stat[id] = {
+      ketikan: 0,          // ketikan tombol yang wajar
+      panjangSebelum: -1,  // panjang jawaban saat input sebelumnya (-1 = belum tahu)
+      sisipanBesar: 0,     // sisipan >= 25 karakter tanpa peristiwa ketikan
+      tempel: 0,           // percobaan tempel/seret yang diblokir
+      ubah: 0,             // jumlah peristiwa input pada sesi halaman ini
+      dilaporkan: false
+    };
+  }
+  return AIWATCH.stat[id];
+}
+
+/** Dipanggil handler paste/drop yang diblokir, untuk memperkuat sinyal. */
+function catatPercobaanTempel_(target) {
+  if (!UJIAN.aktif) return;
+  var diUraian = !!(target && target.closest && target.closest('.answer-section[data-answer-type="URAIAN"]'));
+  var question = currentQuestion();
+  if (diUraian && question) aiStat_(String(question.id_soal)).tempel += 1;
+  else if (!diUraian && question && String((question.tipe || '')).toUpperCase() === 'URAIAN') {
+    aiStat_(String(question.id_soal)).tempel += 1;
+  }
+}
+
+/** Analisis heuristik: penanda teks khas keluaran AI + anomali cara nhập. */
+function analisisIndikasiAI_(teks, stat) {
+  var alasan = [];
+  var skor = 0;
+  var t = String(teks === undefined || teks === null ? '' : teks);
+  var panjang = t.replace(/\s+/g, ' ').trim().length;
+  if (!panjang || !stat) return { skor: 0, alasan: alasan };
+  var rendah = t.toLowerCase();
+
+  var penanda = [
+    ['sebagai model bahasa', 'frasa "sebagai model bahasa"'],
+    ['sebagai ai', 'frasa "sebagai AI"'],
+    ['as an ai', 'frasa "as an AI"'],
+    ['saya adalah ai', 'identifikasi diri sebagai AI'],
+    ['berikut adalah', 'frasa "berikut adalah"'],
+    ['berikut ini adalah', 'frasa "berikut ini adalah"'],
+    ['kesimpulannya', 'frasa "kesimpulannya"'],
+    ['secara keseluruhan', 'frasa "secara keseluruhan"'],
+    ['perlu diingat', 'frasa "perlu diingat"'],
+    ['semoga membantu', 'frasa "semoga membantu"'],
+    ['mohon maaf', 'frasa "mohon maaf"'],
+    ['**', 'format markdown (**tebal**)'],
+    ['###', 'judul markdown (###)']
+  ];
+  var kena = [];
+  penanda.forEach(function(item) { if (rendah.indexOf(item[0]) !== -1) kena.push(item[1]); });
+  if (kena.length) { skor += Math.min(3, kena.length); alasan.push('penanda khas AI: ' + kena.slice(0, 4).join(', ')); }
+
+  var butir = (t.match(/(^|\n)\s*(?:\d+[.)]|[-*•])\s+/g) || []).length;
+  if (butir >= 3) { skor += 1; alasan.push('daftar terstruktur ' + butir + ' butir'); }
+
+  if (stat.sisipanBesar >= 1) { skor += 2; alasan.push(stat.sisipanBesar + ' sisipan teks besar tanpa ketikan'); }
+  if (stat.tempel >= 1) { skor += 1; alasan.push(stat.tempel + ' percobaan tempel dari luar aplikasi'); }
+
+  // Jawaban panjang tetapi ketikan jauh lebih sedikit => teks tidak diketik manual.
+  if (panjang >= 120 && stat.ketikan < panjang * 0.5) {
+    skor += 2;
+    alasan.push('jumlah karakter (' + panjang + ') jauh melebihi ketikan (' + stat.ketikan + ')');
+  }
+  return { skor: skor, alasan: alasan };
+}
+
+/** Evaluasi satu jawaban uraian; kirim pelanggaran SENYAP bila melewati ambang. */
+function evaluasiIndikasiAI_(id) {
+  if (!UJIAN.aktif) return;
+  var question = (UJIAN.soal || []).filter(function(q) { return String(q.id_soal) === String(id); })[0];
+  if (!question || String(question.tipe || '').toUpperCase() !== 'URAIAN') return;
+  var stat = aiStat_(id);
+  if (stat.dilaporkan || stat.ubah === 0) return;
+  var hasil = analisisIndikasiAI_(UJIAN.jawaban[id], stat);
+  if (hasil.skor < 3) return;
+  stat.dilaporkan = true;
+  reportViolation('indikasi_ai',
+    'INDIKASI JAWABAN BERASAL DARI APLIKASI AI (tersembunyi dari peserta) — skor ' + hasil.skor +
+    '; ' + hasil.alasan.join('; ') + '.',
+    null, false, true);
+}
+
+function jadwalkanEvaluasiAI_(id) {
+  window.clearTimeout(AIWATCH.timer[id]);
+  AIWATCH.timer[id] = window.setTimeout(function() { evaluasiIndikasiAI_(id); }, 1500);
+}
+
+/** Telemetri ketikan & sisipan pada textarea uraian (delegasi global). */
+function pasangTelemetriAI_() {
+  document.addEventListener('keydown', function(event) {
+    if (!UJIAN.aktif) return;
+    var target = event.target;
+    if (!target || !target.closest || !target.closest('.answer-section[data-answer-type="URAIAN"]')) return;
+    var key = event.key || '';
+    if (key.length === 1 || key === 'Backspace' || key === 'Delete') {
+      var question = currentQuestion();
+      if (question) aiStat_(String(question.id_soal)).ketikan += 1;
+    }
+  }, true);
+  document.addEventListener('input', function(event) {
+    if (!UJIAN.aktif) return;
+    var target = event.target;
+    if (!target || !target.closest || !target.closest('.answer-section[data-answer-type="URAIAN"]')) return;
+    var question = currentQuestion();
+    if (!question) return;
+    var id = String(question.id_soal);
+    var stat = aiStat_(id);
+    var baru = String(target.value || '').length;
+    if (stat.panjangSebelum < 0) stat.panjangSebelum = baru;
+    var delta = baru - stat.panjangSebelum;
+    stat.panjangSebelum = baru;
+    stat.ubah += 1;
+    if (delta >= 25) stat.sisipanBesar += 1;
+    jadwalkanEvaluasiAI_(id);
+  }, true);
 }
 
 function clipboardAllowedForEssay(element) {

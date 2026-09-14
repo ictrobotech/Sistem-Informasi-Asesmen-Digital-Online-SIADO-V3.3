@@ -394,6 +394,8 @@ function bindAdminInterface() {
   ikatFilter_('cariSoal', 'input', terapkanFilterSoal_, true);
   ikatFilter_('filterSoalTipe', 'change', terapkanFilterSoal_, false);
   ikatFilter_('filterSoalStatus', 'change', terapkanFilterSoal_, false);
+  // Dropdown "Kelas sasaran" pada Bank Soal: penyaringan per soal di sisi klien.
+  ikatFilter_('filterSoalTingkat', 'change', terapkanFilterSoal_, false);
   ikatFilter_('cariMonitor', 'input', terapkanFilterMonitor_, true);
   ikatFilter_('cariPelanggaran', 'input', terapkanFilterPelanggaran_, true);
   ikatFilter_('cariHasil', 'input', terapkanFilterHasil_, true);
@@ -1700,6 +1702,26 @@ function formatUkuran_(bytes) {
 }
 
 /* ====================== PAYLOAD SOAL ====================== */
+/**
+ * Menormalkan nilai "kelas sasaran soal" (tingkat) menjadi VII / VIII / IX /
+ * SEMUA. Nilai kosong, tidak dikenal, atau penulisan lain (7, kelas viii,
+ * rombel "VIII A") dipetakan ke SEMUA agar bank soal tidak tersimpan dengan
+ * label kelas yang tidak dikenali server.
+ */
+function tingkatDariNilai_(nilai) {
+  var teks = String(nilai === undefined || nilai === null ? '' : nilai).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (/^(VII|7|TUJUH|KETUJUH)$/.test(teks)) return 'VII';
+  if (/^(VIII|8|DELAPAN|KEDELAPAN)$/.test(teks)) return 'VIII';
+  if (/^(IX|9|SEMBILAN|KESEMBILAN)$/.test(teks)) return 'IX';
+  return 'SEMUA';
+}
+
+/** Label singkat tingkat untuk rincian hasil simpan. */
+function labelTingkat_(tingkat) {
+  var bersih = tingkatDariNilai_(tingkat);
+  return bersih === 'SEMUA' ? 'Semua kelas' : 'Kelas ' + bersih;
+}
+
 async function buildQuestionPayload(prefix) {
   var media = await resolveQuestionMedia(prefix);
   return {
@@ -1714,6 +1736,9 @@ async function buildQuestionPayload(prefix) {
     stimulus_alt: document.getElementById(prefix + 'ImageAlt').value,
     stimulus_video: media.video,
     stimulus_video_alt: document.getElementById(prefix + 'VideoAlt').value,
+    /* Kelas sasaran soal ini saja. Dikirim eksplisit setiap simpan supaya
+       server tidak perlu menebak/mewarisi tingkat soal lain. */
+    tingkat: tingkatDariNilai_(nilaiInput_(prefix + 'Tingkat')),
     aktif: document.getElementById(prefix + 'Aktif').checked
   };
 }
@@ -1795,6 +1820,7 @@ async function saveNewQuestion() {
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     await hasilSukses_('Soal Tersimpan', result.message || 'Soal baru berhasil ditambahkan ke bank soal.', [
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
+      { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) },
       { label: 'Poin', nilai: String(payload.poin || '-') },
       { label: 'Status', nilai: payload.aktif ? 'Aktif' : 'Nonaktif' }
     ]);
@@ -1809,6 +1835,8 @@ async function saveNewQuestion() {
 function clearQuestionForm(prefix) {
   document.getElementById(prefix + 'Poin').value = '10';
   document.getElementById(prefix + 'Pertanyaan').value = '';
+  var tingkat = document.getElementById(prefix + 'Tingkat');
+  if (tingkat) tingkat.value = 'SEMUA';
   var deskripsi = document.getElementById(prefix + 'DeskripsiStimulus');
   if (deskripsi) deskripsi.value = '';
   document.getElementById(prefix + 'Opsi').value = '';
@@ -1837,18 +1865,22 @@ async function loadQuestions() {
   } finally { ADMIN.refreshBusy.questions = false; }
 }
 
-/** Menyaring bank soal berdasarkan kata kunci, tipe, dan status. */
+/** Menyaring bank soal berdasarkan kata kunci, tipe, kelas sasaran, dan status. */
 function terapkanFilterSoal_() {
   var kueri = kueriFilter_('cariSoal');
   var tipe = nilaiFilter_('filterSoalTipe');
   var status = nilaiFilter_('filterSoalStatus');
+  var tingkat = nilaiFilter_('filterSoalTingkat');
   var rows = DATA_MENTAH.soal.slice();
   if (tipe) rows = rows.filter(function(q) { return String(q.tipe || '') === tipe; });
   if (status) rows = rows.filter(function(q) { return status === 'aktif' ? !!q.aktif : !q.aktif; });
+  // Filter kelas sasaran bersifat per soal: soal tanpa tingkat dianggap SEMUA.
+  if (tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === tingkat; });
   rows = saringKata_(rows, kueri, function(q) {
-    return [q.id_soal, q.tipe, q.pertanyaan, q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi].join(' ');
+    return [q.id_soal, q.tipe, q.pertanyaan, q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
+      tingkatDariNilai_(q.tingkat)].join(' ');
   });
-  if (!rows.length && adaFilterAktif_(kueri, tipe, status)) {
+  if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat)) {
     tampilTidakDitemukan_('questionTable', kueri, DATA_MENTAH.soal.length + ' soal tersimpan di bank soal.');
     return;
   }
@@ -1860,11 +1892,15 @@ function renderQuestionTable(rows) {
     setTableMessage('questionTable', 'Belum ada soal. Tambahkan soal pertama Anda.', 'fa-inbox');
     return;
   }
-  var html = '<table class="admin-table"><thead><tr><th>ID</th><th>Tipe</th><th>Pertanyaan</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+  var html = '<table class="admin-table"><thead><tr><th>ID</th><th>Tipe</th><th>Pertanyaan</th><th>Kelas</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(question) {
+    var tingkatSoal = tingkatDariNilai_(question.tingkat);
     html += '<tr><td><strong>#' + escapeAdmin(question.id_soal) + '</strong></td>' +
       '<td>' + typeBadge(question.tipe) + '</td>' +
       '<td><div class="cell-wrap">' + escapeAdmin(truncate(question.pertanyaan, 150)) + '</div></td>' +
+      // Kolom kelas sasaran: memudahkan memastikan satu perubahan kelas tidak
+      // ikut menyeret soal nomor lain.
+      '<td>' + badge(tingkatSoal === 'SEMUA' ? 'SEMUA' : tingkatSoal, tingkatSoal === 'SEMUA' ? 'gray' : 'blue') + '</td>' +
       '<td><div class="cell-wrap"><strong>Opsi:</strong> ' + escapeAdmin(optionSummary(question)) + '<br><strong>Kunci:</strong> ' + escapeAdmin(readableKey(question)) + '</div></td>' +
       '<td>' + stimulusBadges_(question) + '</td>' +
       '<td>' + escapeAdmin(question.poin) + '</td>' +
@@ -1886,6 +1922,7 @@ function openEditQuestion(id) {
   document.getElementById('eId').value = question.id_soal;
   document.getElementById('eTipe').value = question.tipe;
   document.getElementById('ePoin').value = question.poin;
+  document.getElementById('eTingkat').value = tingkatDariNilai_(question.tingkat);
   document.getElementById('ePertanyaan').value = question.pertanyaan;
   setNilaiInput_('eDeskripsiStimulus', question.stimulus_deskripsi || '');
   document.getElementById('eOpsi').value = optionsToLines(question);
@@ -1920,6 +1957,7 @@ async function saveEditedQuestion() {
     await hasilSukses_('Perubahan Tersimpan', result.message || 'Perubahan soal berhasil disimpan.', [
       { label: 'Nomor soal', nilai: '#' + String(payload.id_soal || '-') },
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
+      { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) + ' (hanya soal ini)' },
       { label: 'Status', nilai: payload.aktif ? 'Aktif' : 'Nonaktif' }
     ]);
   } catch (error) {
@@ -2800,20 +2838,21 @@ async function setAllQuestionStatus(aktif) {
 
 function unduhTemplateSoal() {
   var rows = [
-    ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'aktif', 'stimulus_gambar', 'stimulus_video'],
-    ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'YA', '', ''],
-    ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'YA', '', ''],
-    ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'YA', '', ''],
+    ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'],
+    ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'VII', 'YA', '', ''],
+    ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'VIII', 'YA', '', ''],
+    ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'VIII', 'YA', '', ''],
     ['MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya',
-     'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', '10', 'YA', '', ''],
-    ['ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', '5', 'YA', '', ''],
-    ['URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', '20', 'YA', '', '']
+     'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', '10', 'IX', 'YA', '', ''],
+    ['ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', '5', 'IX', 'YA', '', ''],
+    ['URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', '20', 'SEMUA', 'YA', '', '']
   ];
   unduhCsv_(rows, 'template-import-soal.csv');
   hasilSukses_('Template Soal Diunduh',
     'Berkas template tersimpan di folder unduhan perangkat Anda. Isi datanya lalu simpan kembali sebagai CSV UTF-8 sebelum diimport.', [
       { label: 'Nama berkas', nilai: 'template-import-soal.csv' },
       { label: 'Pemisah opsi', nilai: 'tanda | (pipa)' },
+      { label: 'Kolom tingkat', nilai: 'VII / VIII / IX / SEMUA (kosong = SEMUA)' },
       { label: 'Menjodohkan', nilai: 'tulis pasangan sebagai pernyataan = jawaban, kunci otomatis' },
       { label: 'Contoh baris', nilai: String(rows.length - 1) + ' contoh soal' }
     ]);
@@ -2944,6 +2983,9 @@ async function importSoalDariFile() {
         mapel: item.mapel || '',
         stimulus_gambar: item.stimulus_gambar || item.gambar || '',
         stimulus_video: item.stimulus_video || item.video || '',
+        // Kolom opsional: kelas sasaran per baris. Baris tanpa kolom ini
+        // menjadi SEMUA, sehingga import tidak mengubah kelas soal lain.
+        tingkat: tingkatDariNilai_(item.tingkat || item.kelas || item.kelas_sasaran || ''),
         aktif: !/^(tidak|no|0|nonaktif|false)$/i.test(String(item.aktif || 'YA').trim())
       };
     });

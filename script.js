@@ -974,7 +974,7 @@ function renderQuestion() {
 
   questionHtml += '<section class="answer-section" data-answer-type="' + escapeHtml(type) + '">' +
     '<p class="answer-label"><i class="fa-solid fa-pen-to-square"></i> Jawaban Anda' +
-    (type === 'URAIAN' ? '<span class="paste-allowed paste-blocked"><i class="fa-solid fa-ban"></i> Tempel dari luar diblokir — ketik jawaban sendiri</span>' : '') +
+    (type === 'URAIAN' ? '<span class="paste-allowed paste-blocked"><i class="fa-solid fa-ban"></i> Tempel dari luar &amp; clipboard keyboard diblokir — ketik jawaban sendiri</span>' : '') +
     '</p>' + renderAnswerInput(question, UJIAN.jawaban[id]) + '</section>';
 
   document.getElementById('questionCard').innerHTML = questionHtml;
@@ -2292,6 +2292,27 @@ function bindSecurityEvents() {
       clipboardAllowedForEssay(event.target)
         ? 'Upaya menempel teks dari luar aplikasi pada jawaban uraian (diblokir).'
         : 'Upaya menempel jawaban selain pada soal uraian.');
+  }, true);
+  /* BLOK KLIPBOARD KEYBOARD PONSEL -------------------------------------
+   * Keyboard smartphone (Gboard, Samsung Keyboard, iOS) menempel isi
+   * clipboard lewat jalur yang tidak selalu memicu peristiwa 'paste':
+   * tombol Paste di toolbar keyboard, chip saran clipboard, atau sisipan
+   * execCommand('insertText'). Semuanya melewati 'beforeinput' dengan
+   * inputType khas, jadi di sinilah pencegatan paling hilir. */
+  document.addEventListener('beforeinput', function(event) {
+    if (!UJIAN.aktif) return;
+    var tipe = String(event.inputType || '');
+    var dariKlipboard = /^insertFrom(Paste|PasteAsQuotation|Drop|Yank)/.test(tipe);
+    // insertText/insertReplacementText berisi potongan panjang = sisipan
+    // ala execCommand atau saran clipboard; ketikan/saran kata biasa pendek.
+    var sisipanPanjang = (tipe === 'insertText' || tipe === 'insertReplacementText') &&
+      String(event.data || '').length >= 25;
+    if (!dariKlipboard && !sisipanPanjang) return;
+    event.preventDefault();
+    catatPercobaanTempel_(event.target);
+    peringatanRingan_('Menempel teks dari keyboard dinonaktifkan selama ujian. Ketik jawaban Anda sendiri.');
+    reportViolation('paste_non_uraian',
+      'Percobaan tempel lewat keyboard ponsel (inputType ' + (tipe || '?') + ') diblokir.');
   }, true);
   // Seret-lepas teks dari aplikasi lain juga dicegat.
   document.addEventListener('dragover', function(event) {

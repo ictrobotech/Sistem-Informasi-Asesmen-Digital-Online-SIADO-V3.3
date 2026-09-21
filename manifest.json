@@ -2,6 +2,7 @@
   "name": "SIADO - Asesmen Digitalisasi Online",
   "short_name": "SIADO",
   "description": "Aplikasi Ujian Online SMP Labschool Untad Palu.",
+  "id": "./index.html",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

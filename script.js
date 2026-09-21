@@ -2837,6 +2837,9 @@ function isMobileDevice() {
   // sebagai mobile dan melewati deteksi blur/visibility.
   if (navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
   if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')) return true;
+  /* iPadOS 13+: Safari menyamar sebagai "Macintosh" (tanpa kata iPad/Mobile).
+     Bedakan dari Mac asli lewat layar sentuh multi-titik. */
+  if (/Macintosh/i.test(navigator.userAgent || '') && Number(navigator.maxTouchPoints || 0) > 1) return true;
   var coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   var shortestSide = Math.min(Number(window.screen.width || 9999), Number(window.screen.height || 9999));
   return !!coarsePointer && shortestSide <= 1024;

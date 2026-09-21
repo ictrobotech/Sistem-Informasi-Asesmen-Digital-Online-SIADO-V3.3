@@ -435,7 +435,8 @@
       html += '</tr>';
     }
     html += '</tbody></table>';
-    return html;
+    /* MOBILE 2026-09-22: bungkus scroll horizontal agar tabel PGK multi-kategori tidak jebol di layar HP */
+    return '<div class="pgk-cat-scroll">' + html + '</div>';
   }
 
   /* ======================= EDITOR (browser) ======================= */

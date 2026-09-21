@@ -559,6 +559,26 @@ function bindAdminInterface() {
     updateQuestionFormatHelp(prefix);
   });
   bindClick_('ePreviewMedia', previewEditMedia);
+
+  // REVISI 4.0: editor rich text pertanyaan + editor terstruktur
+  // PGK Kategori & Menjodohkan + hapus seluruh bank soal.
+  RTE_PERTANYAAN.f = SRich.mountEditor(document.getElementById('fPertanyaanRte'), {
+    placeholder: 'Tulis pertanyaan. Dukung tebal, miring, garis bawah, coret, tabel, grafik, gambar, dan rumus.',
+    maxlength: 12000,
+    onChange: function() { document.getElementById('fPertanyaan').value = RTE_PERTANYAAN.f.getHtml(); }
+  });
+  RTE_PERTANYAAN.e = SRich.mountEditor(document.getElementById('ePertanyaanRte'), {
+    placeholder: 'Tulis pertanyaan...',
+    maxlength: 12000,
+    onChange: function() { document.getElementById('ePertanyaan').value = RTE_PERTANYAAN.e.getHtml(); }
+  });
+  resetPgkEditor('f', null);
+  resetJodohEditor('f', null);
+  bindClick_('fPgkAddRow', function() { pgkAddRow('f', '', ''); perbaruiKunciPgk_('f'); perbaruiPratinjauPgk_('f'); });
+  bindClick_('ePgkAddRow', function() { pgkAddRow('e', '', ''); perbaruiKunciPgk_('e'); perbaruiPratinjauPgk_('e'); });
+  bindClick_('fJodohAddRow', function() { jodohAddRow('f', '', ''); });
+  bindClick_('eJodohAddRow', function() { jodohAddRow('e', '', ''); });
+  bindClick_('deleteAllQuestions', deleteAllQuestions);
 }
 
 /* ==================================================================
@@ -1325,32 +1345,43 @@ function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
     PG: '<strong>PG biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
-    PGK: '<strong>PGK:</strong> tulis 1 pernyataan per baris. Kunci mengikuti urutan pernyataan, misalnya: <strong>BENAR,SALAH,BENAR</strong>.',
+    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai.',
     PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>.',
-    MENJODOHKAN: '<strong>Menjodohkan:</strong> tulis 1 pasangan per baris dengan format ' +
-      '<strong>pernyataan = jawaban</strong>. Contoh: <em>Ibu kota Jawa Tengah = Semarang</em>. ' +
-      'Kunci jawaban terisi otomatis dari pasangan ini, dan pilihan jawaban diacak untuk peserta.',
+    MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
+      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta.',
     ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta.',
     URAIAN: '<strong>Uraian:</strong> opsi tidak diperlukan. Isi rubrik/pedoman penilaian pada kolom kunci jawaban.'
   }[type];
   document.getElementById(prefix + 'FormatHelp').innerHTML = help;
-  var optionField = document.getElementById(prefix + 'Opsi');
-  optionField.disabled = type === 'ISIAN' || type === 'URAIAN';
-  optionField.placeholder = type === 'PGK' ? 'Pernyataan 1\nPernyataan 2'
-    : (type === 'MENJODOHKAN' ? 'Ibu kota Jawa Tengah = Semarang\nIbu kota Jawa Barat = Bandung'
-       : 'Opsi 1\nOpsi 2\nOpsi 3');
 
-  // Kunci jawaban menjodohkan dibentuk otomatis dari pasangan, jadi kolomnya
-  // dikunci agar guru tidak perlu (dan tidak bisa) mengetik ulang.
+  // PGK Kategori & Menjodohkan memakai editor tabel terstruktur; kolom
+  // teks opsi/kunci disembunyikan agar tidak membingungkan.
+  var struct = type === 'PGK' || type === 'MENJODOHKAN';
+  var optionField = document.getElementById(prefix + 'Opsi');
+  optionField.disabled = type === 'ISIAN' || type === 'URAIAN' || struct;
+  var opsiWrap = document.getElementById(prefix + 'OpsiWrap');
+  if (opsiWrap) opsiWrap.style.display = struct ? 'none' : '';
+  var pgkBox = document.getElementById(prefix + 'PgkBox');
+  var jodohBox = document.getElementById(prefix + 'JodohBox');
+  if (pgkBox) pgkBox.hidden = type !== 'PGK';
+  if (jodohBox) jodohBox.hidden = type !== 'MENJODOHKAN';
+  optionField.placeholder = type === 'PGK' ? 'Pernyataan 1\\nPernyataan 2'
+    : (type === 'MENJODOHKAN' ? 'Ibu kota Jawa Tengah = Semarang\\nIbu kota Jawa Barat = Bandung'
+       : 'Opsi 1\\nOpsi 2\\nOpsi 3');
+
+  // Kunci jawaban menjodohkan & PGK Kategori dibentuk otomatis dari editor
+  // tabel, jadi kolomnya dikunci agar guru tidak perlu mengetik ulang.
   var keyField = document.getElementById(prefix + 'Kunci');
   if (keyField) {
-    var otomatis = type === 'MENJODOHKAN';
+    var otomatis = type === 'MENJODOHKAN' || type === 'PGK';
     keyField.readOnly = otomatis;
     keyField.placeholder = otomatis
-      ? 'Terisi otomatis dari pasangan pada kolom di atas.'
+      ? 'Terisi otomatis dari editor tabel di atas.'
       : 'Isi berdasarkan petunjuk format di atas.';
-    if (otomatis) perbaruiKunciJodoh_(prefix);
+    if (type === 'MENJODOHKAN') perbaruiKunciJodoh_(prefix);
+    if (type === 'PGK') perbaruiKunciPgk_(prefix);
   }
+  if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
 }
 
 /**
@@ -1369,9 +1400,272 @@ function perbaruiKunciJodoh_(prefix) {
     : '';
 }
 
+/* ==================================================================
+ * EDITOR TERSTRUKTUR: PGK KATEGORI & MENJODOHKAN (REVISI 4.0)
+ *
+ * PGK Kategori mengikuti format gambar: tabel No. | Pernyataan |
+ * kolom-kolom kategori; peserta memberi tanda centang (√) pada kolom
+ * yang sesuai. Kategori jawaban CUSTOM (tidak harus Benar/Salah).
+ * Menjodohkan memakai tabel serupa berisi pasangan pernyataan.
+ * ================================================================== */
+var PGK_STATE = { f: null, e: null };
+var JODOH_STATE = { f: null, e: null };
+var RTE_PERTANYAAN = { f: null, e: null };
+
+function pgkStateDefault() {
+  return { kategori: ['Informasi Penting', 'Dapat Diabaikan'], rows: [] };
+}
+
+function renderPgkKategoriChips(prefix) {
+  var state = PGK_STATE[prefix];
+  var wrap = document.getElementById(prefix + 'PgkKategori');
+  if (!wrap || !state) return;
+  wrap.innerHTML = '';
+  state.kategori.forEach(function(nama, idx) {
+    var chip = document.createElement('span');
+    chip.className = 'kategori-chip';
+    var inp = document.createElement('input');
+    inp.value = nama;
+    inp.maxLength = 40;
+    inp.setAttribute('aria-label', 'Nama kategori ' + (idx + 1));
+    inp.addEventListener('input', function() {
+      var lama = state.kategori[idx];
+      state.kategori[idx] = this.value;
+      state.rows.forEach(function(r) { if (r.kunci === lama) r.kunci = this.value; }, this);
+      syncPgkRowSelects(prefix);
+      perbaruiKunciPgk_(prefix);
+      perbaruiPratinjauPgk_(prefix);
+    });
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.title = 'Hapus kategori ini';
+    del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    del.addEventListener('click', function() {
+      if (state.kategori.length <= 2) { showToast('Minimal dua kategori.', 'error'); return; }
+      var buang = state.kategori.splice(idx, 1)[0];
+      state.rows.forEach(function(r) { if (r.kunci === buang) r.kunci = ''; });
+      renderPgkKategoriChips(prefix);
+      syncPgkRowSelects(prefix);
+      perbaruiKunciPgk_(prefix);
+      perbaruiPratinjauPgk_(prefix);
+    });
+    chip.appendChild(inp);
+    chip.appendChild(del);
+    wrap.appendChild(chip);
+  });
+  var add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'admin-secondary';
+  add.style.minHeight = '30px';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i> Kategori';
+  add.addEventListener('click', function() {
+    if (state.kategori.length >= 5) { showToast('Maksimal lima kategori.', 'error'); return; }
+    state.kategori.push('Kategori ' + (state.kategori.length + 1));
+    renderPgkKategoriChips(prefix);
+    syncPgkRowSelects(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  wrap.appendChild(add);
+}
+
+function syncOnePgkSelect(sel, state, rowState) {
+  var val = rowState.kunci;
+  sel.innerHTML = '<option value="">Pilih kategori kunci</option>' + state.kategori.map(function(k) {
+    return '<option value="' + SRich.escapeHtml(k) + '">' + SRich.escapeHtml(k) + '</option>';
+  }).join('');
+  if (state.kategori.indexOf(val) !== -1) sel.value = val;
+  else { sel.value = ''; rowState.kunci = ''; }
+}
+function syncPgkRowSelects(prefix) {
+  var state = PGK_STATE[prefix];
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  if (!state || !rowsWrap) return;
+  var sels = rowsWrap.querySelectorAll('select');
+  state.rows.forEach(function(r, i) { if (sels[i]) syncOnePgkSelect(sels[i], state, r); });
+}
+function pgkRenumber(prefix, wrapId) {
+  var rowsWrap = document.getElementById(wrapId || (prefix + 'PgkRows'));
+  var nos = rowsWrap.querySelectorAll('.pgk-no');
+  for (var i = 0; i < nos.length; i++) nos[i].textContent = String(i + 1);
+}
+
+function pgkAddRow(prefix, html, kunci) {
+  var state = PGK_STATE[prefix];
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  var row = document.createElement('div');
+  row.className = 'pgk-row';
+  var no = document.createElement('div'); no.className = 'pgk-no';
+  var host = document.createElement('div');
+  var sel = document.createElement('select');
+  sel.title = 'Kunci kategori pernyataan ini';
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'pgk-del';
+  del.title = 'Hapus pernyataan';
+  del.innerHTML = '<i class="fa-solid fa-trash"></i>';
+  row.appendChild(no); row.appendChild(host); row.appendChild(sel); row.appendChild(del);
+  rowsWrap.appendChild(row);
+
+  var rowState = { html: html || '', kunci: kunci || '' };
+  state.rows.push(rowState);
+  var editor = SRich.mountEditor(host, {
+    compact: true,
+    placeholder: 'Tulis pernyataan (dukung tebal/miring/tabel/rumus)...',
+    onChange: function() {
+      rowState.html = editor.getHtml();
+      perbaruiPratinjauPgk_(prefix);
+    }
+  });
+  rowState._editor = editor;
+  editor.setHtml(rowState.html);
+  sel.addEventListener('change', function() {
+    rowState.kunci = sel.value;
+    perbaruiKunciPgk_(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  del.addEventListener('click', function() {
+    if (state.rows.length <= 1) { showToast('Minimal satu pernyataan.', 'error'); return; }
+    var i = state.rows.indexOf(rowState);
+    state.rows.splice(i, 1);
+    if (row.parentNode) row.parentNode.removeChild(row);
+    pgkRenumber(prefix);
+    perbaruiKunciPgk_(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  syncOnePgkSelect(sel, state, rowState);
+  pgkRenumber(prefix);
+  return rowState;
+}
+
+function resetPgkEditor(prefix, data) {
+  PGK_STATE[prefix] = {
+    kategori: (data && data.kategori && data.kategori.length >= 2 ? data.kategori : ['Informasi Penting', 'Dapat Diabaikan']).slice(),
+    rows: []
+  };
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  if (rowsWrap) rowsWrap.innerHTML = '';
+  renderPgkKategoriChips(prefix);
+  var rows = data && data.rows && data.rows.length ? data.rows : [{ html: '', kunci: '' }];
+  rows.forEach(function(r) { pgkAddRow(prefix, r.html, r.kunci); });
+  perbaruiKunciPgk_(prefix);
+  perbaruiPratinjauPgk_(prefix);
+}
+
+function perbaruiKunciPgk_(prefix) {
+  var keyField = document.getElementById(prefix + 'Kunci');
+  var state = PGK_STATE[prefix];
+  if (!keyField || !state) return;
+  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(',');
+}
+
+/** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */
+function perbaruiPratinjauPgk_(prefix) {
+  var prev = document.getElementById(prefix + 'PgkPreview');
+  var state = PGK_STATE[prefix];
+  if (!prev || !state) return;
+  var jawaban = {};
+  state.rows.forEach(function(r, i) { if (r.kunci) jawaban[String(i)] = r.kunci; });
+  prev.innerHTML = SRich.pgkTableHtml({
+    kategori: state.kategori.slice(),
+    statements: state.rows.map(function(r, i) {
+      return { id: String(i), html: r.html || '(pernyataan belum ditulis)' };
+    }),
+    jawaban: jawaban,
+    interaksi: false
+  });
+  SRich.typesetMath(prev);
+}
+
+/* ------------------- editor pasangan menjodohkan ------------------- */
+function jodohAddRow(prefix, text, pasangan) {
+  var state = JODOH_STATE[prefix];
+  var wrap = document.getElementById(prefix + 'JodohRows');
+  var row = document.createElement('div');
+  row.className = 'jodoh-row';
+  var no = document.createElement('div'); no.className = 'pgk-no';
+  var i1 = document.createElement('input');
+  i1.placeholder = 'Pernyataan (kolom kiri)'; i1.maxLength = 500;
+  var eq = document.createElement('div'); eq.className = 'jodoh-eq'; eq.textContent = '=';
+  var i2 = document.createElement('input');
+  i2.placeholder = 'Pasangan (kolom kanan)'; i2.maxLength = 500;
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'pgk-del';
+  del.title = 'Hapus pasangan';
+  del.innerHTML = '<i class="fa-solid fa-trash"></i>';
+  row.appendChild(no); row.appendChild(i1); row.appendChild(eq); row.appendChild(i2); row.appendChild(del);
+  wrap.appendChild(row);
+  var rowState = { text: text || '', pasangan: pasangan || '' };
+  state.rows.push(rowState);
+  i1.value = rowState.text;
+  i2.value = rowState.pasangan;
+  i1.addEventListener('input', function() { rowState.text = this.value; perbaruiKunciJodoh_(prefix); });
+  i2.addEventListener('input', function() { rowState.pasangan = this.value; perbaruiKunciJodoh_(prefix); });
+  del.addEventListener('click', function() {
+    if (state.rows.length <= 1) { showToast('Minimal satu pasangan.', 'error'); return; }
+    var i = state.rows.indexOf(rowState);
+    state.rows.splice(i, 1);
+    if (row.parentNode) row.parentNode.removeChild(row);
+    pgkRenumber(prefix, prefix + 'JodohRows');
+    perbaruiKunciJodoh_(prefix);
+  });
+  pgkRenumber(prefix, prefix + 'JodohRows');
+  perbaruiKunciJodoh_(prefix);
+  return rowState;
+}
+
+function resetJodohEditor(prefix, rows) {
+  JODOH_STATE[prefix] = { rows: [] };
+  var wrap = document.getElementById(prefix + 'JodohRows');
+  if (wrap) wrap.innerHTML = '';
+  var list = rows && rows.length ? rows : [{ text: '', pasangan: '' }];
+  list.forEach(function(r) { jodohAddRow(prefix, r.text, r.pasangan); });
+  perbaruiKunciJodoh_(prefix);
+}
+
+/** Validasi editor terstruktur & pertanyaan sebelum disimpan. */
+function validateSoalStruct_(prefix) {
+  var tipe = document.getElementById(prefix + 'Tipe').value;
+  var rte = RTE_PERTANYAAN[prefix];
+  if (rte && rte.isEmpty()) return 'Pertanyaan wajib diisi (mis. kalimat perintah seperti pada contoh PGK Kategori).';
+  if (tipe === 'PGK') {
+    var st = PGK_STATE[prefix];
+    var unik = [];
+    for (var c = 0; c < st.kategori.length; c++) {
+      var nm = String(st.kategori[c] || '').trim();
+      if (!nm) return 'Nama kategori tidak boleh kosong.';
+      if (/[|,]/.test(nm)) return 'Nama kategori tidak boleh mengandung koma atau tanda pipa (|): "' + nm + '".';
+      if (unik.indexOf(nm) !== -1) return 'Nama kategori harus berbeda satu sama lain: "' + nm + '".';
+      unik.push(nm);
+    }
+    if (!st.rows.length) return 'Minimal satu pernyataan.';
+    for (var j = 0; j < st.rows.length; j++) {
+      if (!SRich.stripHtml(st.rows[j].html).trim()) return 'Pernyataan nomor ' + (j + 1) + ' masih kosong.';
+      if (!st.rows[j].kunci) return 'Kunci kategori untuk pernyataan nomor ' + (j + 1) + ' belum dipilih.';
+    }
+  }
+  if (tipe === 'MENJODOHKAN') {
+    var jd = JODOH_STATE[prefix];
+    var valid = jd.rows.filter(function(r) { return r.text.trim() && r.pasangan.trim(); });
+    if (valid.length < 2) return 'Menjodohkan membutuhkan minimal dua pasangan pernyataan yang lengkap.';
+  }
+  return '';
+}
+
 function optionsFromField(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   if (type === 'ISIAN' || type === 'URAIAN') return [];
+  if (type === 'PGK') {
+    var st = PGK_STATE[prefix];
+    if (!st) return [];
+    return st.rows.map(function(r) { return { text: r.html }; });
+  }
+  if (type === 'MENJODOHKAN') {
+    var jd = JODOH_STATE[prefix];
+    if (jd) {
+      return jd.rows
+        .filter(function(r) { return r.text.trim() && r.pasangan.trim(); })
+        .map(function(r) { return { text: r.text.trim(), pasangan: r.pasangan.trim() }; });
+    }
+  }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
     .map(function(line) { return line.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
     .filter(Boolean);
@@ -1466,7 +1760,7 @@ function labelSumberMedia_(sumber) {
 
 /** Label tipe soal yang ramah dibaca pada kotak dialog. */
 function labelTipeSoal_(tipe) {
-  return { PG: 'PG biasa', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
+  return { PG: 'PG biasa', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
            ISIAN: 'Isian', URAIAN: 'Uraian' }[String(tipe || '').toUpperCase()] || String(tipe || '-');
 }
 
@@ -1477,7 +1771,7 @@ function labelTipeSoal_(tipe) {
 function labelTipeSoalResmi_(tipe) {
   return {
     PG: 'Pilihan Ganda',
-    PGK: 'Pilihan Ganda Kompleks (Benar/Salah)',
+    PGK: 'PGK Kategori',
     PGK_MCMA: 'Pilihan Ganda Kompleks (Jawaban Ganda)',
     MENJODOHKAN: 'Menjodohkan',
     ISIAN: 'Isian Singkat',
@@ -1742,13 +2036,30 @@ function labelTingkat_(tingkat) {
 
 async function buildQuestionPayload(prefix) {
   var media = await resolveQuestionMedia(prefix);
+  var tipe = document.getElementById(prefix + 'Tipe').value;
+  // Pertanyaan kini berupa HTML kaya dari editor; untuk PGK Kategori daftar
+  // kategori disematkan sebagai penanda tersembunyi agar tampilan peserta
+  // selalu sama dengan susunan di panel.
+  var rte = RTE_PERTANYAAN[prefix];
+  var pertanyaanHtml = rte ? rte.getHtml() : document.getElementById(prefix + 'Pertanyaan').value;
+  if (tipe === 'PGK') {
+    pertanyaanHtml = SRich.pgkMarkerEmbed(pertanyaanHtml, (PGK_STATE[prefix] || { kategori: [] }).kategori);
+  } else {
+    pertanyaanHtml = String(pertanyaanHtml)
+      .replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '')
+      .replace(/<span[^>]*data-siado-pgk-kategori[^>]*>\s*<\/span>/gi, '');
+  }
+  var kunci = document.getElementById(prefix + 'Kunci').value;
+  if (tipe === 'PGK') {
+    kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
+  }
   return {
     id_soal: prefix === 'e' ? document.getElementById('eId').value : undefined,
-    tipe: document.getElementById(prefix + 'Tipe').value,
+    tipe: tipe,
     poin: document.getElementById(prefix + 'Poin').value,
-    pertanyaan: document.getElementById(prefix + 'Pertanyaan').value,
+    pertanyaan: pertanyaanHtml,
     opsi: optionsFromField(prefix),
-    kunci_jawaban: document.getElementById(prefix + 'Kunci').value,
+    kunci_jawaban: kunci,
     stimulus_deskripsi: nilaiInput_(prefix + 'DeskripsiStimulus'),
     stimulus_gambar: media.gambar,
     stimulus_alt: document.getElementById(prefix + 'ImageAlt').value,
@@ -1829,6 +2140,11 @@ async function previewEditMedia() {
 
 async function saveNewQuestion() {
   if (ADMIN.operationBusy.addQuestion) return;
+  var galatStruktur = validateSoalStruct_('f');
+  if (galatStruktur) {
+    await hasilGagal_('Soal Gagal Disimpan', galatStruktur);
+    return;
+  }
   ADMIN.operationBusy.addQuestion = true;
   setFormBusy('addQuestionForm', true);
   try {
@@ -1853,6 +2169,10 @@ async function saveNewQuestion() {
 function clearQuestionForm(prefix) {
   document.getElementById(prefix + 'Poin').value = '10';
   document.getElementById(prefix + 'Pertanyaan').value = '';
+  if (RTE_PERTANYAAN[prefix]) RTE_PERTANYAAN[prefix].setHtml('');
+  resetPgkEditor(prefix, null);
+  resetJodohEditor(prefix, null);
+  updateQuestionFormatHelp(prefix);
   var tingkat = document.getElementById(prefix + 'Tingkat');
   if (tingkat) tingkat.value = 'SEMUA';
   var deskripsi = document.getElementById(prefix + 'DeskripsiStimulus');
@@ -1895,7 +2215,7 @@ function terapkanFilterSoal_() {
   // Filter kelas sasaran bersifat per soal: soal tanpa tingkat dianggap SEMUA.
   if (tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === tingkat; });
   rows = saringKata_(rows, kueri, function(q) {
-    return [q.id_soal, q.tipe, q.pertanyaan, q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
+    return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
       tingkatDariNilai_(q.tingkat)].join(' ');
   });
   if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat)) {
@@ -1915,7 +2235,7 @@ function renderQuestionTable(rows) {
     var tingkatSoal = tingkatDariNilai_(question.tingkat);
     html += '<tr><td><strong>#' + escapeAdmin(question.id_soal) + '</strong></td>' +
       '<td>' + typeBadge(question.tipe) + '</td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(question.pertanyaan, 150)) + '</div></td>' +
+      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</div></td>' +
       // Kolom kelas sasaran: memudahkan memastikan satu perubahan kelas tidak
       // ikut menyeret soal nomor lain.
       '<td>' + badge(tingkatSoal === 'SEMUA' ? 'SEMUA' : tingkatSoal, tingkatSoal === 'SEMUA' ? 'gray' : 'blue') + '</td>' +
@@ -1942,7 +2262,30 @@ function openEditQuestion(id) {
   document.getElementById('ePoin').value = question.poin;
   document.getElementById('eTingkat').value = tingkatDariNilai_(question.tingkat);
   document.getElementById('ePertanyaan').value = question.pertanyaan;
+  if (RTE_PERTANYAAN.e) RTE_PERTANYAAN.e.setHtml(question.pertanyaan);
   setNilaiInput_('eDeskripsiStimulus', question.stimulus_deskripsi || '');
+  // Isi editor terstruktur PGK Kategori & Menjodohkan dari data soal tersimpan.
+  var tipeSoal = String(question.tipe || '').toUpperCase();
+  if (tipeSoal === 'PGK') {
+    var infoKat = SRich.pgkCategories(question);
+    var kunciObj = tryJson(question.kunci_jawaban, question.kunci_jawaban);
+    var rowsData = (question.opsi || []).map(function(op, idx) {
+      var k = '';
+      if (kunciObj && typeof kunciObj === 'object' && !Array.isArray(kunciObj)) {
+        k = String(kunciObj[op.id !== undefined ? op.id : String(idx)] || '');
+      }
+      if (!k && typeof question.kunci_jawaban === 'string' && question.kunci_jawaban.indexOf(',') !== -1) {
+        k = String(question.kunci_jawaban.split(',')[idx] || '').trim();
+      }
+      return { html: op.text || '', kunci: k };
+    });
+    resetPgkEditor('e', { kategori: infoKat.kategori, rows: rowsData.length ? rowsData : null });
+  }
+  if (tipeSoal === 'MENJODOHKAN') {
+    resetJodohEditor('e', (question.opsi || []).map(function(op) {
+      return { text: SRich.stripHtml(op.text || ''), pasangan: SRich.stripHtml(op.pasangan || '') };
+    }));
+  }
   document.getElementById('eOpsi').value = optionsToLines(question);
   document.getElementById('eKunci').value = editableKey(question);
   document.getElementById('eImageLink').value = question.stimulus_gambar || '';
@@ -1965,6 +2308,11 @@ function closeEditQuestion() { document.getElementById('editQuestionModal').clas
 
 async function saveEditedQuestion() {
   if (ADMIN.operationBusy.editQuestion) return;
+  var galatStruktur = validateSoalStruct_('e');
+  if (galatStruktur) {
+    await hasilGagal_('Perubahan Gagal Disimpan', galatStruktur);
+    return;
+  }
   ADMIN.operationBusy.editQuestion = true;
   setFormBusy('editQuestionForm', true);
   try {
@@ -2048,9 +2396,9 @@ function optionSummary(question) {
   if (!question.opsi || !question.opsi.length) return '-';
   return question.opsi.map(function(option, index) {
     var marker = option.label || option.id || String(index + 1);
-    var teks = truncate(option.text || '', 45);
+    var teks = truncate(SRich.stripHtml(option.text || ''), 45);
     // Menjodohkan menampilkan pasangannya sekaligus agar mudah diperiksa.
-    if (option.pasangan) teks += ' = ' + truncate(option.pasangan, 35);
+    if (option.pasangan) teks += ' = ' + truncate(SRich.stripHtml(option.pasangan), 35);
     return marker + '. ' + teks;
   }).join(' | ');
 }
@@ -2416,7 +2764,7 @@ function renderEssayTable(rows) {
       ? ''
       : (isFinite(Number(nilaiTersimpan)) ? Number(nilaiTersimpan) : '');
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong><br>' + badge(row.kelas, 'blue') + '<br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(row.pertanyaan) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
+      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(SRich.stripHtml(row.pertanyaan)) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
       '<td><div class="essay-answer">' + escapeAdmin(row.jawaban || '-') + '</div></td><td>' + statusBadge(row.status) + '</td>' +
       '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" inputmode="decimal" autocomplete="off" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small> <small class="essay-draft-flag" style="display:none;color:#b45309;font-weight:700">belum disimpan</small></td>' +
       '<td><button class="mini-button edit" type="button" data-grade-session="' + escapeAdmin(row.session_id) + '" data-grade-question="' + escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-floppy-disk"></i> Simpan</button></td></tr>';
@@ -2934,10 +3282,63 @@ async function setAllQuestionStatus(aktif) {
   } finally { ADMIN.operationBusy.bulkStatus = false; }
 }
 
+/**
+ * REVISI 4.0 — Hapus SEMUA soal (menyeluruh).
+ * Server tidak menyediakan aksi hapus massal, jadi setiap soal dihapus
+ * lewat aksi hapusSoal yang sudah ada (kontrak tidak berubah). Dua tahap
+ * konfirmasi agar tidak terpicu tanpa sengaja.
+ */
+async function deleteAllQuestions() {
+  var semua = (DATA_MENTAH.soal || []).slice();
+  if (!semua.length) {
+    await hasilInfo_('Bank Soal Kosong', 'Tidak ada soal yang dapat dihapus.');
+    return;
+  }
+  var setuju = await konfirmasi_('SELURUH bank soal (' + semua.length + ' soal) akan dihapus permanen, ' +
+    'termasuk berkas gambar/video-nya di penyimpanan aplikasi. Soal yang sedang dipakai peserta aktif ' +
+    'hanya dinonaktifkan demi menjaga ujian yang berjalan. Tindakan ini TIDAK dapat dibatalkan.',
+    { judul: 'Hapus Semua Soal', nada: 'danger', teksOk: 'Lanjutkan' });
+  if (!setuju) return;
+  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan seluruh bank soal.',
+    { judul: 'Konfirmasi Akhir', label: 'Ketik HAPUS', placeholder: 'HAPUS', teksOk: 'Hapus Permanen' });
+  if (ketik === null || String(ketik).trim() !== 'HAPUS') {
+    await hasilInfo_('Hapus Dibatalkan', 'Konfirmasi tidak cocok. Bank soal tidak diubah.');
+    return;
+  }
+  if (ADMIN.operationBusy.deleteAll) return;
+  ADMIN.operationBusy.deleteAll = true;
+  var berhasil = 0;
+  var gagalList = [];
+  try {
+    for (var i = 0; i < semua.length; i++) {
+      try {
+        var r = await adminApi('hapusSoal', { id_soal: semua[i].id_soal });
+        if (r && r.success) berhasil += 1;
+        else gagalList.push('#' + semua[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
+      } catch (error) {
+        gagalList.push('#' + semua[i].id_soal + ': ' + (error.message || error));
+      }
+    }
+    await segarkanSenyap_([loadQuestions, loadDashboard]);
+    if (!gagalList.length) {
+      await hasilSukses_('Semua Soal Dihapus', berhasil + ' soal dihapus permanen dari bank soal.', [
+        { label: 'Dihapus', nilai: String(berhasil) },
+        { label: 'Sisa soal', nilai: '0' }
+      ]);
+    } else {
+      await hasilGagal_('Hapus Selesai Sebagian',
+        berhasil + ' soal terhapus; ' + gagalList.length + ' gagal. ' + gagalList.slice(0, 5).join('; '));
+    }
+  } finally {
+    ADMIN.operationBusy.deleteAll = false;
+  }
+}
+
 function unduhTemplateSoal() {
   var rows = [
     ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'],
     ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'VII', 'YA', '', ''],
+    ['PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', '10', 'VIII', 'YA', '', ''],
     ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'VIII', 'YA', '', ''],
     ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'VIII', 'YA', '', ''],
     ['MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya',
@@ -2952,6 +3353,7 @@ function unduhTemplateSoal() {
       { label: 'Pemisah opsi', nilai: 'tanda | (pipa)' },
       { label: 'Kolom tingkat', nilai: 'VII / VIII / IX / SEMUA (kosong = SEMUA)' },
       { label: 'Menjodohkan', nilai: 'tulis pasangan sebagai pernyataan = jawaban, kunci otomatis' },
+      { label: 'PGK Kategori', nilai: 'kolom kunci_jawaban berisi nama kategori per pernyataan dipisah koma (mis. Informasi Penting,Dapat Diabaikan,...)' },
       { label: 'Contoh baris', nilai: String(rows.length - 1) + ' contoh soal' }
     ]);
 }
@@ -4795,7 +5197,7 @@ function renderKartuSoalTable_(rows) {
     '<th>Kelas</th><th>Materi / Elemen</th><th>Indikator Soal</th><th>Level</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td><strong>' + escapeAdmin(row.ks_nomor_soal || ('#' + row.id_soal)) + '</strong></td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(row.pertanyaan, 110)) + '</div></td>' +
+      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(row.pertanyaan), 110)) + '</div></td>' +
       '<td>' + typeBadge(row.tipe) + '</td>' +
       '<td>' + escapeAdmin(row.ks_kelas || '-') + '</td>' +
       '<td><div class="cell-wrap">' + escapeAdmin(row.ks_materi || '-') + '</div></td>' +
@@ -4819,7 +5221,7 @@ function bukaKartuSoal_(id) {
     return;
   }
   document.getElementById('ksIdSoal').value = row.id_soal;
-  document.getElementById('ksRingkasSoal').textContent = '#' + row.id_soal + ' — ' + truncate(row.pertanyaan, 120);
+  document.getElementById('ksRingkasSoal').textContent = '#' + row.id_soal + ' — ' + truncate(SRich.stripHtml(row.pertanyaan), 120);
   document.getElementById('ksCapaian').value = row.ks_capaian || '';
   document.getElementById('ksKelas').value = row.ks_kelas || '';
   document.getElementById('ksNomorSoal').value = row.ks_nomor_soal || '';
@@ -4979,7 +5381,7 @@ function badge(text, color) {
   return '<span class="badge ' + safeColor + '">' + escapeAdmin(text) + '</span>';
 }
 function typeBadge(type) {
-  var label = { PG: 'PG', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'MENJODOHKAN',
+  var label = { PG: 'PG', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'MENJODOHKAN',
                 ISIAN: 'ISIAN', URAIAN: 'URAIAN' }[type] || type;
   return badge(label, type === 'URAIAN' ? 'amber' : 'blue');
 }

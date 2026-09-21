@@ -1022,7 +1022,7 @@ function renderQuestion() {
     mediaHtml = '<p class="stimulus-intro">' + formatText(deskripsiSoal) + '</p>' + mediaHtml;
   }
   var questionHtml = mediaHtml +
-    '<div class="question-content question-protected" data-protected-question="true">' + formatText(question.pertanyaan) + '</div>';
+    '<div class="question-content question-protected rich-content" data-protected-question="true">' + SRich.renderRich(question.pertanyaan) + '</div>';
 
   questionHtml += '<section class="answer-section" data-answer-type="' + escapeHtml(type) + '">' +
     '<p class="answer-label"><i class="fa-solid fa-pen-to-square"></i> Jawaban Anda' +
@@ -1030,6 +1030,7 @@ function renderQuestion() {
     '</p>' + renderAnswerInput(question, UJIAN.jawaban[id]) + '</section>';
 
   document.getElementById('questionCard').innerHTML = questionHtml;
+  SRich.typesetMath(document.getElementById('questionCard'));
   document.getElementById('questionNumber').textContent = 'SOAL ' + (UJIAN.index + 1);
   document.getElementById('questionType').textContent = labelTipe(type);
   document.getElementById('questionPosition').textContent = 'Soal ' + (UJIAN.index + 1) + ' dari ' + UJIAN.soal.length;
@@ -1188,16 +1189,22 @@ function renderAnswerInput(question, value) {
       var checked = type === 'PG' ? selected === label : selected.indexOf(label) !== -1;
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
-        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' + formatTextInline(option.text) + '</span></label>';
+        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' + SRich.renderRich(option.text) + '</span></label>';
     }).join('') + '</div>';
   }
   if (type === 'PGK') {
+    // PGK Kategori: tabel No. | Pernyataan | kolom-kolom kategori; peserta
+    // memberi tanda centang (√) pada kolom kategori yang sesuai. Kategori
+    // dibaca dari penanda soal (custom) atau dari kunci soal lama (BENAR/SALAH).
     var objectValue = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    return '<table class="pgk-table"><thead><tr><th>Pernyataan</th><th>Jawaban</th></tr></thead><tbody>' + options.map(function(option, index) {
-      var selectedValue = String(objectValue[option.id] || '');
-      return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) + '</td><td><select class="pgk-select" data-answer-input="true" data-statement="' + escapeHtml(option.id) + '">' +
-        '<option value="">Pilih</option><option value="BENAR"' + (selectedValue === 'BENAR' ? ' selected' : '') + '>Benar</option><option value="SALAH"' + (selectedValue === 'SALAH' ? ' selected' : '') + '>Salah</option></select></td></tr>';
-    }).join('') + '</tbody></table>';
+    var infoKategori = SRich.pgkCategories(question);
+    return SRich.pgkTableHtml({
+      kategori: infoKategori.kategori,
+      statements: options.map(function(option) { return { id: option.id, html: option.text }; }),
+      jawaban: objectValue,
+      interaksi: true,
+      legacy: infoKategori.legacy
+    });
   }
   if (type === 'MENJODOHKAN') {
     // Peserta memilih jawaban dari daftar yang sudah diacak server.
@@ -1352,8 +1359,8 @@ function collectCurrentAnswer() {
   }
   if (type === 'PGK') {
     var output = {};
-    document.querySelectorAll('.pgk-select[data-statement]').forEach(function(select) {
-      if (select.value) output[select.dataset.statement] = select.value;
+    document.querySelectorAll('.pgk-cat-cell input[data-statement]:checked').forEach(function(input) {
+      output[input.getAttribute('data-statement')] = input.value;
     });
     return output;
   }
@@ -3076,7 +3083,7 @@ function kembaliKeLogin(pesanAkhir) {
   switchScreen('loginScreen');
 }
 function labelTipe(type) {
-  return { PG: 'PG', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', ISIAN: 'ISIAN',
+  return { PG: 'PG', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', ISIAN: 'ISIAN',
            URAIAN: 'URAIAN', MENJODOHKAN: 'MENJODOHKAN' }[type] || type;
 }
 function escapeHtml(value) {

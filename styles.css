@@ -344,3 +344,76 @@ body.konten-disamarkan .privacy-veil{display:flex}
     font:700 16px/1.6 sans-serif;color:#000;padding:40px;text-align:center}
 }
 
+
+/* ============================================================
+ * REVISI 4.0 — TEKS KAYA (rich text) & PGK KATEGORI
+ * Editor pertanyaan (tebal/miring/tabel/grafik/rumus), sanitizer
+ * tempelan, dan tabel kategori yang konsisten panel ↔ peserta.
+ * ============================================================ */
+.rich-content{word-break:break-word}
+.rich-content p{margin:0 0 10px}
+.rich-content p:last-child{margin-bottom:0}
+.rich-content table{border-collapse:collapse;margin:10px 0;width:100%;max-width:100%}
+.rich-content th,.rich-content td{border:1px solid #b9cbdd;padding:7px 10px;font-size:.92em;line-height:1.5;text-align:left;background:#fff}
+.rich-content th{background:#e8f0f9;font-weight:800}
+.rich-content ul,.rich-content ol{margin:6px 0 10px;padding-left:24px}
+.rich-content li{margin:3px 0}
+.rich-content img{max-width:100%;height:auto;border-radius:8px;margin:4px 0}
+.rich-content svg{max-width:100%;height:auto;display:block;margin:8px auto}
+.rich-content blockquote{border-left:4px solid #bcd8fb;margin:8px 0;padding:6px 12px;background:#f5faff;color:#3c5c80}
+.rich-content pre{background:#f2f6fa;border:1px solid #dbe6f0;border-radius:8px;padding:8px 10px;overflow:auto;font-size:.9em}
+.siado-tex{display:inline-block;padding:0 3px}
+.siado-tex-fallback{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f2f6fa;border:1px solid #dbe6f0;border-radius:6px;padding:1px 6px;font-size:.88em;color:#174f90}
+.siado-tex .katex{font-size:1.06em}
+
+/* ---- editor rich text panel ---- */
+.srte{border:1.5px solid #cedbe8;border-radius:11px;background:#fff;overflow:visible;position:relative}
+.srte-bar{display:flex;flex-wrap:wrap;gap:3px;padding:6px;border-bottom:1px solid #e2ebf4;background:#f7fafc;border-radius:11px 11px 0 0;position:relative}
+.srte-btn{min-width:30px;height:29px;border:1px solid transparent;background:transparent;border-radius:7px;color:#40617d;font-size:12px;display:inline-flex;align-items:center;justify-content:center;padding:0 7px;cursor:pointer}
+.srte-btn:hover{background:#e8f1fb;border-color:#bcd8fb;color:#1f6feb}
+.srte-btn.srte-ok{background:#1f6feb;border-color:#1f6feb;color:#fff;font-weight:800;height:31px;margin-top:4px}
+.srte-area{min-height:110px;max-height:420px;overflow:auto;padding:12px 14px;font-size:14px;line-height:1.65;color:#193552;outline:none;border-radius:0 0 11px 11px}
+.srte-area:focus{box-shadow:inset 0 0 0 2px rgba(31,111,235,.14)}
+.srte-area:empty:before{content:attr(data-placeholder);color:#93a7bb;pointer-events:none}
+.srte-area.compact{min-height:44px;max-height:160px;padding:8px 10px;font-size:13px}
+.srte-pop{position:absolute;top:100%;left:8px;z-index:60;display:flex;flex-direction:column;gap:7px;min-width:250px;background:#fff;border:1px solid #d3e0ec;border-radius:11px;box-shadow:0 14px 34px rgba(20,45,70,.16);padding:11px;margin-top:4px}
+.srte-field{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:800;color:#4c6680}
+.srte-field input,.srte-field select{border:1px solid #c9d8e6;border-radius:8px;padding:6px 8px;font-size:12px;color:#294865;outline:none}
+.srte-field input:focus,.srte-field select:focus{border-color:#1f6feb}
+
+/* ---- editor terstruktur PGK Kategori & Menjodohkan (panel) ---- */
+.soal-struct-box{border:1.5px dashed #c7d7e6;border-radius:12px;background:#f8fbff;padding:14px;margin-top:6px}
+.soal-struct-box h4{margin:0 0 10px;font:800 13px var(--heading);color:#163958;display:flex;align-items:center;gap:7px}
+.soal-struct-box h4 i{color:#1f6feb}
+.kategori-chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.kategori-chip{display:inline-flex;align-items:center;gap:7px;background:#eaf3ff;border:1px solid #bcd8fb;color:#1d62b5;border-radius:99px;padding:6px 11px;font-size:12px;font-weight:800}
+.kategori-chip input{border:0;background:transparent;color:#174f90;font-size:12px;font-weight:800;width:130px;outline:none}
+.kategori-chip button{border:0;background:transparent;color:#b42318;cursor:pointer;font-size:11px;padding:2px}
+.pgk-rows{display:flex;flex-direction:column;gap:9px;margin-top:10px}
+.pgk-row{display:grid;grid-template-columns:30px minmax(0,1fr) 190px 34px;gap:8px;align-items:start}
+.pgk-row .pgk-no{padding-top:10px;font-weight:800;color:#66809c;font-size:12px;text-align:center}
+.pgk-row select{border:1px solid #c9d8e6;border-radius:9px;padding:9px 8px;font-size:12px;font-weight:700;color:#294865;background:#fff;outline:none;margin-top:1px}
+.pgk-row .pgk-del{border:1px solid #f4c5c5;background:#fff;color:#bb2525;border-radius:8px;height:34px;cursor:pointer}
+.jodoh-rows{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.jodoh-row{display:grid;grid-template-columns:30px minmax(0,1fr) 24px minmax(0,1fr) 34px;gap:8px;align-items:center}
+.jodoh-row input{border:1px solid #c9d8e6;border-radius:9px;padding:9px 10px;font-size:13px;color:#294865;outline:none}
+.jodoh-row input:focus{border-color:#1f6feb}
+.jodoh-row .jodoh-eq{text-align:center;color:#66809c;font-weight:800}
+.struct-preview{margin-top:14px;border:1px solid #d7e3ee;border-radius:11px;background:#fff;padding:12px}
+.struct-preview small{display:block;margin-bottom:8px;color:#71879c;font-weight:700}
+@media(max-width:620px){.pgk-row{grid-template-columns:24px minmax(0,1fr);}.pgk-row select{grid-column:2}.pgk-row .pgk-del{grid-column:2;justify-self:end}.jodoh-row{grid-template-columns:minmax(0,1fr) 34px}.jodoh-row .jodoh-eq{display:none}}
+
+/* ---- tabel PGK Kategori tampilan peserta (sesuai format gambar) ---- */
+.pgk-cat-instruction{font-size:14px;font-weight:600;color:#1a3452;margin:0 0 12px}
+.pgk-cat-table{width:100%;border-collapse:collapse;margin:6px 0 4px;background:#fff}
+.pgk-cat-table th{background:#dbe7f5;color:#163958;border:1px solid #b9cbdd;padding:9px 10px;font-size:12.5px;font-weight:800;text-align:center;line-height:1.35}
+.pgk-cat-table td{border:1px solid #b9cbdd;padding:9px 10px;font-size:13.5px;line-height:1.55;color:#233d59;vertical-align:top}
+.pgk-cat-table td.pgk-cat-no{width:44px;text-align:center;font-weight:700;color:#41597a}
+.pgk-cat-table th.pgk-cat-col,.pgk-cat-table td.pgk-cat-cell{width:110px;min-width:96px;text-align:center;vertical-align:middle}
+.pgk-cat-cell label{display:flex;align-items:center;justify-content:center;min-height:30px;cursor:pointer;border-radius:8px;margin:2px}
+.pgk-cat-cell input{position:absolute;opacity:0;pointer-events:none}
+.pgk-cat-cell .cat-check{width:26px;height:26px;border:1.6px solid #aabccc;border-radius:7px;display:grid;place-items:center;color:transparent;font-size:13px;background:#fff;transition:all .15s}
+.pgk-cat-cell input:checked + .cat-check{border-color:#15803d;background:#e8f9ee;color:#15803d}
+.pgk-cat-cell label:hover .cat-check{border-color:#1f6feb}
+.pgk-cat-table .rich-content{font-size:inherit}
+@media(max-width:580px){.pgk-cat-table th,.pgk-cat-table td{padding:7px 6px;font-size:12px}.pgk-cat-table th.pgk-cat-col,.pgk-cat-table td.pgk-cat-cell{min-width:64px;width:64px}}

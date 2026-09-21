@@ -52,7 +52,10 @@ var ADMIN = {
   background: null,
   brandingVersion: '',
   brandingSyncId: null,
-  brandingBusy: false
+  brandingBusy: false,
+  // PERBAIKAN 3.4: tema aktif dan daftar tema dari server (Pengaturan -> Tema).
+  tema: 'navy',
+  daftarTema: []
 };
 
 var TAB_META = {
@@ -166,23 +169,109 @@ function terapkanTemaPanel_() {
 
 /** Daftar tema profesional yang tersedia di panel. */
 var DAFTAR_TEMA_ = [
-  { id: 'navy', nama: 'Navy Profesional' },
-  { id: 'emerald', nama: 'Emerald Modern' },
-  { id: 'royal', nama: 'Royal Violet' },
-  { id: 'ocean', nama: 'Ocean Teal' },
-  { id: 'sunset', nama: 'Sunset Coral' }
+  { id: 'navy', nama: 'Navy Profesional', warna: '#1f6feb', gelap: '#0b1f36' },
+  { id: 'emerald', nama: 'Emerald Modern', warna: '#0e9f6e', gelap: '#0b3d2e' },
+  { id: 'royal', nama: 'Royal Violet', warna: '#6d28d9', gelap: '#2b1060' },
+  { id: 'ocean', nama: 'Ocean Teal', warna: '#0d9488', gelap: '#083344' },
+  { id: 'sunset', nama: 'Sunset Coral', warna: '#ea580c', gelap: '#431407' }
 ];
+
+/** Warna kartu tema (dipakai bila server tidak mengirim kode warnanya). */
+function warnaTema_(id) {
+  var bawaan = DAFTAR_TEMA_.filter(function(item) { return item.id === String(id).toLowerCase(); })[0];
+  return bawaan || { warna: '#1f6feb', gelap: '#0b1f36' };
+}
+
+/**
+ * PERBAIKAN 3.4: mengisi menu "Tema" pada Pengaturan.
+ *
+ * Sebelumnya <select id="sTema"> dibiarkan kosong di admin.html dan tidak ada
+ * kode yang mengisinya, sehingga 5 pilihan tema tidak pernah muncul. Daftar
+ * diambil dari server (result.daftarTema) bila tersedia, dengan cadangan
+ * DAFTAR_TEMA_ di sisi panel.
+ */
+function isiPilihanTema_(temaTerpilih) {
+  var pilih = document.getElementById('sTema');
+  if (!pilih) return;
+  var daftar = (ADMIN.daftarTema && ADMIN.daftarTema.length) ? ADMIN.daftarTema : DAFTAR_TEMA_;
+  var aktif = String(temaTerpilih || ADMIN.tema || pilih.value || 'navy').toLowerCase();
+  var adaAktif = daftar.some(function(item) { return String(item.id).toLowerCase() === aktif; });
+  if (!adaAktif) aktif = String(daftar[0].id).toLowerCase();
+  pilih.innerHTML = daftar.map(function(item) {
+    var id = String(item.id || '').toLowerCase();
+    var nama = escapeAdmin(item.nama || id);
+    return '<option value="' + escapeAdmin(id) + '"' + (id === aktif ? ' selected' : '') + '>' + nama + '</option>';
+  }).join('');
+  pilih.value = aktif;
+  gambarKartuTema_(daftar, aktif);
+}
+
+/**
+ * Menggambar kartu warna tema.
+ *
+ * PERBAIKAN 3.4b: <select> saja ternyata tidak terlihat jelas di panel
+ * (apalagi ketika kosong), sehingga pilihan tema ditampilkan sebagai kartu
+ * warna yang dapat diklik. Kartu dan <select> selalu disinkronkan.
+ */
+function gambarKartuTema_(daftar, aktif) {
+  var wadah = document.getElementById('temaGrid');
+  if (!wadah) return;
+  daftar = (daftar && daftar.length) ? daftar : DAFTAR_TEMA_;
+  aktif = String(aktif || ADMIN.tema || 'navy').toLowerCase();
+  wadah.innerHTML = daftar.map(function(item) {
+    var id = String(item.id || '').toLowerCase();
+    var referensi = warnaTema_(id);
+    var warna = String(item.warna || referensi.warna);
+    var gelap = String(item.gelap || referensi.gelap);
+    var terpilih = id === aktif;
+    return '<button type="button" class="tema-chip' + (terpilih ? ' aktif' : '') + '"' +
+      ' data-tema="' + escapeAdmin(id) + '" role="radio" aria-checked="' + (terpilih ? 'true' : 'false') + '"' +
+      ' style="--tema-warna:' + escapeAdmin(warna) + ';--tema-gelap:' + escapeAdmin(gelap) + '">' +
+      '<span class="tema-bulat"></span>' +
+      '<span class="tema-teks"><span class="tema-nama">' + escapeAdmin(item.nama || id) + '</span>' +
+      '<span class="tema-status">' + (terpilih ? 'Sedang dipakai' : 'Pilih tema') + '</span></span>' +
+      '<i class="fa-solid fa-circle-check tema-centang"></i></button>';
+  }).join('');
+}
+
+/** Klik kartu tema: menyorot pilihan, menyamakan select, dan pratinjau langsung. */
+function pilihKartuTema_(id) {
+  var pilih = document.getElementById('sTema');
+  var tema = String(id || '').toLowerCase();
+  if (!tema) return;
+  if (pilih) pilih.value = tema;
+  gambarKartuTema_((ADMIN.daftarTema && ADMIN.daftarTema.length) ? ADMIN.daftarTema : DAFTAR_TEMA_, tema);
+  document.documentElement.setAttribute('data-theme', tema);
+}
+
+/** Pratinjau tema langsung saat pilihan diganti (belum disimpan ke server). */
+function pratinjauTemaAdmin_() {
+  var pilih = document.getElementById('sTema');
+  if (!pilih || !pilih.value) return;
+  pilihKartuTema_(pilih.value);
+}
 
 /** Menyimpan tema pilihan admin ke server dan menerapkannya langsung. */
 async function simpanTemaAdmin_() {
   var pilih = document.getElementById('sTema');
   if (!pilih) return;
+  if (!pilih.value) {
+    isiPilihanTema_();
+    if (!pilih.value) {
+      showToast('Daftar tema belum siap. Muat ulang panel lalu coba lagi.', 'error');
+      return;
+    }
+  }
   try {
     var result = await apiWajib_('simpanTema', { tema: pilih.value });
     ADMIN.tema = result.tema || pilih.value;
+    isiPilihanTema_(ADMIN.tema);
     terapkanTemaPanel_();
     showToast(result.message || 'Tema tampilan diterapkan.', 'success');
   } catch (error) {
+    // Kembalikan tampilan ke tema resmi bila penyimpanan gagal.
+    isiPilihanTema_(ADMIN.tema);
+    terapkanTemaPanel_();
     showToast('Tema gagal disimpan: ' + (error.message || ''), 'error');
   }
 }
@@ -306,6 +395,8 @@ function bindAdminInterface() {
   ikatFilter_('cariSoal', 'input', terapkanFilterSoal_, true);
   ikatFilter_('filterSoalTipe', 'change', terapkanFilterSoal_, false);
   ikatFilter_('filterSoalStatus', 'change', terapkanFilterSoal_, false);
+  // Dropdown "Kelas sasaran" pada Bank Soal: penyaringan per soal di sisi klien.
+  ikatFilter_('filterSoalTingkat', 'change', terapkanFilterSoal_, false);
   ikatFilter_('cariMonitor', 'input', terapkanFilterMonitor_, true);
   ikatFilter_('cariPelanggaran', 'input', terapkanFilterPelanggaran_, true);
   ikatFilter_('cariHasil', 'input', terapkanFilterHasil_, true);
@@ -394,6 +485,13 @@ function bindAdminInterface() {
 
   // Nilai uraian massal
   bindClick_('saveAllEssayScores', saveAllEssayScores);
+  // Peringatan bila admin menutup/memuat ulang halaman padahal masih ada
+  // nilai uraian yang diketik tetapi belum disimpan.
+  window.addEventListener('beforeunload', function(event) {
+    if (!Object.keys(ADMIN.essayDrafts || {}).length) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
 
   // Password sendiri
 
@@ -427,6 +525,17 @@ function bindAdminInterface() {
   if (btnResetSatu) btnResetSatu.addEventListener('click', resetWaktuSatuPeserta_);
   var btnResetSemua = document.getElementById('btnResetWaktuSemua');
   if (btnResetSemua) btnResetSemua.addEventListener('click', resetWaktuSemuaPeserta_);
+  // PERBAIKAN 3.4: isi 5 pilihan tema segera saat panel dibuka, lalu
+  // pratinjau langsung ketika pilihan diganti.
+  isiPilihanTema_();
+  var pilihTema = document.getElementById('sTema');
+  if (pilihTema) pilihTema.addEventListener('change', pratinjauTemaAdmin_);
+  var gridTema = document.getElementById('temaGrid');
+  if (gridTema) gridTema.addEventListener('click', function(event) {
+    var kartu = event.target && event.target.closest ? event.target.closest('.tema-chip') : null;
+    if (!kartu) return;
+    pilihKartuTema_(kartu.getAttribute('data-tema'));
+  });
   var btnTema = document.getElementById('btnSimpanTema');
   if (btnTema) btnTema.addEventListener('click', simpanTemaAdmin_);
   document.getElementById('closeEditModal').addEventListener('click', closeEditQuestion);
@@ -451,6 +560,26 @@ function bindAdminInterface() {
     updateQuestionFormatHelp(prefix);
   });
   bindClick_('ePreviewMedia', previewEditMedia);
+
+  // REVISI 4.0: editor rich text pertanyaan + editor terstruktur
+  // PGK Kategori & Menjodohkan + hapus seluruh bank soal.
+  RTE_PERTANYAAN.f = SRich.mountEditor(document.getElementById('fPertanyaanRte'), {
+    placeholder: 'Tulis pertanyaan. Dukung tebal, miring, garis bawah, coret, tabel, grafik, gambar, dan rumus.',
+    maxlength: 12000,
+    onChange: function() { document.getElementById('fPertanyaan').value = RTE_PERTANYAAN.f.getHtml(); }
+  });
+  RTE_PERTANYAAN.e = SRich.mountEditor(document.getElementById('ePertanyaanRte'), {
+    placeholder: 'Tulis pertanyaan...',
+    maxlength: 12000,
+    onChange: function() { document.getElementById('ePertanyaan').value = RTE_PERTANYAAN.e.getHtml(); }
+  });
+  resetPgkEditor('f', null);
+  resetJodohEditor('f', null);
+  bindClick_('fPgkAddRow', function() { pgkAddRow('f', '', ''); perbaruiKunciPgk_('f'); perbaruiPratinjauPgk_('f'); });
+  bindClick_('ePgkAddRow', function() { pgkAddRow('e', '', ''); perbaruiKunciPgk_('e'); perbaruiPratinjauPgk_('e'); });
+  bindClick_('fJodohAddRow', function() { jodohAddRow('f', '', ''); });
+  bindClick_('eJodohAddRow', function() { jodohAddRow('e', '', ''); });
+  bindClick_('deleteAllQuestions', deleteAllQuestions);
 }
 
 /* ==================================================================
@@ -996,7 +1125,9 @@ function startAdminAutoRefresh() {
     if (ADMIN.activeTab === 'monitor') loadMonitor();
     if (ADMIN.activeTab === 'pelanggaran') loadViolations();
     if (ADMIN.activeTab === 'hasil') loadResults();
-    if (ADMIN.activeTab === 'uraian') loadEssays();
+    // Jangan menyegarkan Nilai Uraian selama admin masih mengisi nilai;
+    // penyegaran akan berjalan sendiri pada siklus berikutnya setelah disimpan.
+    if (ADMIN.activeTab === 'uraian' && !adaNilaiUraianDiedit_()) loadEssays();
     if (ADMIN.activeTab === 'notifikasi') loadNotifications();
     else loadNotificationBadge_();
   }, 10000);
@@ -1015,6 +1146,9 @@ function switchAdminTab(tab) {
       ]);
     return;
   }
+  // Meninggalkan tab Nilai Uraian berarti ketikan yang belum disimpan dibuang,
+  // agar tidak muncul lagi sebagai angka basi saat tab dibuka kembali.
+  if (tab !== 'uraian') ADMIN.essayDrafts = {};
   ADMIN.activeTab = tab;
   document.querySelectorAll('.sidebar-link').forEach(function(button) { button.classList.toggle('active', button.dataset.tab === tab); });
   document.querySelectorAll('.admin-pane').forEach(function(pane) { pane.classList.toggle('show', pane.id === 'pane-' + tab); });
@@ -1072,6 +1206,12 @@ function applySettingsData(setting) {
   }
   setNilaiInput_('sJudulUjian', setting.judulUjian);
   setNilaiInput_('sPetunjukUjian', setting.petunjukUjian);
+  // Nama sekolah di sidebar panel mengikuti pengaturan server, supaya tidak
+  // lagi menjadi teks statis yang ketinggalan (sebelumnya "SMP LABSCHOOL UNTAD").
+  var namaSekolah = document.getElementById('sidebarSchoolName');
+  if (namaSekolah && String(setting.sekolah || '').trim()) {
+    namaSekolah.textContent = String(setting.sekolah).trim();
+  }
   perbaruiJudulUjian_();
   perbaruiMenuKartuSoal_();
 }
@@ -1178,6 +1318,8 @@ async function loadAdminBootstrap() {
       terapkanHakAkses_();
     }
     ADMIN.tema = result.tema || ADMIN.tema || 'navy';
+    if (result.daftarTema && result.daftarTema.length) ADMIN.daftarTema = result.daftarTema;
+    isiPilihanTema_(ADMIN.tema);
     terapkanTemaPanel_();
     ADMIN.notifications = result.notifikasi || [];
     applyNotificationBadge_(result.notifikasiBelumDibaca || 0);
@@ -1204,32 +1346,43 @@ function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
     PG: '<strong>PG biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
-    PGK: '<strong>PGK:</strong> tulis 1 pernyataan per baris. Kunci mengikuti urutan pernyataan, misalnya: <strong>BENAR,SALAH,BENAR</strong>.',
+    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai.',
     PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>.',
-    MENJODOHKAN: '<strong>Menjodohkan:</strong> tulis 1 pasangan per baris dengan format ' +
-      '<strong>pernyataan = jawaban</strong>. Contoh: <em>Ibu kota Jawa Tengah = Semarang</em>. ' +
-      'Kunci jawaban terisi otomatis dari pasangan ini, dan pilihan jawaban diacak untuk peserta.',
+    MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
+      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta.',
     ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta.',
     URAIAN: '<strong>Uraian:</strong> opsi tidak diperlukan. Isi rubrik/pedoman penilaian pada kolom kunci jawaban.'
   }[type];
   document.getElementById(prefix + 'FormatHelp').innerHTML = help;
-  var optionField = document.getElementById(prefix + 'Opsi');
-  optionField.disabled = type === 'ISIAN' || type === 'URAIAN';
-  optionField.placeholder = type === 'PGK' ? 'Pernyataan 1\nPernyataan 2'
-    : (type === 'MENJODOHKAN' ? 'Ibu kota Jawa Tengah = Semarang\nIbu kota Jawa Barat = Bandung'
-       : 'Opsi 1\nOpsi 2\nOpsi 3');
 
-  // Kunci jawaban menjodohkan dibentuk otomatis dari pasangan, jadi kolomnya
-  // dikunci agar guru tidak perlu (dan tidak bisa) mengetik ulang.
+  // PGK Kategori & Menjodohkan memakai editor tabel terstruktur; kolom
+  // teks opsi/kunci disembunyikan agar tidak membingungkan.
+  var struct = type === 'PGK' || type === 'MENJODOHKAN';
+  var optionField = document.getElementById(prefix + 'Opsi');
+  optionField.disabled = type === 'ISIAN' || type === 'URAIAN' || struct;
+  var opsiWrap = document.getElementById(prefix + 'OpsiWrap');
+  if (opsiWrap) opsiWrap.style.display = struct ? 'none' : '';
+  var pgkBox = document.getElementById(prefix + 'PgkBox');
+  var jodohBox = document.getElementById(prefix + 'JodohBox');
+  if (pgkBox) pgkBox.hidden = type !== 'PGK';
+  if (jodohBox) jodohBox.hidden = type !== 'MENJODOHKAN';
+  optionField.placeholder = type === 'PGK' ? 'Pernyataan 1\\nPernyataan 2'
+    : (type === 'MENJODOHKAN' ? 'Ibu kota Jawa Tengah = Semarang\\nIbu kota Jawa Barat = Bandung'
+       : 'Opsi 1\\nOpsi 2\\nOpsi 3');
+
+  // Kunci jawaban menjodohkan & PGK Kategori dibentuk otomatis dari editor
+  // tabel, jadi kolomnya dikunci agar guru tidak perlu mengetik ulang.
   var keyField = document.getElementById(prefix + 'Kunci');
   if (keyField) {
-    var otomatis = type === 'MENJODOHKAN';
+    var otomatis = type === 'MENJODOHKAN' || type === 'PGK';
     keyField.readOnly = otomatis;
     keyField.placeholder = otomatis
-      ? 'Terisi otomatis dari pasangan pada kolom di atas.'
+      ? 'Terisi otomatis dari editor tabel di atas.'
       : 'Isi berdasarkan petunjuk format di atas.';
-    if (otomatis) perbaruiKunciJodoh_(prefix);
+    if (type === 'MENJODOHKAN') perbaruiKunciJodoh_(prefix);
+    if (type === 'PGK') perbaruiKunciPgk_(prefix);
   }
+  if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
 }
 
 /**
@@ -1248,9 +1401,272 @@ function perbaruiKunciJodoh_(prefix) {
     : '';
 }
 
+/* ==================================================================
+ * EDITOR TERSTRUKTUR: PGK KATEGORI & MENJODOHKAN (REVISI 4.0)
+ *
+ * PGK Kategori mengikuti format gambar: tabel No. | Pernyataan |
+ * kolom-kolom kategori; peserta memberi tanda centang (√) pada kolom
+ * yang sesuai. Kategori jawaban CUSTOM (tidak harus Benar/Salah).
+ * Menjodohkan memakai tabel serupa berisi pasangan pernyataan.
+ * ================================================================== */
+var PGK_STATE = { f: null, e: null };
+var JODOH_STATE = { f: null, e: null };
+var RTE_PERTANYAAN = { f: null, e: null };
+
+function pgkStateDefault() {
+  return { kategori: ['Informasi Penting', 'Dapat Diabaikan'], rows: [] };
+}
+
+function renderPgkKategoriChips(prefix) {
+  var state = PGK_STATE[prefix];
+  var wrap = document.getElementById(prefix + 'PgkKategori');
+  if (!wrap || !state) return;
+  wrap.innerHTML = '';
+  state.kategori.forEach(function(nama, idx) {
+    var chip = document.createElement('span');
+    chip.className = 'kategori-chip';
+    var inp = document.createElement('input');
+    inp.value = nama;
+    inp.maxLength = 40;
+    inp.setAttribute('aria-label', 'Nama kategori ' + (idx + 1));
+    inp.addEventListener('input', function() {
+      var lama = state.kategori[idx];
+      state.kategori[idx] = this.value;
+      state.rows.forEach(function(r) { if (r.kunci === lama) r.kunci = this.value; }, this);
+      syncPgkRowSelects(prefix);
+      perbaruiKunciPgk_(prefix);
+      perbaruiPratinjauPgk_(prefix);
+    });
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.title = 'Hapus kategori ini';
+    del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    del.addEventListener('click', function() {
+      if (state.kategori.length <= 2) { showToast('Minimal dua kategori.', 'error'); return; }
+      var buang = state.kategori.splice(idx, 1)[0];
+      state.rows.forEach(function(r) { if (r.kunci === buang) r.kunci = ''; });
+      renderPgkKategoriChips(prefix);
+      syncPgkRowSelects(prefix);
+      perbaruiKunciPgk_(prefix);
+      perbaruiPratinjauPgk_(prefix);
+    });
+    chip.appendChild(inp);
+    chip.appendChild(del);
+    wrap.appendChild(chip);
+  });
+  var add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'admin-secondary';
+  add.style.minHeight = '30px';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i> Kategori';
+  add.addEventListener('click', function() {
+    if (state.kategori.length >= 5) { showToast('Maksimal lima kategori.', 'error'); return; }
+    state.kategori.push('Kategori ' + (state.kategori.length + 1));
+    renderPgkKategoriChips(prefix);
+    syncPgkRowSelects(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  wrap.appendChild(add);
+}
+
+function syncOnePgkSelect(sel, state, rowState) {
+  var val = rowState.kunci;
+  sel.innerHTML = '<option value="">Pilih kategori kunci</option>' + state.kategori.map(function(k) {
+    return '<option value="' + SRich.escapeHtml(k) + '">' + SRich.escapeHtml(k) + '</option>';
+  }).join('');
+  if (state.kategori.indexOf(val) !== -1) sel.value = val;
+  else { sel.value = ''; rowState.kunci = ''; }
+}
+function syncPgkRowSelects(prefix) {
+  var state = PGK_STATE[prefix];
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  if (!state || !rowsWrap) return;
+  var sels = rowsWrap.querySelectorAll('select');
+  state.rows.forEach(function(r, i) { if (sels[i]) syncOnePgkSelect(sels[i], state, r); });
+}
+function pgkRenumber(prefix, wrapId) {
+  var rowsWrap = document.getElementById(wrapId || (prefix + 'PgkRows'));
+  var nos = rowsWrap.querySelectorAll('.pgk-no');
+  for (var i = 0; i < nos.length; i++) nos[i].textContent = String(i + 1);
+}
+
+function pgkAddRow(prefix, html, kunci) {
+  var state = PGK_STATE[prefix];
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  var row = document.createElement('div');
+  row.className = 'pgk-row';
+  var no = document.createElement('div'); no.className = 'pgk-no';
+  var host = document.createElement('div');
+  var sel = document.createElement('select');
+  sel.title = 'Kunci kategori pernyataan ini';
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'pgk-del';
+  del.title = 'Hapus pernyataan';
+  del.innerHTML = '<i class="fa-solid fa-trash"></i>';
+  row.appendChild(no); row.appendChild(host); row.appendChild(sel); row.appendChild(del);
+  rowsWrap.appendChild(row);
+
+  var rowState = { html: html || '', kunci: kunci || '' };
+  state.rows.push(rowState);
+  var editor = SRich.mountEditor(host, {
+    compact: true,
+    placeholder: 'Tulis pernyataan (dukung tebal/miring/tabel/rumus)...',
+    onChange: function() {
+      rowState.html = editor.getHtml();
+      perbaruiPratinjauPgk_(prefix);
+    }
+  });
+  rowState._editor = editor;
+  editor.setHtml(rowState.html);
+  sel.addEventListener('change', function() {
+    rowState.kunci = sel.value;
+    perbaruiKunciPgk_(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  del.addEventListener('click', function() {
+    if (state.rows.length <= 1) { showToast('Minimal satu pernyataan.', 'error'); return; }
+    var i = state.rows.indexOf(rowState);
+    state.rows.splice(i, 1);
+    if (row.parentNode) row.parentNode.removeChild(row);
+    pgkRenumber(prefix);
+    perbaruiKunciPgk_(prefix);
+    perbaruiPratinjauPgk_(prefix);
+  });
+  syncOnePgkSelect(sel, state, rowState);
+  pgkRenumber(prefix);
+  return rowState;
+}
+
+function resetPgkEditor(prefix, data) {
+  PGK_STATE[prefix] = {
+    kategori: (data && data.kategori && data.kategori.length >= 2 ? data.kategori : ['Informasi Penting', 'Dapat Diabaikan']).slice(),
+    rows: []
+  };
+  var rowsWrap = document.getElementById(prefix + 'PgkRows');
+  if (rowsWrap) rowsWrap.innerHTML = '';
+  renderPgkKategoriChips(prefix);
+  var rows = data && data.rows && data.rows.length ? data.rows : [{ html: '', kunci: '' }];
+  rows.forEach(function(r) { pgkAddRow(prefix, r.html, r.kunci); });
+  perbaruiKunciPgk_(prefix);
+  perbaruiPratinjauPgk_(prefix);
+}
+
+function perbaruiKunciPgk_(prefix) {
+  var keyField = document.getElementById(prefix + 'Kunci');
+  var state = PGK_STATE[prefix];
+  if (!keyField || !state) return;
+  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(',');
+}
+
+/** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */
+function perbaruiPratinjauPgk_(prefix) {
+  var prev = document.getElementById(prefix + 'PgkPreview');
+  var state = PGK_STATE[prefix];
+  if (!prev || !state) return;
+  var jawaban = {};
+  state.rows.forEach(function(r, i) { if (r.kunci) jawaban[String(i)] = r.kunci; });
+  prev.innerHTML = SRich.pgkTableHtml({
+    kategori: state.kategori.slice(),
+    statements: state.rows.map(function(r, i) {
+      return { id: String(i), html: r.html || '(pernyataan belum ditulis)' };
+    }),
+    jawaban: jawaban,
+    interaksi: false
+  });
+  SRich.typesetMath(prev);
+}
+
+/* ------------------- editor pasangan menjodohkan ------------------- */
+function jodohAddRow(prefix, text, pasangan) {
+  var state = JODOH_STATE[prefix];
+  var wrap = document.getElementById(prefix + 'JodohRows');
+  var row = document.createElement('div');
+  row.className = 'jodoh-row';
+  var no = document.createElement('div'); no.className = 'pgk-no';
+  var i1 = document.createElement('input');
+  i1.placeholder = 'Pernyataan (kolom kiri)'; i1.maxLength = 500;
+  var eq = document.createElement('div'); eq.className = 'jodoh-eq'; eq.textContent = '=';
+  var i2 = document.createElement('input');
+  i2.placeholder = 'Pasangan (kolom kanan)'; i2.maxLength = 500;
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'pgk-del';
+  del.title = 'Hapus pasangan';
+  del.innerHTML = '<i class="fa-solid fa-trash"></i>';
+  row.appendChild(no); row.appendChild(i1); row.appendChild(eq); row.appendChild(i2); row.appendChild(del);
+  wrap.appendChild(row);
+  var rowState = { text: text || '', pasangan: pasangan || '' };
+  state.rows.push(rowState);
+  i1.value = rowState.text;
+  i2.value = rowState.pasangan;
+  i1.addEventListener('input', function() { rowState.text = this.value; perbaruiKunciJodoh_(prefix); });
+  i2.addEventListener('input', function() { rowState.pasangan = this.value; perbaruiKunciJodoh_(prefix); });
+  del.addEventListener('click', function() {
+    if (state.rows.length <= 1) { showToast('Minimal satu pasangan.', 'error'); return; }
+    var i = state.rows.indexOf(rowState);
+    state.rows.splice(i, 1);
+    if (row.parentNode) row.parentNode.removeChild(row);
+    pgkRenumber(prefix, prefix + 'JodohRows');
+    perbaruiKunciJodoh_(prefix);
+  });
+  pgkRenumber(prefix, prefix + 'JodohRows');
+  perbaruiKunciJodoh_(prefix);
+  return rowState;
+}
+
+function resetJodohEditor(prefix, rows) {
+  JODOH_STATE[prefix] = { rows: [] };
+  var wrap = document.getElementById(prefix + 'JodohRows');
+  if (wrap) wrap.innerHTML = '';
+  var list = rows && rows.length ? rows : [{ text: '', pasangan: '' }];
+  list.forEach(function(r) { jodohAddRow(prefix, r.text, r.pasangan); });
+  perbaruiKunciJodoh_(prefix);
+}
+
+/** Validasi editor terstruktur & pertanyaan sebelum disimpan. */
+function validateSoalStruct_(prefix) {
+  var tipe = document.getElementById(prefix + 'Tipe').value;
+  var rte = RTE_PERTANYAAN[prefix];
+  if (rte && rte.isEmpty()) return 'Pertanyaan wajib diisi (mis. kalimat perintah seperti pada contoh PGK Kategori).';
+  if (tipe === 'PGK') {
+    var st = PGK_STATE[prefix];
+    var unik = [];
+    for (var c = 0; c < st.kategori.length; c++) {
+      var nm = String(st.kategori[c] || '').trim();
+      if (!nm) return 'Nama kategori tidak boleh kosong.';
+      if (/[|,]/.test(nm)) return 'Nama kategori tidak boleh mengandung koma atau tanda pipa (|): "' + nm + '".';
+      if (unik.indexOf(nm) !== -1) return 'Nama kategori harus berbeda satu sama lain: "' + nm + '".';
+      unik.push(nm);
+    }
+    if (!st.rows.length) return 'Minimal satu pernyataan.';
+    for (var j = 0; j < st.rows.length; j++) {
+      if (!SRich.stripHtml(st.rows[j].html).trim()) return 'Pernyataan nomor ' + (j + 1) + ' masih kosong.';
+      if (!st.rows[j].kunci) return 'Kunci kategori untuk pernyataan nomor ' + (j + 1) + ' belum dipilih.';
+    }
+  }
+  if (tipe === 'MENJODOHKAN') {
+    var jd = JODOH_STATE[prefix];
+    var valid = jd.rows.filter(function(r) { return r.text.trim() && r.pasangan.trim(); });
+    if (valid.length < 2) return 'Menjodohkan membutuhkan minimal dua pasangan pernyataan yang lengkap.';
+  }
+  return '';
+}
+
 function optionsFromField(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   if (type === 'ISIAN' || type === 'URAIAN') return [];
+  if (type === 'PGK') {
+    var st = PGK_STATE[prefix];
+    if (!st) return [];
+    return st.rows.map(function(r) { return { text: r.html }; });
+  }
+  if (type === 'MENJODOHKAN') {
+    var jd = JODOH_STATE[prefix];
+    if (jd) {
+      return jd.rows
+        .filter(function(r) { return r.text.trim() && r.pasangan.trim(); })
+        .map(function(r) { return { text: r.text.trim(), pasangan: r.pasangan.trim() }; });
+    }
+  }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
     .map(function(line) { return line.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
     .filter(Boolean);
@@ -1345,7 +1761,7 @@ function labelSumberMedia_(sumber) {
 
 /** Label tipe soal yang ramah dibaca pada kotak dialog. */
 function labelTipeSoal_(tipe) {
-  return { PG: 'PG biasa', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
+  return { PG: 'PG biasa', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
            ISIAN: 'Isian', URAIAN: 'Uraian' }[String(tipe || '').toUpperCase()] || String(tipe || '-');
 }
 
@@ -1356,7 +1772,7 @@ function labelTipeSoal_(tipe) {
 function labelTipeSoalResmi_(tipe) {
   return {
     PG: 'Pilihan Ganda',
-    PGK: 'Pilihan Ganda Kompleks (Benar/Salah)',
+    PGK: 'PGK Kategori',
     PGK_MCMA: 'Pilihan Ganda Kompleks (Jawaban Ganda)',
     MENJODOHKAN: 'Menjodohkan',
     ISIAN: 'Isian Singkat',
@@ -1378,27 +1794,26 @@ async function mintaKosongkanMedia_(box) {
     return;
   }
   var setuju = await konfirmasi_('Kosongkan ' + nama + ' stimulus yang sudah diproses? ' +
-    'Berkasnya juga akan dihapus dari folder Google Drive aplikasi.',
+    'Berkasnya juga akan dihapus dari penyimpanan aplikasi (Supabase Storage) bila tidak dipakai soal lain.',
     { judul: 'Kosongkan ' + (kind === 'video' ? 'Video' : 'Gambar'), nada: 'warn', teksOk: 'Ya, Kosongkan' });
   if (!setuju) return;
 
   // Berkas dibuang lebih dulu selagi URL-nya masih diketahui.
   var hapus = { dihapus: false, message: '' };
   try {
-    hapus = await adminApi('hapusMediaStimulus', {
-      url: nilai,
-      jenis: kind,
-      // Kotak form soal baru belum punya id; modal edit menyimpannya di dataset.
+    /* [SIADO v5] berkas dihapus dari Supabase Storage langsung (siadoHapusMedia, policy RLS storage.objects) */
+    hapus = await window.siadoHapusMedia(nilai, {
+      jenis: kind, adminToken: ADMIN.token,
       idSoal: (box.dataset && box.dataset.mediaSoalId) || ''
     }) || hapus;
   } catch (error) {
-    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Drive: ' + (error.message || 'kesalahan jaringan') };
+    hapus = { dihapus: false, message: 'Berkas gagal dihapus dari Storage: ' + (error.message || 'kesalahan jaringan') };
   }
 
   kosongkanMediaBox_(box);
   await hasilSukses_('Kotak Dikosongkan',
     'Media ' + nama + ' pada soal ini telah dilepas.', [
-      { label: 'Berkas Drive', nilai: hapus.dihapus
+      { label: 'Berkas Storage', nilai: hapus.dihapus
         ? 'Dihapus' + (hapus.nama ? ' — ' + hapus.nama : '') : (hapus.message || 'Tidak ada yang dihapus') }
     ]);
 }
@@ -1406,6 +1821,8 @@ async function mintaKosongkanMedia_(box) {
 function kosongkanMediaBox_(box) {
   var key = box.dataset.mediaBox;
   MEDIA_STATE[key].url = '';
+  MEDIA_STATE[key].berkasTerunggah = null;
+  MEDIA_STATE[key].urlBerkas = '';
   box.querySelector('[data-media-value]').value = '';
   var fileInput = box.querySelector('[data-media-file]');
   if (fileInput) fileInput.value = '';
@@ -1474,7 +1891,17 @@ async function prosesMediaBox_(box, diam) {
         return;
       }
       MEDIA_FOLDER_TERAKHIR = '';
-      url = await unggahFileMedia_(box, file, kind);
+      if (state.berkasTerunggah === file && state.urlBerkas) {
+        // Berkas yang sama sudah diunggah saat dipilih (event change) — pakai ulang URL-nya,
+        // jangan unggah dua kali ke Storage.
+        url = state.urlBerkas;
+        MEDIA_FOLDER_TERAKHIR = state.folderBerkas || '';
+      } else {
+        url = await unggahFileMedia_(box, file, kind);
+        state.berkasTerunggah = file;
+        state.urlBerkas = url;
+        state.folderBerkas = MEDIA_FOLDER_TERAKHIR;
+      }
     } else if (sumber === 'drive') {
       var driveLink = box.querySelector('[data-media-drive]').value.trim();
       if (!driveLink) {
@@ -1509,7 +1936,7 @@ async function prosesMediaBox_(box, diam) {
         { label: 'Sumber', nilai: labelSumberMedia_(sumber) },
         { label: 'Jenis', nilai: kind === 'video' ? 'Video' : 'Gambar' }
       ].concat(MEDIA_FOLDER_TERAKHIR
-        ? [{ label: 'Folder Drive', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
+        ? [{ label: 'Penyimpanan', nilai: MEDIA_FOLDER_TERAKHIR }] : []));
     MEDIA_FOLDER_TERAKHIR = '';
   } catch (error) {
     mediaProgress_(box, null);
@@ -1531,54 +1958,25 @@ var MEDIA_FOLDER_TERAKHIR = '';
  * agar batas payload Apps Script tidak terlampaui.
  */
 async function unggahFileMedia_(box, file, kind) {
+  /* [SIADO v5] Upload langsung ke Supabase Storage (siadoUploadMedia, policy RLS storage.objects — tanpa Edge Function)
+   * (pengganti uploadMediaInline / getUploadTicket / finalisasiUploadDrive Google Drive). */
   var maxImageMb = Math.min(25, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumUploadMb || 5)));
-  var maxVideoMb = Math.min(1024, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumVideoMb || 1024)));
-
+  var maxVideoMb = Math.min(50, Math.max(1, Number(ADMIN.settings && ADMIN.settings.maksimumVideoMb || 50)));
   if (kind === 'gambar') {
     if (!/^image\//i.test(file.type)) throw new Error('Pilih berkas gambar (PNG, JPG, GIF, atau WEBP).');
     if (file.size > maxImageMb * 1024 * 1024) throw new Error('Ukuran gambar melebihi ' + maxImageMb + ' MB.');
   } else {
     if (!/^video\//i.test(file.type)) throw new Error('Pilih berkas video (MP4, WEBM, OGG, atau MOV).');
-    if (file.size > maxVideoMb * 1024 * 1024) throw new Error('Ukuran video melebihi ' + maxVideoMb + ' MB (maksimal 1 GB).');
+    if (file.size > maxVideoMb * 1024 * 1024) throw new Error('Ukuran video melebihi ' + maxVideoMb + ' MB (batas paket Supabase Free). Unggah ke YouTube (unlisted) lalu tempel tautannya.');
   }
-
-  var inlineLimit = kind === 'gambar' ? maxImageMb * 1024 * 1024 : 8 * 1024 * 1024;
-  if (file.size <= inlineLimit) {
-    mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Mengunggah ' + escapeAdmin(file.name) + '...', 'info');
-    mediaProgress_(box, 35);
-    var dataUrl = await readFileAsDataUrl(file);
-    mediaProgress_(box, 70);
-    var result = await adminApi('uploadMediaInline', {
-      fileName: file.name,
-      mimeType: file.type,
-      jenis: kind,
-      base64: dataUrl.split(',')[1]
-    });
-    mediaProgress_(box, 100);
-    setTimeout(function() { mediaProgress_(box, null); }, 700);
-    if (!result.success) throw new Error(result.message || 'Upload gagal.');
-    // Server melaporkan folder tujuan agar dapat ditampilkan ke pengguna.
-    MEDIA_FOLDER_TERAKHIR = result.folder || '';
-    return result.url;
-  }
-
-  // Upload besar: minta tiket resumable lalu kirim langsung ke Google Drive.
-  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyiapkan upload video besar...', 'info');
-  var ticket = await adminApi('getUploadTicket', {
-    fileName: file.name,
-    mimeType: file.type,
-    jenis: kind,
-    ukuranBytes: file.size
-  });
-  if (!ticket.success) throw new Error(ticket.message || 'Tiket upload gagal dibuat.');
-
-  var fileId = await kirimResumable_(box, file, ticket);
-  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyelesaikan berkas di Google Drive...', 'info');
-  var finalize = await adminApi('finalisasiUploadDrive', { fileId: fileId, jenis: kind, fileName: file.name });
-  if (!finalize.success) throw new Error(finalize.message || 'Finalisasi upload gagal.');
-  MEDIA_FOLDER_TERAKHIR = finalize.folder || '';
-  mediaProgress_(box, null);
-  return finalize.url;
+  mediaStatus_(box, '<i class="fa-solid fa-circle-notch fa-spin"></i> Mengunggah ' + escapeAdmin(file.name) + '...', 'info');
+  mediaProgress_(box, 30);
+  var result = await window.siadoUploadMedia(file, { jenis: kind, adminToken: ADMIN.token });
+  mediaProgress_(box, 100);
+  setTimeout(function() { mediaProgress_(box, null); }, 700);
+  if (!result || !result.success) throw new Error((result && result.message) || 'Upload gagal.');
+  MEDIA_FOLDER_TERAKHIR = 'Supabase Storage / ' + (result.bucket || 'media-soal');
+  return result.url;
 }
 
 function kirimResumable_(box, file, ticket) {
@@ -1617,20 +2015,60 @@ function formatUkuran_(bytes) {
 }
 
 /* ====================== PAYLOAD SOAL ====================== */
+/**
+ * Menormalkan nilai "kelas sasaran soal" (tingkat) menjadi VII / VIII / IX /
+ * SEMUA. Nilai kosong, tidak dikenal, atau penulisan lain (7, kelas viii,
+ * rombel "VIII A") dipetakan ke SEMUA agar bank soal tidak tersimpan dengan
+ * label kelas yang tidak dikenali server.
+ */
+function tingkatDariNilai_(nilai) {
+  var teks = String(nilai === undefined || nilai === null ? '' : nilai).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (/^(VII|7|TUJUH|KETUJUH)$/.test(teks)) return 'VII';
+  if (/^(VIII|8|DELAPAN|KEDELAPAN)$/.test(teks)) return 'VIII';
+  if (/^(IX|9|SEMBILAN|KESEMBILAN)$/.test(teks)) return 'IX';
+  return 'SEMUA';
+}
+
+/** Label singkat tingkat untuk rincian hasil simpan. */
+function labelTingkat_(tingkat) {
+  var bersih = tingkatDariNilai_(tingkat);
+  return bersih === 'SEMUA' ? 'Semua kelas' : 'Kelas ' + bersih;
+}
+
 async function buildQuestionPayload(prefix) {
   var media = await resolveQuestionMedia(prefix);
+  var tipe = document.getElementById(prefix + 'Tipe').value;
+  // Pertanyaan kini berupa HTML kaya dari editor; untuk PGK Kategori daftar
+  // kategori disematkan sebagai penanda tersembunyi agar tampilan peserta
+  // selalu sama dengan susunan di panel.
+  var rte = RTE_PERTANYAAN[prefix];
+  var pertanyaanHtml = rte ? rte.getHtml() : document.getElementById(prefix + 'Pertanyaan').value;
+  if (tipe === 'PGK') {
+    pertanyaanHtml = SRich.pgkMarkerEmbed(pertanyaanHtml, (PGK_STATE[prefix] || { kategori: [] }).kategori);
+  } else {
+    pertanyaanHtml = String(pertanyaanHtml)
+      .replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '')
+      .replace(/<span[^>]*data-siado-pgk-kategori[^>]*>\s*<\/span>/gi, '');
+  }
+  var kunci = document.getElementById(prefix + 'Kunci').value;
+  if (tipe === 'PGK') {
+    kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
+  }
   return {
     id_soal: prefix === 'e' ? document.getElementById('eId').value : undefined,
-    tipe: document.getElementById(prefix + 'Tipe').value,
+    tipe: tipe,
     poin: document.getElementById(prefix + 'Poin').value,
-    pertanyaan: document.getElementById(prefix + 'Pertanyaan').value,
+    pertanyaan: pertanyaanHtml,
     opsi: optionsFromField(prefix),
-    kunci_jawaban: document.getElementById(prefix + 'Kunci').value,
+    kunci_jawaban: kunci,
     stimulus_deskripsi: nilaiInput_(prefix + 'DeskripsiStimulus'),
     stimulus_gambar: media.gambar,
     stimulus_alt: document.getElementById(prefix + 'ImageAlt').value,
     stimulus_video: media.video,
     stimulus_video_alt: document.getElementById(prefix + 'VideoAlt').value,
+    /* Kelas sasaran soal ini saja. Dikirim eksplisit setiap simpan supaya
+       server tidak perlu menebak/mewarisi tingkat soal lain. */
+    tingkat: tingkatDariNilai_(nilaiInput_(prefix + 'Tingkat')),
     aktif: document.getElementById(prefix + 'Aktif').checked
   };
 }
@@ -1703,6 +2141,11 @@ async function previewEditMedia() {
 
 async function saveNewQuestion() {
   if (ADMIN.operationBusy.addQuestion) return;
+  var galatStruktur = validateSoalStruct_('f');
+  if (galatStruktur) {
+    await hasilGagal_('Soal Gagal Disimpan', galatStruktur);
+    return;
+  }
   ADMIN.operationBusy.addQuestion = true;
   setFormBusy('addQuestionForm', true);
   try {
@@ -1712,6 +2155,7 @@ async function saveNewQuestion() {
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     await hasilSukses_('Soal Tersimpan', result.message || 'Soal baru berhasil ditambahkan ke bank soal.', [
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
+      { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) },
       { label: 'Poin', nilai: String(payload.poin || '-') },
       { label: 'Status', nilai: payload.aktif ? 'Aktif' : 'Nonaktif' }
     ]);
@@ -1726,6 +2170,12 @@ async function saveNewQuestion() {
 function clearQuestionForm(prefix) {
   document.getElementById(prefix + 'Poin').value = '10';
   document.getElementById(prefix + 'Pertanyaan').value = '';
+  if (RTE_PERTANYAAN[prefix]) RTE_PERTANYAAN[prefix].setHtml('');
+  resetPgkEditor(prefix, null);
+  resetJodohEditor(prefix, null);
+  updateQuestionFormatHelp(prefix);
+  var tingkat = document.getElementById(prefix + 'Tingkat');
+  if (tingkat) tingkat.value = 'SEMUA';
   var deskripsi = document.getElementById(prefix + 'DeskripsiStimulus');
   if (deskripsi) deskripsi.value = '';
   document.getElementById(prefix + 'Opsi').value = '';
@@ -1744,25 +2194,32 @@ async function loadQuestions() {
   try {
     var result = await adminApi('getAllSoal', {});
     if (!guardAdminResult(result)) return;
-    ADMIN.questions = result.soal || [];
-    renderQuestionTable(ADMIN.questions);
+    ADMIN.questions = result.soal || result.data || [];
+    // Sumber data filter ikut diperbarui, supaya daftar yang tampil dan daftar yang dipakai
+    // tombol Edit/Hapus selalu sama (sebelumnya filter memakai salinan lama dari bootstrap).
+    DATA_MENTAH.soal = ADMIN.questions;
+    terapkanFilterSoal_();
   } catch (error) {
     setTableMessage('questionTable', 'Gagal memuat bank soal.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.questions = false; }
 }
 
-/** Menyaring bank soal berdasarkan kata kunci, tipe, dan status. */
+/** Menyaring bank soal berdasarkan kata kunci, tipe, kelas sasaran, dan status. */
 function terapkanFilterSoal_() {
   var kueri = kueriFilter_('cariSoal');
   var tipe = nilaiFilter_('filterSoalTipe');
   var status = nilaiFilter_('filterSoalStatus');
+  var tingkat = nilaiFilter_('filterSoalTingkat');
   var rows = DATA_MENTAH.soal.slice();
   if (tipe) rows = rows.filter(function(q) { return String(q.tipe || '') === tipe; });
   if (status) rows = rows.filter(function(q) { return status === 'aktif' ? !!q.aktif : !q.aktif; });
+  // Filter kelas sasaran bersifat per soal: soal tanpa tingkat dianggap SEMUA.
+  if (tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === tingkat; });
   rows = saringKata_(rows, kueri, function(q) {
-    return [q.id_soal, q.tipe, q.pertanyaan, q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi].join(' ');
+    return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
+      tingkatDariNilai_(q.tingkat)].join(' ');
   });
-  if (!rows.length && adaFilterAktif_(kueri, tipe, status)) {
+  if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat)) {
     tampilTidakDitemukan_('questionTable', kueri, DATA_MENTAH.soal.length + ' soal tersimpan di bank soal.');
     return;
   }
@@ -1774,11 +2231,15 @@ function renderQuestionTable(rows) {
     setTableMessage('questionTable', 'Belum ada soal. Tambahkan soal pertama Anda.', 'fa-inbox');
     return;
   }
-  var html = '<table class="admin-table"><thead><tr><th>ID</th><th>Tipe</th><th>Pertanyaan</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+  var html = '<table class="admin-table"><thead><tr><th>ID</th><th>Tipe</th><th>Pertanyaan</th><th>Kelas</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(question) {
+    var tingkatSoal = tingkatDariNilai_(question.tingkat);
     html += '<tr><td><strong>#' + escapeAdmin(question.id_soal) + '</strong></td>' +
       '<td>' + typeBadge(question.tipe) + '</td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(question.pertanyaan, 150)) + '</div></td>' +
+      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</div></td>' +
+      // Kolom kelas sasaran: memudahkan memastikan satu perubahan kelas tidak
+      // ikut menyeret soal nomor lain.
+      '<td>' + badge(tingkatSoal === 'SEMUA' ? 'SEMUA' : tingkatSoal, tingkatSoal === 'SEMUA' ? 'gray' : 'blue') + '</td>' +
       '<td><div class="cell-wrap"><strong>Opsi:</strong> ' + escapeAdmin(optionSummary(question)) + '<br><strong>Kunci:</strong> ' + escapeAdmin(readableKey(question)) + '</div></td>' +
       '<td>' + stimulusBadges_(question) + '</td>' +
       '<td>' + escapeAdmin(question.poin) + '</td>' +
@@ -1792,7 +2253,7 @@ function renderQuestionTable(rows) {
 }
 
 function openEditQuestion(id) {
-  var question = ADMIN.questions.filter(function(item) { return String(item.id_soal) === String(id); })[0];
+  var question = ADMIN.questions.concat(DATA_MENTAH.soal || []).filter(function(item) { return String(item.id_soal) === String(id); })[0];
   if (!question) {
     hasilGagal_('Soal Tidak Ditemukan', 'Data soal #' + id + ' tidak ada pada daftar. Tekan Refresh lalu coba lagi.');
     return;
@@ -1800,8 +2261,32 @@ function openEditQuestion(id) {
   document.getElementById('eId').value = question.id_soal;
   document.getElementById('eTipe').value = question.tipe;
   document.getElementById('ePoin').value = question.poin;
+  document.getElementById('eTingkat').value = tingkatDariNilai_(question.tingkat);
   document.getElementById('ePertanyaan').value = question.pertanyaan;
+  if (RTE_PERTANYAAN.e) RTE_PERTANYAAN.e.setHtml(question.pertanyaan);
   setNilaiInput_('eDeskripsiStimulus', question.stimulus_deskripsi || '');
+  // Isi editor terstruktur PGK Kategori & Menjodohkan dari data soal tersimpan.
+  var tipeSoal = String(question.tipe || '').toUpperCase();
+  if (tipeSoal === 'PGK') {
+    var infoKat = SRich.pgkCategories(question);
+    var kunciObj = tryJson(question.kunci_jawaban, question.kunci_jawaban);
+    var rowsData = (question.opsi || []).map(function(op, idx) {
+      var k = '';
+      if (kunciObj && typeof kunciObj === 'object' && !Array.isArray(kunciObj)) {
+        k = String(kunciObj[op.id !== undefined ? op.id : String(idx)] || '');
+      }
+      if (!k && typeof question.kunci_jawaban === 'string' && question.kunci_jawaban.indexOf(',') !== -1) {
+        k = String(question.kunci_jawaban.split(',')[idx] || '').trim();
+      }
+      return { html: op.text || '', kunci: k };
+    });
+    resetPgkEditor('e', { kategori: infoKat.kategori, rows: rowsData.length ? rowsData : null });
+  }
+  if (tipeSoal === 'MENJODOHKAN') {
+    resetJodohEditor('e', (question.opsi || []).map(function(op) {
+      return { text: SRich.stripHtml(op.text || ''), pasangan: SRich.stripHtml(op.pasangan || '') };
+    }));
+  }
   document.getElementById('eOpsi').value = optionsToLines(question);
   document.getElementById('eKunci').value = editableKey(question);
   document.getElementById('eImageLink').value = question.stimulus_gambar || '';
@@ -1824,6 +2309,11 @@ function closeEditQuestion() { document.getElementById('editQuestionModal').clas
 
 async function saveEditedQuestion() {
   if (ADMIN.operationBusy.editQuestion) return;
+  var galatStruktur = validateSoalStruct_('e');
+  if (galatStruktur) {
+    await hasilGagal_('Perubahan Gagal Disimpan', galatStruktur);
+    return;
+  }
   ADMIN.operationBusy.editQuestion = true;
   setFormBusy('editQuestionForm', true);
   try {
@@ -1834,6 +2324,7 @@ async function saveEditedQuestion() {
     await hasilSukses_('Perubahan Tersimpan', result.message || 'Perubahan soal berhasil disimpan.', [
       { label: 'Nomor soal', nilai: '#' + String(payload.id_soal || '-') },
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
+      { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) + ' (hanya soal ini)' },
       { label: 'Status', nilai: payload.aktif ? 'Aktif' : 'Nonaktif' }
     ]);
   } catch (error) {
@@ -1854,7 +2345,7 @@ async function deleteQuestion(id) {
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     var rincianHapus = [{ label: 'Nomor soal', nilai: '#' + String(id) }];
     if (result.berkasDihapus && result.berkasDihapus.length) {
-      rincianHapus.push({ label: 'Berkas Drive dihapus', nilai: result.berkasDihapus.join(', ') });
+      rincianHapus.push({ label: 'Berkas Storage dihapus', nilai: result.berkasDihapus.join(', ') });
     }
     if (result.berkasDilewati && result.berkasDilewati.length) {
       rincianHapus.push({ label: 'Tidak ikut dihapus', nilai: result.berkasDilewati.join('; ') });
@@ -1906,9 +2397,9 @@ function optionSummary(question) {
   if (!question.opsi || !question.opsi.length) return '-';
   return question.opsi.map(function(option, index) {
     var marker = option.label || option.id || String(index + 1);
-    var teks = truncate(option.text || '', 45);
+    var teks = truncate(SRich.stripHtml(option.text || ''), 45);
     // Menjodohkan menampilkan pasangannya sekaligus agar mudah diperiksa.
-    if (option.pasangan) teks += ' = ' + truncate(option.pasangan, 35);
+    if (option.pasangan) teks += ' = ' + truncate(SRich.stripHtml(option.pasangan), 35);
     return marker + '. ' + teks;
   }).join(' | ');
 }
@@ -2001,12 +2492,22 @@ function terapkanFilterPelanggaran_() {
   renderViolationTable(rows);
 }
 
+/** Badge jenis pelanggaran; indikasi AI disorot khusus untuk pengawas. */
+function badgeJenisPelanggaran_(row) {
+  var jenis = String(row.jenis || '');
+  var label = String(row.jenis_label || jenis.replace(/_/g, ' ') || '-');
+  if (/indikasi_ai|indikasi ai/i.test(jenis + label)) {
+    return '<span class="badge red"><i class="fa-solid fa-robot"></i> INDIKASI AI</span> ' + escapeAdmin(label);
+  }
+  return escapeAdmin(label);
+}
+
 function renderViolationTable(rows) {
   if (!rows.length) { setTableMessage('violationTable', 'Belum ada pelanggaran tercatat.', 'fa-shield-heart'); return; }
   var html = '<table class="admin-table"><thead><tr><th>Waktu</th><th>Peserta</th><th>Kelas</th><th>Jenis Pelanggaran</th><th>Detail</th><th>Ke-</th><th>Tindakan</th><th>Email</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td>' + escapeAdmin(formatDate(row.timestamp)) + '</td><td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + escapeAdmin(row.jenis_label) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
+      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
       '<td>' + badge(String(row.jumlah), row.jumlah >= 3 ? 'red' : 'amber') + '</td><td>' + statusBadge(row.tindakan) + '</td><td><div class="cell-wrap">' + escapeAdmin(row.email_status || '-') + '</div></td></tr>';
   });
   html += '</tbody></table>';
@@ -2187,6 +2688,53 @@ async function loadEssays() {
   }
 }
 
+/* ==================================================================
+ * NILAI URAIAN — DRAFT KETIKAN ADMIN
+ *
+ * Tabel Nilai Uraian disegarkan otomatis setiap 10 detik. Sebelumnya
+ * renderEssayTable() menulis ulang innerHTML tabel, sehingga angka yang
+ * sedang diketik admin lenyap dan kembali ke nilai tersimpan di server
+ * (0 bila belum dinilai) — bahkan sebelum tombol Simpan ditekan.
+ * Ketikan kini disimpan sebagai draft per jawaban dan dipulihkan setiap
+ * kali tabel digambar ulang. Penyegaran otomatis 10 detik juga dilewati
+ * selama masih ada nilai yang belum disimpan.
+ * ================================================================== */
+
+/** Kunci unik satu baris jawaban uraian. */
+function kunciBarisUraian_(sessionId, idSoal) {
+  return String(sessionId === undefined || sessionId === null ? '' : sessionId) +
+    '#' + String(idSoal === undefined || idSoal === null ? '' : idSoal);
+}
+
+/** Benar bila ada kolom nilai yang sedang diketik atau belum disimpan. */
+function adaNilaiUraianDiedit_() {
+  var aktif = document.activeElement;
+  if (aktif && aktif.classList && aktif.classList.contains('essay-score')) return true;
+  return Object.keys(ADMIN.essayDrafts || {}).length > 0;
+}
+
+/** Memasang kembali ketikan admin setelah tabel digambar ulang. */
+function pulihkanDraftUraian_() {
+  var draft = ADMIN.essayDrafts || {};
+  if (!Object.keys(draft).length) return;
+  document.querySelectorAll('#essayTable tbody tr').forEach(function(tr) {
+    var tombol = tr.querySelector('[data-grade-session]');
+    var input = tr.querySelector('.essay-score');
+    if (!tombol || !input) return;
+    var kunci = kunciBarisUraian_(tombol.dataset.gradeSession, tombol.dataset.gradeQuestion);
+    if (!(kunci in draft)) return;
+    input.value = draft[kunci];
+    tr.classList.add('essay-row-draft');
+    var penanda = tr.querySelector('.essay-draft-flag');
+    if (penanda) penanda.style.display = 'inline';
+  });
+}
+
+/** Membuang draft satu jawaban setelah nilainya tersimpan di server. */
+function hapusDraftUraian_(sessionId, idSoal) {
+  delete ADMIN.essayDrafts[kunciBarisUraian_(sessionId, idSoal)];
+}
+
 /** Menyaring jawaban uraian berdasarkan nama atau username peserta. */
 function terapkanFilterUraian_() {
   var kueri = kueriFilter_('cariUraian');
@@ -2208,11 +2756,18 @@ function renderEssayTable(rows) {
   }
   var html = '<table class="admin-table"><thead><tr><th>Peserta</th><th>Soal / Rubrik</th><th>Jawaban</th><th>Status</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
-    var numericScore = isFinite(Number(row.nilai)) ? Number(row.nilai) : '';
+    // Nilai yang belum diisi (null/undefined/kosong) harus tampil KOSONG.
+    // Sebelumnya Number(null) menghasilkan 0 sehingga kolom nilai seolah
+    // sudah berisi 0 padahal jawabannya belum dinilai.
+    var nilaiTersimpan = row.nilai;
+    var numericScore = (nilaiTersimpan === null || nilaiTersimpan === undefined ||
+      String(nilaiTersimpan).trim() === '')
+      ? ''
+      : (isFinite(Number(nilaiTersimpan)) ? Number(nilaiTersimpan) : '');
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong><br>' + badge(row.kelas, 'blue') + '<br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(row.pertanyaan) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
+      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(SRich.stripHtml(row.pertanyaan)) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
       '<td><div class="essay-answer">' + escapeAdmin(row.jawaban || '-') + '</div></td><td>' + statusBadge(row.status) + '</td>' +
-      '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small></td>' +
+      '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" inputmode="decimal" autocomplete="off" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small> <small class="essay-draft-flag" style="display:none;color:#b45309;font-weight:700">belum disimpan</small></td>' +
       '<td><button class="mini-button edit" type="button" data-grade-session="' + escapeAdmin(row.session_id) + '" data-grade-question="' + escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-floppy-disk"></i> Simpan</button></td></tr>';
   });
   html += '</tbody></table>';
@@ -2220,6 +2775,21 @@ function renderEssayTable(rows) {
   document.querySelectorAll('[data-grade-session]').forEach(function(button) {
     button.addEventListener('click', function() { saveEssayScore(this); });
   });
+  // Rekam setiap ketikan sebagai draft, lalu pasang kembali draft yang ada.
+  document.querySelectorAll('#essayTable .essay-score').forEach(function(input) {
+    input.addEventListener('input', function() {
+      var baris = input.closest('tr');
+      var tombol = baris ? baris.querySelector('[data-grade-session]') : null;
+      if (!tombol) return;
+      var kunci = kunciBarisUraian_(tombol.dataset.gradeSession, tombol.dataset.gradeQuestion);
+      if (String(input.value).trim() === '') delete ADMIN.essayDrafts[kunci];
+      else ADMIN.essayDrafts[kunci] = String(input.value);
+      baris.classList.add('essay-row-draft');
+      var penanda = baris.querySelector('.essay-draft-flag');
+      if (penanda) penanda.style.display = 'inline';
+    });
+  });
+  pulihkanDraftUraian_();
 }
 
 async function saveEssayScore(button) {
@@ -2241,6 +2811,7 @@ async function saveEssayScore(button) {
       nilai: score
     });
     if (!guardAdminResult(result)) return;
+    hapusDraftUraian_(button.dataset.gradeSession, button.dataset.gradeQuestion);
     showToast(result.message || 'Nilai tersimpan.', 'success');
     await segarkanSenyap_([loadEssays, loadResults, loadRecap, loadDashboard]);
   } catch (error) {
@@ -2559,18 +3130,18 @@ async function updateBrandingLogo(event) {
   resetButton.disabled = true;
   setBrandingMessage_('Memproses dan mengunggah logo...', '');
   try {
+    /* [SIADO v5] Logo diverifikasi/dinormalisasi di browser (seperti versi lama), lalu
+     * berkas WEBP 256x256 diunggah ke bucket "branding" langsung (siadoUploadMedia, khusus ADMIN).
+     * Server menyimpan URL-nya di pengaturan (Branding_Logo_Url) — bukan base64 lagi. */
+    if (!file) throw new Error('Pilih berkas logo terlebih dahulu.');
     var loaded = await readBrandingImage_(file);
     var ui = createBrandingAsset_(loaded.image, 256, 'image/webp', 0.9);
-    var email = createBrandingAsset_(loaded.image, 256, 'image/png', 1);
-    var faviconAsset = createBrandingAsset_(loaded.image, 64, 'image/png', 1);
-    if (ui.base64.length + email.base64.length + faviconAsset.base64.length > 200000) {
-      throw new Error('Logo terlalu kompleks setelah diproses. Gunakan file dengan detail atau warna lebih sederhana.');
-    }
-    var result = await adminApi('updateBrandingLogo', {
-      logoUiMime: ui.mime,
-      logoUiBase64: ui.base64,
-      logoEmailBase64: email.base64,
-      faviconBase64: faviconAsset.base64
+    var blob = await (await fetch(ui.dataUri)).blob();
+    var berkas = new File([blob], 'logo-' + Date.now() + '.webp', { type: ui.mime });
+    var unggah = await window.siadoUploadMedia(berkas, { jenis: 'logo', adminToken: ADMIN.token });
+    if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Logo gagal diunggah.');
+    var result = unggah.branding ? { success: true, branding: unggah.branding } : await adminApi('getBrandingPublik', {
+      knownVersion: '', knownBgVersion: (ADMIN.background && ADMIN.background.version) || ''
     });
     if (!guardAdminResult(result)) {
       setBrandingMessage_((result && result.message) || 'Logo gagal diterapkan.', 'error');
@@ -2578,11 +3149,11 @@ async function updateBrandingLogo(event) {
     }
     input.value = '';
     applyBrandingData_(result.branding);
-    setBrandingMessage_(result.message, 'success');
+    setBrandingMessage_('Logo diperbarui.', 'success');
     await hasilSukses_('Logo Diterapkan',
-      'Logo baru langsung dipakai pada halaman login, panel, layar ujian, dan email pelanggaran.', [
-        { label: 'Ukuran panel', nilai: '256 × 256 piksel' },
-        { label: 'Favicon', nilai: '64 × 64 piksel' }
+      'Logo baru langsung dipakai pada halaman login, panel, dan layar ujian.', [
+        { label: 'Ukuran', nilai: '256 × 256 piksel (WEBP)' },
+        { label: 'Penyimpanan', nilai: 'Supabase Storage / bucket branding' }
       ]);
   } catch (error) {
     setBrandingMessage_(error.message || 'Logo gagal diproses.', 'error');
@@ -2712,23 +3283,78 @@ async function setAllQuestionStatus(aktif) {
   } finally { ADMIN.operationBusy.bulkStatus = false; }
 }
 
+/**
+ * REVISI 4.0 — Hapus SEMUA soal (menyeluruh).
+ * Server tidak menyediakan aksi hapus massal, jadi setiap soal dihapus
+ * lewat aksi hapusSoal yang sudah ada (kontrak tidak berubah). Dua tahap
+ * konfirmasi agar tidak terpicu tanpa sengaja.
+ */
+async function deleteAllQuestions() {
+  var semua = (DATA_MENTAH.soal || []).slice();
+  if (!semua.length) {
+    await hasilInfo_('Bank Soal Kosong', 'Tidak ada soal yang dapat dihapus.');
+    return;
+  }
+  var setuju = await konfirmasi_('SELURUH bank soal (' + semua.length + ' soal) akan dihapus permanen, ' +
+    'termasuk berkas gambar/video-nya di penyimpanan aplikasi. Soal yang sedang dipakai peserta aktif ' +
+    'hanya dinonaktifkan demi menjaga ujian yang berjalan. Tindakan ini TIDAK dapat dibatalkan.',
+    { judul: 'Hapus Semua Soal', nada: 'danger', teksOk: 'Lanjutkan' });
+  if (!setuju) return;
+  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan seluruh bank soal.',
+    { judul: 'Konfirmasi Akhir', label: 'Ketik HAPUS', placeholder: 'HAPUS', teksOk: 'Hapus Permanen' });
+  if (ketik === null || String(ketik).trim() !== 'HAPUS') {
+    await hasilInfo_('Hapus Dibatalkan', 'Konfirmasi tidak cocok. Bank soal tidak diubah.');
+    return;
+  }
+  if (ADMIN.operationBusy.deleteAll) return;
+  ADMIN.operationBusy.deleteAll = true;
+  var berhasil = 0;
+  var gagalList = [];
+  try {
+    for (var i = 0; i < semua.length; i++) {
+      try {
+        var r = await adminApi('hapusSoal', { id_soal: semua[i].id_soal });
+        if (r && r.success) berhasil += 1;
+        else gagalList.push('#' + semua[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
+      } catch (error) {
+        gagalList.push('#' + semua[i].id_soal + ': ' + (error.message || error));
+      }
+    }
+    await segarkanSenyap_([loadQuestions, loadDashboard]);
+    if (!gagalList.length) {
+      await hasilSukses_('Semua Soal Dihapus', berhasil + ' soal dihapus permanen dari bank soal.', [
+        { label: 'Dihapus', nilai: String(berhasil) },
+        { label: 'Sisa soal', nilai: '0' }
+      ]);
+    } else {
+      await hasilGagal_('Hapus Selesai Sebagian',
+        berhasil + ' soal terhapus; ' + gagalList.length + ' gagal. ' + gagalList.slice(0, 5).join('; '));
+    }
+  } finally {
+    ADMIN.operationBusy.deleteAll = false;
+  }
+}
+
 function unduhTemplateSoal() {
   var rows = [
-    ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'aktif', 'stimulus_gambar', 'stimulus_video'],
-    ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'YA', '', ''],
-    ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'YA', '', ''],
-    ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'YA', '', ''],
+    ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'],
+    ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'VII', 'YA', '', ''],
+    ['PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', '10', 'VIII', 'YA', '', ''],
+    ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'VIII', 'YA', '', ''],
+    ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'VIII', 'YA', '', ''],
     ['MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya',
-     'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', '10', 'YA', '', ''],
-    ['ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', '5', 'YA', '', ''],
-    ['URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', '20', 'YA', '', '']
+     'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', '10', 'IX', 'YA', '', ''],
+    ['ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', '5', 'IX', 'YA', '', ''],
+    ['URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', '20', 'SEMUA', 'YA', '', '']
   ];
   unduhCsv_(rows, 'template-import-soal.csv');
   hasilSukses_('Template Soal Diunduh',
     'Berkas template tersimpan di folder unduhan perangkat Anda. Isi datanya lalu simpan kembali sebagai CSV UTF-8 sebelum diimport.', [
       { label: 'Nama berkas', nilai: 'template-import-soal.csv' },
       { label: 'Pemisah opsi', nilai: 'tanda | (pipa)' },
+      { label: 'Kolom tingkat', nilai: 'VII / VIII / IX / SEMUA (kosong = SEMUA)' },
       { label: 'Menjodohkan', nilai: 'tulis pasangan sebagai pernyataan = jawaban, kunci otomatis' },
+      { label: 'PGK Kategori', nilai: 'kolom kunci_jawaban berisi nama kategori per pernyataan dipisah koma (mis. Informasi Penting,Dapat Diabaikan,...)' },
       { label: 'Contoh baris', nilai: String(rows.length - 1) + ' contoh soal' }
     ]);
 }
@@ -2858,6 +3484,9 @@ async function importSoalDariFile() {
         mapel: item.mapel || '',
         stimulus_gambar: item.stimulus_gambar || item.gambar || '',
         stimulus_video: item.stimulus_video || item.video || '',
+        // Kolom opsional: kelas sasaran per baris. Baris tanpa kolom ini
+        // menjadi SEMUA, sehingga import tidak mengubah kelas soal lain.
+        tingkat: tingkatDariNilai_(item.tingkat || item.kelas || item.kelas_sasaran || ''),
         aktif: !/^(tidak|no|0|nonaktif|false)$/i.test(String(item.aktif || 'YA').trim())
       };
     });
@@ -2916,7 +3545,7 @@ async function exportLaporanFile(format) {
       if (!laporan.nilai.length && !laporan.pelanggaran.length) {
         throw new Error('Belum ada data nilai atau pelanggaran untuk diexport.');
       }
-      var blob = format === 'pdf' ? buatPdfLaporan_(laporan) : buatExcelLaporan_(laporan);
+      var blob = format === 'pdf' ? buatPdfLaporan_(laporan) : await buatExcelLaporan_(laporan);
       fileName = namaBerkasLaporan_(format, laporan.filterKelas);
       unduhBlob_(blob, fileName);
     }
@@ -2989,6 +3618,7 @@ function labelKelulusanLaporan_(row, kkmDefault) {
 function labelPelanggaranLaporan_(row) {
   if (row && (row.jenis_label || row.label)) return teksLaporan_(row.jenis_label || row.label);
   var labels = {
+    INDIKASI_AI: 'Indikasi jawaban dari aplikasi AI (tersembunyi dari peserta)',
     PINDAH_TAB: 'Berpindah tab / aplikasi',
     KELUAR_FULLSCREEN: 'Keluar layar penuh',
     CETAK_HALAMAN: 'Mencetak halaman',
@@ -3063,55 +3693,248 @@ function namaBerkasLaporan_(format, filterKelas) {
   return 'Laporan-Ujian-' + (kelas ? kelas + '-' : '') + stamp + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
 }
 
-function buatExcelLaporan_(laporan) {
-  if (!window.XLSX || !window.XLSX.utils) {
-    throw new Error('Pustaka Excel belum dimuat. Pastikan folder vendor/ diunggah bersama admin.html.');
+async function buatExcelLaporan_(laporan) {
+  /*
+   * SheetJS CE membentuk .xlsx dengan baik, tetapi tidak menjamin penulisan
+   * style sel. ExcelJS dipakai di sini agar warna, font, border, lebar kolom,
+   * freeze pane, filter, dan tata cetak benar-benar tersimpan di Excel.
+   */
+  if (!window.ExcelJS || !window.ExcelJS.Workbook) {
+    throw new Error('Pustaka ExcelJS belum dimuat. Unggah exceljs.min.js di root repository bersama admin.html.');
   }
-  var XLSX = window.XLSX;
-  var workbook = XLSX.utils.book_new();
+  var ExcelJS = window.ExcelJS;
+  var workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIADO — Sistem Informasi Asesmen Digitalisasi Online';
+  workbook.lastModifiedBy = laporan.guru || 'SIADO';
+  workbook.created = new Date(laporan.dibuat || Date.now());
+  workbook.modified = new Date();
+  workbook.properties.title = 'Laporan Ujian ' + laporan.sekolah;
+  workbook.properties.subject = laporan.mapel || 'Laporan Ujian';
+  workbook.properties.description = 'Laporan nilai, pelanggaran, dan rekap hasil ujian.';
+
   var headerNilai = ['No', 'Nama Peserta', 'Kelas', 'Username', 'Kehadiran', 'Mata Pelajaran', 'Guru Mapel',
     'Benar', 'Salah', 'Nilai', 'Poin Maks', 'Persen (%)', 'KKM', 'Status', 'Pelanggaran', 'Selesai'];
   var headerPelanggaran = ['No', 'Waktu', 'Nama Peserta', 'Kelas', 'Username', 'Jenis Pelanggaran',
     'Detail', 'Pelanggaran Ke', 'Tindakan', 'Status Email'];
   var headerRekap = ['No', 'Kelas', 'Mata Pelajaran', 'Peserta', 'Selesai', 'Tuntas', 'Remedial',
     'Menunggu Penilaian', 'Rata-rata (%)', 'Tertinggi (%)', 'Terendah (%)', 'Pelanggaran'];
-  var nilai = dataNilaiLaporan_(laporan);
-  var pelanggaran = dataPelanggaranLaporan_(laporan);
-  var rekap = dataRekapLaporan_(laporan);
 
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Nilai', 'LAPORAN NILAI UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerNilai, nilai, '#1F6FEB', [5, 26, 16, 17, 14, 22, 22, 9, 9, 10, 11, 12, 8, 22, 13, 19]);
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Pelanggaran', 'LAPORAN PELANGGARAN UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerPelanggaran, pelanggaran, '#B42318', [5, 21, 26, 16, 17, 28, 42, 15, 22, 17]);
-  tambahSheetExcelLaporan_(XLSX, workbook, 'Rekap', 'REKAP HASIL UJIAN — ' + laporan.sekolah,
-    infoLaporan_(laporan), headerRekap, rekap, '#146C94', [5, 16, 22, 11, 10, 10, 11, 20, 16, 16, 16, 14]);
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Nilai',
+    judul: 'LAPORAN NILAI UJIAN',
+    laporan: laporan,
+    header: headerNilai,
+    rows: dataNilaiLaporan_(laporan),
+    warnaUtama: 'FF1F4E78',
+    warnaAksen: 'FFD9EAF7',
+    lebar: [6, 29, 18, 18, 15, 23, 23, 9, 9, 11, 12, 13, 9, 23, 14, 21],
+    tipe: 'nilai'
+  });
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Pelanggaran',
+    judul: 'LAPORAN PELANGGARAN UJIAN',
+    laporan: laporan,
+    header: headerPelanggaran,
+    rows: dataPelanggaranLaporan_(laporan),
+    warnaUtama: 'FF9E2A2B',
+    warnaAksen: 'FFFBE1E1',
+    lebar: [6, 22, 29, 18, 18, 30, 48, 16, 23, 18],
+    tipe: 'pelanggaran'
+  });
+  tambahSheetExcelProfesional_(workbook, {
+    nama: 'Rekap',
+    judul: 'REKAP HASIL UJIAN',
+    laporan: laporan,
+    header: headerRekap,
+    rows: dataRekapLaporan_(laporan),
+    warnaUtama: 'FF0B6E69',
+    warnaAksen: 'FFD8F0EC',
+    lebar: [6, 18, 23, 12, 12, 12, 13, 23, 17, 17, 17, 15],
+    tipe: 'rekap'
+  });
 
-  var output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', compression: true });
-  return new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  var output = await workbook.xlsx.writeBuffer();
+  return new Blob([output], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
 }
 
-function tambahSheetExcelLaporan_(XLSX, workbook, nama, judul, keterangan, header, rows, warna, lebar) {
-  var data = [[judul], [keterangan], [], header].concat(rows.length ? rows : [['Belum ada data.']]);
-  var sheet = XLSX.utils.aoa_to_sheet(data);
-  sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: header.length - 1 } }];
-  sheet['!cols'] = lebar.map(function(w) { return { wch: w }; });
-  sheet['!rows'] = [{ hpt: 24 }, { hpt: 18 }, { hpt: 8 }, { hpt: 32 }];
-  sheet['!autofilter'] = { ref: 'A4:' + XLSX.utils.encode_col(header.length - 1) + Math.max(4, rows.length + 4) };
-  sheet['!freeze'] = { xSplit: 0, ySplit: 4 };
-  // SheetJS Community tetap menghasilkan file XLSX valid bila style diabaikan;
-  // style ini dipakai oleh build yang mendukung cell styles.
-  var titleStyle = { font: { bold: true, sz: 14, color: { rgb: '102A43' } }, alignment: { horizontal: 'center' } };
-  var infoStyle = { font: { sz: 9, color: { rgb: '555555' } }, alignment: { horizontal: 'center', wrapText: true } };
-  var headStyle = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: warna.replace('#', '') } },
-    alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
-  if (sheet.A1) sheet.A1.s = titleStyle;
-  if (sheet.A2) sheet.A2.s = infoStyle;
-  for (var c = 0; c < header.length; c++) {
-    var cell = sheet[XLSX.utils.encode_cell({ r: 3, c: c })];
-    if (cell) cell.s = headStyle;
+/* Palet SIADO yang konsisten pada seluruh worksheet Excel. */
+var GAYA_EXCEL_LAPORAN = {
+  putih: 'FFFFFFFF',
+  teks: 'FF183B56',
+  teksSekunder: 'FF5D7285',
+  garis: 'FFD5E2EC',
+  garisLembut: 'FFE8EFF5',
+  abuMuda: 'FFF4F8FB',
+  hijau: 'FFE2F3E8',
+  teksHijau: 'FF147A3D',
+  merah: 'FFFBE5E5',
+  teksMerah: 'FFB42318',
+  kuning: 'FFFFF3D6',
+  teksKuning: 'FF9A6700'
+};
+
+function warnaPolaExcel_(argb) {
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb: argb } };
+}
+
+function garisExcel_(warna) {
+  var sisi = { style: 'thin', color: { argb: warna || GAYA_EXCEL_LAPORAN.garis } };
+  return { top: sisi, left: sisi, bottom: sisi, right: sisi };
+}
+
+function tambahSheetExcelProfesional_(workbook, opsi) {
+  var sheet = workbook.addWorksheet(opsi.nama, {
+    properties: { defaultRowHeight: 19 },
+    pageSetup: {
+      orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 }
+    },
+    views: [{ state: 'frozen', ySplit: 4, showGridLines: false }]
+  });
+  var panjang = opsi.header.length;
+  var akhirKolom = nomorKolomExcel_(panjang);
+  sheet.columns = opsi.lebar.map(function(lebar) { return { width: lebar }; });
+  sheet.mergeCells(1, 1, 1, panjang);
+  sheet.mergeCells(2, 1, 2, panjang);
+
+  var selJudul = sheet.getCell('A1');
+  selJudul.value = opsi.judul + ' — ' + opsi.laporan.sekolah;
+  selJudul.font = { name: 'Aptos Display', size: 16, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+  selJudul.fill = warnaPolaExcel_(opsi.warnaUtama);
+  selJudul.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 33;
+
+  var selInfo = sheet.getCell('A2');
+  selInfo.value = infoLaporan_(opsi.laporan);
+  selInfo.font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  selInfo.fill = warnaPolaExcel_(opsi.warnaAksen);
+  selInfo.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  sheet.getRow(2).height = 25;
+  sheet.getRow(3).height = 9;
+
+  var headerRow = sheet.getRow(4);
+  headerRow.values = opsi.header;
+  headerRow.height = 34;
+  headerRow.eachCell(function(cell) {
+    cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+    cell.fill = warnaPolaExcel_(opsi.warnaUtama);
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = garisExcel_(opsi.warnaUtama);
+  });
+
+  var rows = opsi.rows || [];
+  if (!rows.length) {
+    var kosong = sheet.addRow(['Belum ada data pada laporan ini.']);
+    sheet.mergeCells(5, 1, 5, panjang);
+    kosong.height = 28;
+    kosong.getCell(1).font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+    kosong.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    kosong.getCell(1).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+    kosong.getCell(1).border = garisExcel_();
+  } else {
+    rows.forEach(function(data, index) {
+      var row = sheet.addRow(data);
+      row.height = 22;
+      row.eachCell(function(cell, nomor) {
+        cell.font = { name: 'Aptos', size: 10, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = garisExcel_(GAYA_EXCEL_LAPORAN.garisLembut);
+        if (index % 2 === 1) cell.fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+        if (nomor === 1 || nomor >= panjang - 4) cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+      formatBarisExcelLaporan_(row, opsi.tipe, data, index);
+    });
   }
-  XLSX.utils.book_append_sheet(workbook, sheet, nama);
+
+  var barisAkhir = 4 + Math.max(rows.length, 1);
+  sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: panjang } };
+  var ringkasan = ringkasanExcelLaporan_(opsi.tipe, rows);
+  var summaryRow = sheet.addRow([ringkasan]);
+  sheet.mergeCells(summaryRow.number, 1, summaryRow.number, panjang);
+  summaryRow.height = 26;
+  var summaryCell = summaryRow.getCell(1);
+  summaryCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+  summaryCell.fill = warnaPolaExcel_(opsi.warnaAksen);
+  summaryCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  summaryCell.border = garisExcel_(opsi.warnaUtama);
+
+  var catatan = sheet.addRow(['Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online']);
+  sheet.mergeCells(catatan.number, 1, catatan.number, panjang);
+  catatan.height = 21;
+  catatan.getCell(1).font = { name: 'Aptos', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  catatan.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+
+  sheet.pageSetup.printTitlesRow = '1:4';
+  sheet.pageSetup.printArea = 'A1:' + akhirKolom + catatan.number;
+  sheet.headerFooter.oddFooter = '&L' + opsi.nama + '&C&D &T&RHalaman &P dari &N';
+  sheet.getColumn(1).alignment = { horizontal: 'center', vertical: 'middle' };
+  return sheet;
+}
+
+function formatBarisExcelLaporan_(row, tipe, data) {
+  /* Kolom angka disejajarkan serta diberi format angka yang bersih. */
+  if (tipe === 'nilai') {
+    [8, 9, 10, 11, 12, 13, 15].forEach(function(kolom) {
+      row.getCell(kolom).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    [10, 11, 12].forEach(function(kolom) { row.getCell(kolom).numFmt = '0.00'; });
+    [8, 9, 13, 15].forEach(function(kolom) { row.getCell(kolom).numFmt = '0'; });
+    var kehadiran = teksLaporan_(data[4]).toUpperCase();
+    var status = teksLaporan_(data[13]).toUpperCase();
+    if (kehadiran !== 'HADIR') {
+      row.getCell(5).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.kuning);
+      row.getCell(5).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksKuning } };
+    }
+    if (status === 'TUNTAS') {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.hijau);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksHijau } };
+    } else if (status === 'REMEDIAL') {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    } else {
+      row.getCell(14).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.kuning);
+      row.getCell(14).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksKuning } };
+    }
+    if (angkaLaporan_(data[14], 0) > 0) {
+      row.getCell(15).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(15).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    }
+  } else if (tipe === 'pelanggaran') {
+    [1, 8].forEach(function(kolom) { row.getCell(kolom).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; });
+    if (teksLaporan_(data[8]).toUpperCase().indexOf('DISKUALIFIKASI') !== -1) {
+      row.getCell(9).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.merah);
+      row.getCell(9).font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teksMerah } };
+    }
+  } else if (tipe === 'rekap') {
+    for (var kolomRekap = 4; kolomRekap <= 12; kolomRekap++) {
+      row.getCell(kolomRekap).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      row.getCell(kolomRekap).numFmt = kolomRekap >= 9 && kolomRekap <= 11 ? '0.00' : '0';
+    }
+  }
+}
+
+function ringkasanExcelLaporan_(tipe, rows) {
+  if (tipe === 'nilai') {
+    var tuntas = rows.filter(function(row) { return teksLaporan_(row[13]).toUpperCase() === 'TUNTAS'; }).length;
+    var remedial = rows.filter(function(row) { return teksLaporan_(row[13]).toUpperCase() === 'REMEDIAL'; }).length;
+    var rata = rows.length ? rows.reduce(function(total, row) { return total + angkaLaporan_(row[11], 0); }, 0) / rows.length : 0;
+    return 'RINGKASAN • Peserta: ' + rows.length + '  |  Tuntas: ' + tuntas + '  |  Remedial: ' + remedial + '  |  Rata-rata: ' + rata.toFixed(2) + '%';
+  }
+  if (tipe === 'pelanggaran') return 'RINGKASAN • Total pelanggaran tercatat: ' + rows.length;
+  var totalPeserta = rows.reduce(function(total, row) { return total + angkaLaporan_(row[3], 0); }, 0);
+  return 'RINGKASAN • Kelas/Mapel: ' + rows.length + '  |  Total peserta: ' + totalPeserta;
+}
+
+function nomorKolomExcel_(nomor) {
+  var hasil = '';
+  while (nomor > 0) {
+    var sisa = (nomor - 1) % 26;
+    hasil = String.fromCharCode(65 + sisa) + hasil;
+    nomor = Math.floor((nomor - 1) / 26);
+  }
+  return hasil;
 }
 
 function buatPdfLaporan_(laporan) {
@@ -4079,6 +4902,7 @@ async function saveAllEssayScores() {
   ADMIN.operationBusy.bulkEssay = true;
   try {
     var result = await apiWajib_('nilaiUraianMassal', { items: items });
+    ADMIN.essayDrafts = {};
     await segarkanSenyap_([loadEssays, loadResults, loadRecap, loadDashboard]);
     await hasilSukses_('Semua Nilai Tersimpan', result.message || 'Nilai uraian berhasil disimpan.', [
       { label: 'Jumlah nilai', nilai: String(items.length) },
@@ -4173,13 +4997,15 @@ async function applyBackgroundImage() {
   ADMIN.operationBusy.background = true;
   try {
     setBgStatus_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengompres dan menyimpan background...', 'info');
+    /* [SIADO v5] gambar dikompres (JPEG, lebar maks 1600 px, < 300 KB) lalu diunggah ke bucket
+     * "branding" (batas 2 MB). siadoUploadMedia sekaligus menyimpan URL-nya (updateLoginBackground). */
     var dataUri = await kompresBackground_(file);
-    var result = await adminApi('updateLoginBackground', {
-      mode: 'gambar',
-      imageBase64: dataUri,
-      imageMime: 'image/jpeg',
-      fileName: file.name
-    });
+    var blobBg = await (await fetch(dataUri)).blob();
+    var berkasBg = new File([blobBg], 'background-' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    var unggah = await window.siadoUploadMedia(berkasBg, { jenis: 'background', adminToken: ADMIN.token });
+    if (!unggah || !unggah.success) throw new Error((unggah && unggah.message) || 'Background gagal diunggah.');
+    var result = unggah.background ? { success: true, background: unggah.background, message: 'Background login diperbarui.' }
+      : await adminApi('updateLoginBackground', { mode: 'gambar', url: unggah.url, fileName: file.name });
     if (!guardAdminResult(result)) return;
     if (!result.success) throw new Error(result.message || 'Background gagal disimpan.');
     applyBackgroundData_(result.background);
@@ -4372,7 +5198,7 @@ function renderKartuSoalTable_(rows) {
     '<th>Kelas</th><th>Materi / Elemen</th><th>Indikator Soal</th><th>Level</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td><strong>' + escapeAdmin(row.ks_nomor_soal || ('#' + row.id_soal)) + '</strong></td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(row.pertanyaan, 110)) + '</div></td>' +
+      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(row.pertanyaan), 110)) + '</div></td>' +
       '<td>' + typeBadge(row.tipe) + '</td>' +
       '<td>' + escapeAdmin(row.ks_kelas || '-') + '</td>' +
       '<td><div class="cell-wrap">' + escapeAdmin(row.ks_materi || '-') + '</div></td>' +
@@ -4396,7 +5222,7 @@ function bukaKartuSoal_(id) {
     return;
   }
   document.getElementById('ksIdSoal').value = row.id_soal;
-  document.getElementById('ksRingkasSoal').textContent = '#' + row.id_soal + ' — ' + truncate(row.pertanyaan, 120);
+  document.getElementById('ksRingkasSoal').textContent = '#' + row.id_soal + ' — ' + truncate(SRich.stripHtml(row.pertanyaan), 120);
   document.getElementById('ksCapaian').value = row.ks_capaian || '';
   document.getElementById('ksKelas').value = row.ks_kelas || '';
   document.getElementById('ksNomorSoal').value = row.ks_nomor_soal || '';
@@ -4556,7 +5382,7 @@ function badge(text, color) {
   return '<span class="badge ' + safeColor + '">' + escapeAdmin(text) + '</span>';
 }
 function typeBadge(type) {
-  var label = { PG: 'PG', PGK: 'PGK', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'MENJODOHKAN',
+  var label = { PG: 'PG', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'MENJODOHKAN',
                 ISIAN: 'ISIAN', URAIAN: 'URAIAN' }[type] || type;
   return badge(label, type === 'URAIAN' ? 'amber' : 'blue');
 }
@@ -4573,5 +5399,6 @@ function formatDate(value) { if (!value) return '-'; var date = new Date(value);
 function escapeAdmin(value) { return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
+
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a34440bfca225724',t:'MTc4ODI2NTQ3Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

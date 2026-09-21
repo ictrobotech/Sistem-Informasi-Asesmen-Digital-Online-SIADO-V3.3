@@ -2377,7 +2377,7 @@ function readableKey(question) {
   }
   if (type === 'PGK') {
     var object = tryJson(question.kunci_jawaban, {});
-    return Object.keys(object).map(function(key) { return object[key]; }).join(', ');
+    return Object.keys(object).map(function(key) { return object[key]; }).join(' / ');
   }
   if (type === 'MENJODOHKAN') {
     var jodoh = tryJson(question.kunci_jawaban, {});

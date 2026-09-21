@@ -396,6 +396,17 @@
    * opts: { kategori:[], statements:[{id,html}], jawaban:{id:nilai},
    *         interaksi:bool, legacy:bool }
    */
+  /**
+   * Pernyataan PGK adalah satu baris logis; jeda baris sisa tempelan
+   * atau ketikan (Enter) disatukan menjadi spasi agar tidak "tersusun"
+   * ke bawah di pratinjau maupun di peserta. Format tebal/miring/
+   * garis bawah, daftar, gambar, dan rumus tidak diubah.
+   */
+  function satukanBarisPernyataan(htmlBersih) {
+    return String(htmlBersih || '')
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<\/p>\s*<p>/gi, ' ');
+  }
   function pgkTableHtml(opts) {
     opts = opts || {};
     var kategori = opts.kategori || ['BENAR', 'SALAH'];

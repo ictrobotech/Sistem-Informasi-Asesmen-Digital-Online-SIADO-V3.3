@@ -3260,9 +3260,13 @@ async function changeAdminCredential() {
  * STATUS MASSAL DAN IMPORT SOAL
  * ================================================================== */
 async function setAllQuestionStatus(aktif) {
-  var pesan = aktif
+  var mapelStatus = ADMIN.isAdmin ? '' : mapelDiujikan_();
+  var batasStatus = ADMIN.isAdmin ? ''
+    : (mapelStatus ? ' Hanya soal milik Anda pada mapel "' + mapelStatus + '" yang diubah.'
+       : ' Hanya soal milik Anda yang diubah.');
+  var pesan = (aktif
     ? 'Aktifkan SEMUA soal di bank soal? Soal akan langsung tersedia untuk peserta baru.'
-    : 'Nonaktifkan SEMUA soal sekaligus? Peserta yang belum memulai ujian tidak akan menerima soal apa pun sampai ada soal yang diaktifkan kembali.';
+    : 'Nonaktifkan SEMUA soal sekaligus? Peserta yang belum memulai ujian tidak akan menerima soal apa pun sampai ada soal yang diaktifkan kembali.') + batasStatus;
   var setujuStatus = await konfirmasi_(pesan,
     { judul: aktif ? 'Aktifkan Semua Soal' : 'Nonaktifkan Semua Soal', nada: aktif ? 'warn' : 'danger',
       teksOk: aktif ? 'Ya, Aktifkan Semua' : 'Ya, Nonaktifkan Semua' });
@@ -3270,7 +3274,9 @@ async function setAllQuestionStatus(aktif) {
   if (ADMIN.operationBusy.bulkStatus) return;
   ADMIN.operationBusy.bulkStatus = true;
   try {
-    var result = await apiWajib_('setStatusSemuaSoal', { aktif: !!aktif });
+    var payloadStatus = { aktif: !!aktif };
+    if (mapelStatus) payloadStatus.mapel = mapelStatus;
+    var result = await apiWajib_('setStatusSemuaSoal', payloadStatus);
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     await hasilSukses_(aktif ? 'Semua Soal Diaktifkan' : 'Semua Soal Dinonaktifkan',
       result.message || 'Status seluruh soal berhasil diperbarui.', [
@@ -3283,23 +3289,52 @@ async function setAllQuestionStatus(aktif) {
 }
 
 /**
- * REVISI 4.0 — Hapus SEMUA soal (menyeluruh).
- * Server tidak menyediakan aksi hapus massal, jadi setiap soal dihapus
- * lewat aksi hapusSoal yang sudah ada (kontrak tidak berubah). Dua tahap
- * konfirmasi agar tidak terpicu tanpa sengaja.
+ * REVISI 2026-09-22 — Hapus SEMUA soal per peran.
+ * Admin: seluruh bank soal dari semua mapel. Guru: hanya soal sendiri
+ * pada mapel yang diujikan (soal mapel lain dilewati; soal milik akun
+ * lain tetap ditolak server). Setiap soal dihapus lewat aksi hapusSoal
+ * yang sudah ada. Dua tahap konfirmasi agar tidak terpicu tanpa sengaja.
  */
+function mapelDiujikan_() {
+  var s = ADMIN.settings || {};
+  var m = String(s.mapel || '').trim();
+  if (!m) {
+    var el = document.getElementById('sMapel');
+    if (el) m = String(el.value || '').trim();
+  }
+  return m;
+}
+function soalSeMapelUjian_(soal, mapelUjian) {
+  if (!mapelUjian) return true;
+  var m = String((soal && soal.mapel) || '').trim();
+  if (!m) return true;
+  return m.toLowerCase() === String(mapelUjian).toLowerCase();
+}
 async function deleteAllQuestions() {
   var semua = (DATA_MENTAH.soal || []).slice();
   if (!semua.length) {
     await hasilInfo_('Bank Soal Kosong', 'Tidak ada soal yang dapat dihapus.');
     return;
   }
-  var setuju = await konfirmasi_('SELURUH bank soal (' + semua.length + ' soal) akan dihapus permanen, ' +
+  var mapelUjian = ADMIN.isAdmin ? '' : mapelDiujikan_();
+  var target = semua.filter(function(q) { return ADMIN.isAdmin || soalSeMapelUjian_(q, mapelUjian); });
+  var dilewati = semua.length - target.length;
+  if (!target.length) {
+    await hasilInfo_('Tidak Ada Soal Dalam Cakupan',
+      'Tidak ada soal mapel "' + mapelUjian + '" milik Anda. ' + semua.length + ' soal mapel lain tidak dihapus.');
+    return;
+  }
+  var cakupan = ADMIN.isAdmin
+    ? 'SELURUH bank soal (' + target.length + ' soal dari semua mapel)'
+    : 'Soal milik Anda pada mapel "' + (mapelUjian || 'yang diujikan') + '" (' + target.length + ' soal)';
+  var setuju = await konfirmasi_(cakupan + ' akan dihapus permanen, ' +
     'termasuk berkas gambar/video-nya di penyimpanan aplikasi. Soal yang sedang dipakai peserta aktif ' +
-    'hanya dinonaktifkan demi menjaga ujian yang berjalan. Tindakan ini TIDAK dapat dibatalkan.',
+    'hanya dinonaktifkan demi menjaga ujian yang berjalan.' +
+    (dilewati ? ' ' + dilewati + ' soal mapel lain dilewati (tidak dihapus).' : '') +
+    ' Tindakan ini TIDAK dapat dibatalkan.',
     { judul: 'Hapus Semua Soal', nada: 'danger', teksOk: 'Lanjutkan' });
   if (!setuju) return;
-  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan seluruh bank soal.',
+  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan ' + escapeAdmin(cakupan.toLowerCase()) + '.',
     { judul: 'Konfirmasi Akhir', label: 'Ketik HAPUS', placeholder: 'HAPUS', teksOk: 'Hapus Permanen' });
   if (ketik === null || String(ketik).trim() !== 'HAPUS') {
     await hasilInfo_('Hapus Dibatalkan', 'Konfirmasi tidak cocok. Bank soal tidak diubah.');
@@ -3310,21 +3345,26 @@ async function deleteAllQuestions() {
   var berhasil = 0;
   var gagalList = [];
   try {
-    for (var i = 0; i < semua.length; i++) {
+    for (var i = 0; i < target.length; i++) {
       try {
-        var r = await adminApi('hapusSoal', { id_soal: semua[i].id_soal });
+        var payloadHapus = { id_soal: target[i].id_soal };
+        if (mapelUjian) payloadHapus.mapel_scope = mapelUjian;
+        var r = await adminApi('hapusSoal', payloadHapus);
         if (r && r.success) berhasil += 1;
-        else gagalList.push('#' + semua[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
+        else gagalList.push('#' + target[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
       } catch (error) {
-        gagalList.push('#' + semua[i].id_soal + ': ' + (error.message || error));
+        gagalList.push('#' + target[i].id_soal + ': ' + (error.message || error));
       }
     }
     await segarkanSenyap_([loadQuestions, loadDashboard]);
+    var sisa = (DATA_MENTAH.soal || []).length;
+    var rincianHapus = [
+      { label: 'Dihapus', nilai: String(berhasil) },
+      { label: 'Sisa soal', nilai: String(sisa) }
+    ];
+    if (dilewati) rincianHapus.splice(1, 0, { label: 'Dilewati (mapel lain)', nilai: String(dilewati) });
     if (!gagalList.length) {
-      await hasilSukses_('Semua Soal Dihapus', berhasil + ' soal dihapus permanen dari bank soal.', [
-        { label: 'Dihapus', nilai: String(berhasil) },
-        { label: 'Sisa soal', nilai: '0' }
-      ]);
+      await hasilSukses_('Hapus Massal Selesai', berhasil + ' soal dihapus permanen.', rincianHapus);
     } else {
       await hasilGagal_('Hapus Selesai Sebagian',
         berhasil + ' soal terhapus; ' + gagalList.length + ' gagal. ' + gagalList.slice(0, 5).join('; '));

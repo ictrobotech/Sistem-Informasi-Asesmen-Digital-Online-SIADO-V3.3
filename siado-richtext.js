@@ -402,7 +402,7 @@
     var statements = opts.statements || [];
     var jawaban = opts.jawaban || {};
     var interaksi = !!opts.interaksi;
-    var html = '<table class="pgk-cat-table"><thead><tr><th style="width:44px">No.</th><th>Pernyataan</th>';
+    var html = '<table class="pgk-cat-table"><thead><tr><th class="pgk-cat-nohead" style="width:44px">No.</th><th class="pgk-statement-head">Pernyataan</th>';
     for (var k = 0; k < kategori.length; k++) {
       html += '<th class="pgk-cat-col">' + escapeHtml(kategori[k]) + '</th>';
     }
@@ -410,7 +410,7 @@
     for (var i = 0; i < statements.length; i++) {
       var st = statements[i];
       var id = String(st.id !== undefined ? st.id : i);
-      html += '<tr><td class="pgk-cat-no">' + (i + 1) + '</td><td><div class="rich-content">' + sanitizeHtml(st.html) + '</div></td>';
+      html += '<tr><td class="pgk-cat-no">' + (i + 1) + '</td><td class="pgk-statement"><div class="rich-content">' + sanitizeHtml(st.html) + '</div></td>';
       for (var c = 0; c < kategori.length; c++) {
         var nilai = kategori[c];
         var checked = String(jawaban[id] || '') === nilai;

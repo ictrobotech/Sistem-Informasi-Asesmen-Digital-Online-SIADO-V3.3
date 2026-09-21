@@ -406,14 +406,21 @@ body.konten-disamarkan .privacy-veil{display:flex}
 /* ---- tabel PGK Kategori tampilan peserta (sesuai format gambar) ---- */
 .pgk-cat-instruction{font-size:14px;font-weight:600;color:#1a3452;margin:0 0 12px}
 .pgk-cat-table{width:100%;border-collapse:collapse;margin:6px 0 4px;background:#fff}
-.pgk-cat-table th{background:#dbe7f5;color:#163958;border:1px solid #b9cbdd;padding:9px 10px;font-size:12.5px;font-weight:800;text-align:center;line-height:1.35}
-.pgk-cat-table td{border:1px solid #b9cbdd;padding:9px 10px;font-size:13.5px;line-height:1.55;color:#233d59;vertical-align:top}
-.pgk-cat-table td.pgk-cat-no{width:44px;text-align:center;font-weight:700;color:#41597a}
-.pgk-cat-table th.pgk-cat-col,.pgk-cat-table td.pgk-cat-cell{width:110px;min-width:96px;text-align:center;vertical-align:middle}
+.rich-content .pgk-cat-table th,.pgk-cat-table th{background:#dbe7f5;color:#163958;border:1px solid #b9cbdd;padding:9px 10px;font-size:12.5px;font-weight:800;text-align:center;line-height:1.35;vertical-align:middle;overflow-wrap:break-word}
+.rich-content .pgk-cat-table td,.pgk-cat-table td{border:1px solid #b9cbdd;padding:9px 10px;font-size:13.5px;line-height:1.55;color:#233d59;vertical-align:top;text-align:left;overflow-wrap:break-word}
+/* Kolom pernyataan: tampil persis seperti yang diketik — rata kiri, tanpa jarak paragraf tambahan. */
+.pgk-cat-table td.pgk-statement{text-align:left;vertical-align:top}
+.pgk-cat-table td .rich-content{font-size:inherit;line-height:1.55}
+.pgk-cat-table td .rich-content p{margin:0 0 6px}
+.pgk-cat-table td .rich-content p:last-child{margin-bottom:0}
+.pgk-cat-table td .rich-content ul,.pgk-cat-table td .rich-content ol{margin:4px 0 4px;padding-left:20px}
+.pgk-cat-table td .rich-content li{margin:2px 0}
+/* Kolom No. dan kolom kategori: selalu rata tengah (panel maupun peserta). */
+.rich-content .pgk-cat-table td.pgk-cat-no,.pgk-cat-table td.pgk-cat-no{width:44px;text-align:center;vertical-align:middle;font-weight:700;color:#41597a}
+.rich-content .pgk-cat-table th.pgk-cat-col,.pgk-cat-table th.pgk-cat-col,.rich-content .pgk-cat-table td.pgk-cat-cell,.pgk-cat-table td.pgk-cat-cell{width:110px;min-width:96px;text-align:center;vertical-align:middle}
 .pgk-cat-cell label{display:flex;align-items:center;justify-content:center;min-height:30px;cursor:pointer;border-radius:8px;margin:2px}
 .pgk-cat-cell input{position:absolute;opacity:0;pointer-events:none}
-.pgk-cat-cell .cat-check{width:26px;height:26px;border:1.6px solid #aabccc;border-radius:7px;display:grid;place-items:center;color:transparent;font-size:13px;background:#fff;transition:all .15s}
+.pgk-cat-cell .cat-check{width:26px;height:26px;border:1.6px solid #aabccc;border-radius:7px;display:grid;place-items:center;color:transparent;font-size:13px;background:#fff;transition:all .15s;margin:0 auto}
 .pgk-cat-cell input:checked + .cat-check{border-color:#15803d;background:#e8f9ee;color:#15803d}
 .pgk-cat-cell label:hover .cat-check{border-color:#1f6feb}
-.pgk-cat-table .rich-content{font-size:inherit}
-@media(max-width:580px){.pgk-cat-table th,.pgk-cat-table td{padding:7px 6px;font-size:12px}.pgk-cat-table th.pgk-cat-col,.pgk-cat-table td.pgk-cat-cell{min-width:64px;width:64px}}
+@media(max-width:580px){.rich-content .pgk-cat-table th,.pgk-cat-table th,.rich-content .pgk-cat-table td,.pgk-cat-table td{padding:7px 6px;font-size:12px}.pgk-cat-table th.pgk-cat-col,.pgk-cat-table td.pgk-cat-cell{min-width:64px;width:64px}}

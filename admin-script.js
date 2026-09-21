@@ -1554,7 +1554,7 @@ function perbaruiKunciPgk_(prefix) {
   var keyField = document.getElementById(prefix + 'Kunci');
   var state = PGK_STATE[prefix];
   if (!keyField || !state) return;
-  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(',');
+  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(' / ');
 }
 
 /** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */
@@ -3862,7 +3862,7 @@ function tambahSheetExcelProfesional_(workbook, opsi) {
   var catatan = sheet.addRow(['Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online']);
   sheet.mergeCells(catatan.number, 1, catatan.number, panjang);
   catatan.height = 21;
-  catatan.getCell(1).font = { name: 'Aptos', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  catatan.getCell(1).font = { name: 'Apts', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
   catatan.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
 
   sheet.pageSetup.printTitlesRow = '1:4';
@@ -5398,3 +5398,4 @@ function formatDate(value) { if (!value) return '-'; var date = new Date(value);
 function escapeAdmin(value) { return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
+

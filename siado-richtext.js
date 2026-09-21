@@ -410,7 +410,7 @@
     for (var i = 0; i < statements.length; i++) {
       var st = statements[i];
       var id = String(st.id !== undefined ? st.id : i);
-      html += '<tr><td class="pgk-cat-no">' + (i + 1) + '</td><td class="pgk-statement"><div class="rich-content">' + sanitizeHtml(st.html) + '</div></td>';
+      html += '<tr><td class="pgk-cat-no">' + (i + 1) + '</td><td class="pgk-statement"><div class="rich-content">' + satukanBarisPernyataan(sanitizeHtml(st.html)) + '</div></td>';
       for (var c = 0; c < kategori.length; c++) {
         var nilai = kategori[c];
         var checked = String(jawaban[id] || '') === nilai;
@@ -662,6 +662,7 @@
     pgkMarkerParse: pgkMarkerParse,
     pgkCategories: pgkCategories,
     pgkTableHtml: pgkTableHtml,
+    satukanBarisPernyataan: satukanBarisPernyataan,
     mountEditor: mountEditor
   };
   w.SRich = SRich;

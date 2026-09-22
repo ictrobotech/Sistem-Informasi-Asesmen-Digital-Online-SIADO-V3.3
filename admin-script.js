@@ -4406,10 +4406,10 @@ function tambahSheetExcelProfesional_(workbook, opsi) {
       row.height = 22;
       row.eachCell(function(cell, nomor) {
         cell.font = { name: 'Aptos', size: 10, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
-        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         cell.border = garisExcel_(GAYA_EXCEL_LAPORAN.garisLembut);
         if (index % 2 === 1) cell.fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
-        if (nomor === 1 || nomor >= panjang - 4) cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        /* REVISI rata tengah: seluruh sel baris sudah rata tengah (baris di atas). */
       });
       formatBarisExcelLaporan_(row, opsi.tipe, data, index);
     });
@@ -4518,12 +4518,12 @@ function buatPdfLaporan_(laporan) {
   gambarJudulPdf_(doc, 'LAPORAN NILAI UJIAN', laporan);
   tabelPdfLaporan_(doc, 23, headerNilai, dataNilaiLaporan_(laporan), [
     7, 28, 14, 17, 13, 20, 20, 8, 8, 9, 9, 8, 8, 19, 10, 18
-  ], [31, 111, 235]);
+  ], [31, 111, 235], 13);
   doc.addPage('a4', 'landscape');
   gambarJudulPdf_(doc, 'LAPORAN PELANGGARAN UJIAN', laporan);
   tabelPdfLaporan_(doc, 23, headerPelanggaran, dataPelanggaranLaporan_(laporan), [
     7, 22, 28, 15, 18, 28, 54, 9, 22, 17
-  ], [180, 35, 24]);
+  ], [180, 35, 24], -1);
   tambahNomorHalamanPdf_(doc);
   return doc.output('blob');
 }
@@ -4539,7 +4539,7 @@ function gambarJudulPdf_(doc, judul, laporan) {
   doc.text(infoLaporan_(laporan), 14, 16);
 }
 
-function tabelPdfLaporan_(doc, startY, header, rows, widths, warna) {
+function tabelPdfLaporan_(doc, startY, header, rows, widths, warna, kolomStatus) {
   var body = rows.length ? rows : [['Belum ada data.']];
   var stylesKolom = {};
   widths.forEach(function(width, index) { stylesKolom[index] = { cellWidth: width }; });
@@ -4549,9 +4549,17 @@ function tabelPdfLaporan_(doc, startY, header, rows, widths, warna) {
     body: body,
     theme: 'grid',
     margin: { left: 8, right: 8 },
-    styles: { font: 'helvetica', fontSize: 5.8, cellPadding: 0.85, overflow: 'linebreak', valign: 'middle', lineColor: [205, 216, 228], lineWidth: 0.1 },
+    styles: { font: 'helvetica', fontSize: 5.8, cellPadding: 0.85, overflow: 'linebreak', valign: 'middle', halign: 'center', lineColor: [205, 216, 228], lineWidth: 0.1 },
     headStyles: { fillColor: warna, textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 5.8 },
     columnStyles: stylesKolom,
+    didParseCell: function(hook) {
+      /* REVISI: REMEDIAL tampil tebal + merah pada laporan nilai. */
+      if (hook.section === 'body' && kolomStatus >= 0 && hook.column.index === kolomStatus &&
+          String(hook.cell.raw || '').toUpperCase() === 'REMEDIAL') {
+        hook.cell.styles.textColor = [180, 35, 24];
+        hook.cell.styles.fontStyle = 'bold';
+      }
+    },
     didDrawPage: function(data) {
       if (data.pageNumber > 1) {
         doc.setFontSize(7);

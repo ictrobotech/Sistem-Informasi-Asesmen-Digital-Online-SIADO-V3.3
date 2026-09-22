@@ -2645,7 +2645,7 @@ function renderDisqualifiedTable(rows) {
       '<td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="font-size:11px;color:#71879c">' +
       escapeAdmin(row.username) + '</span></td>' +
       '<td>' + badge(row.kelas, 'blue') + '</td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(row.alasan || '-') + '</div></td>' +
+      '' + selDeskripsiTengah_(row.alasan) + '' +
       '<td>' + badge(row.aktif ? 'DIBLOKIR' : 'AKTIF KEMBALI', row.aktif ? 'red' : 'green') + '</td>' +
       '<td>' + tombol + '</td></tr>';
   });

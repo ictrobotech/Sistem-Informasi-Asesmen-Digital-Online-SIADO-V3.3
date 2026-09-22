@@ -552,6 +552,7 @@ function bindAdminInterface() {
   if (pilihMapelAktif) pilihMapelAktif.addEventListener('change', function() {
     tampilManualMapel_(pilihMapelAktif.value === MAPEL_MANUAL_);
     perbaruiInfoMapelSoal_();
+    perbaruiInfoBatasKelasGuru_();
   });
   var ketikMapelManual = document.getElementById('sMapelManual');
   if (ketikMapelManual) ketikMapelManual.addEventListener('input', debounce(perbaruiInfoMapelSoal_, 180));
@@ -3488,7 +3489,11 @@ function daftarMapelMilik_(terpilih) {
     var ada = daftar.some(function(x) { return x.toLowerCase() === bersih.toLowerCase(); });
     if (!ada) daftar.push(bersih);
   }
-  tambah(terpilih);
+  if (kunciMapelGuru_()) {
+    pecahMapelGuru_(terpilih).forEach(tambah);
+  } else {
+    tambah(terpilih);
+  }
   (ADMIN.mapelDiampu || []).forEach(tambah);
   if (!kunciMapelGuru_()) {
     (DATA_MENTAH.soal || []).forEach(function(soal) { tambah(soal && soal.mapel); });
@@ -3500,6 +3505,43 @@ function daftarMapelMilik_(terpilih) {
  * REVISI kunci mapel: guru memuat mapel kanonik + batas kelasnya (read-only).
  * Sumber: RPC info_mapel_guru. Diam bila gagal (server lama) atau bila admin.
  */
+/**
+ * REVISI info guru: kotak info mengikuti pilihan dropdown mapel aktif.
+ * Memakai medan kelasMapel1/2 (migrasi 2b); jatuh-balik ke kelasAktif.
+ */
+function perbaruiInfoBatasKelasGuru_() {
+  var kotak = document.getElementById('infoBatasKelasGuru');
+  var info = ADMIN.infoMapelGuru_ || null;
+  if (!kotak || !info) return;
+  var dipilih = String(mapelAktifTerpilih_() || '').trim();
+  var kanon = pecahMapelGuru_(String(info.mapelAkun || ''));
+  var slot = 0;
+  for (var i = 0; i < kanon.length; i++) {
+    if (dipilih && kanon[i].toLowerCase() === dipilih.toLowerCase()) { slot = i + 1; break; }
+  }
+  var daftar = [];
+  if (slot === 1 && Array.isArray(info.kelasMapel1)) daftar = info.kelasMapel1;
+  else if (slot === 2 && Array.isArray(info.kelasMapel2)) daftar = info.kelasMapel2;
+  else if (Array.isArray(info.kelasAktif)) daftar = info.kelasAktif;
+  daftar = daftar.filter(function(k) { return String(k || '').trim(); });
+  var html = '<strong>Mapel aktif:</strong> ' + escapeAdmin(dipilih || '-') +
+    '<br><strong>Kelas yang boleh mengikuti ujian:</strong> ' +
+    escapeAdmin(daftar.length ? daftar.join(' / ') : 'Semua kelas');
+  var tersimpan = String(info.mapelAktif || '').trim();
+  var slotTersimpan = 0;
+  for (var j = 0; j < kanon.length; j++) {
+    if (tersimpan && kanon[j].toLowerCase() === tersimpan.toLowerCase()) { slotTersimpan = j + 1; break; }
+  }
+  if (tersimpan && !slotTersimpan) {
+    html += '<br><span style="color:#b42318"><strong>Perhatian:</strong> mapel aktif tersimpan ("' +
+      escapeAdmin(tersimpan) + '") tidak cocok dengan mapel penetapan admin. ' +
+      'Pilih salah satu mapel di atas lalu Simpan Pengaturan.</span>';
+  }
+  html += '<br><span style="font-size:11px">Ditetapkan oleh admin dan tidak dapat diubah dari akun ini.</span>';
+  kotak.innerHTML = html;
+  kotak.style.display = '';
+}
+
 async function muatInfoBatasKelasGuru_() {
   var kotak = document.getElementById('infoBatasKelasGuru');
   if (ADMIN.isAdmin) { if (kotak) kotak.style.display = 'none'; return; }
@@ -3520,14 +3562,8 @@ async function muatInfoBatasKelasGuru_() {
       try { isiPilihanMapelUjian_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || ''); } catch (abaikan) {}
     }
   }
-  if (!kotak) return;
-  var aktif = String(info.mapelAktif || mapelAktifTerpilih_() || '').trim();
-  var daftar = Array.isArray(info.kelasAktif) ? info.kelasAktif.filter(function(k) { return String(k || '').trim(); }) : [];
-  kotak.innerHTML = '<strong>Mapel aktif:</strong> ' + escapeAdmin(aktif || '-') +
-    ' &nbsp;·&nbsp; <strong>Kelas yang boleh mengikuti:</strong> ' +
-    escapeAdmin(daftar.length ? daftar.join(', ') : 'Semua kelas') +
-    '<br><span style="font-size:11px">Ditetapkan oleh admin dan tidak dapat diubah dari akun ini.</span>';
-  kotak.style.display = '';
+  ADMIN.infoMapelGuru_ = info;
+  perbaruiInfoBatasKelasGuru_();
 }
 
 /** Membangun dropdown #sMapel dan menyinkronkan kotak ketik manual. */

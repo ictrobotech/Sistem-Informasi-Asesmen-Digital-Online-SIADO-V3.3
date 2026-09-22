@@ -2078,7 +2078,7 @@ async function buildQuestionPayload(prefix) {
   if (tipe === 'PGK') {
     kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
   }
-  return {
+  var hasil = {
     id_soal: prefix === 'e' ? document.getElementById('eId').value : undefined,
     tipe: tipe,
     poin: document.getElementById(prefix + 'Poin').value,
@@ -2095,6 +2095,18 @@ async function buildQuestionPayload(prefix) {
     tingkat: tingkatDariNilai_(nilaiInput_(prefix + 'Tingkat')),
     aktif: document.getElementById(prefix + 'Aktif').checked
   };
+  /* REVISI pindah mapel: kunci `mapel` hanya dikirim saat modal edit
+     benar-benar mengubah mapel (payload tambah soal & edit-tanpa-ubah
+     mapel tetap identik seperti sebelumnya). */
+  if (prefix === 'e') {
+    var elMapelSoal = document.getElementById('eMapel');
+    var mapelSoalBaru = elMapelSoal ? String(elMapelSoal.value || '').trim() : '';
+    var mapelSoalLama = String(EDIT_MAPEL_LAMA_ || '').trim();
+    if (mapelSoalBaru && mapelSoalBaru.toLowerCase() !== mapelSoalLama.toLowerCase()) {
+      hasil.mapel = mapelSoalBaru;
+    }
+  }
+  return hasil;
 }
 
 /**
@@ -2178,6 +2190,7 @@ async function saveNewQuestion() {
     clearQuestionForm('f');
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     await hasilSukses_('Soal Tersimpan', result.message || 'Soal baru berhasil ditambahkan ke bank soal.', [
+      { label: 'Mapel', nilai: mapelDiujikan_() || '-' },
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
       { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) },
       { label: 'Poin', nilai: String(payload.poin || '-') },
@@ -2294,6 +2307,11 @@ function openEditQuestion(id) {
   document.getElementById('eTipe').value = question.tipe;
   document.getElementById('ePoin').value = question.poin;
   document.getElementById('eTingkat').value = tingkatDariNilai_(question.tingkat);
+  // REVISI pindah mapel: isi kolom mapel + saran datalist.
+  EDIT_MAPEL_LAMA_ = String(question.mapel || '').trim();
+  isiDatalistMapelSoal_();
+  var elMapelEdit = document.getElementById('eMapel');
+  if (elMapelEdit) elMapelEdit.value = EDIT_MAPEL_LAMA_ || mapelDiujikan_();
   document.getElementById('ePertanyaan').value = question.pertanyaan;
   if (RTE_PERTANYAAN.e) RTE_PERTANYAAN.e.setHtml(question.pertanyaan);
   setNilaiInput_('eDeskripsiStimulus', question.stimulus_deskripsi || '');
@@ -2346,19 +2364,44 @@ async function saveEditedQuestion() {
     await hasilGagal_('Perubahan Gagal Disimpan', galatStruktur);
     return;
   }
+  // REVISI pindah mapel: mapel soal tidak boleh kosong.
+  var elMapelWajib = document.getElementById('eMapel');
+  if (elMapelWajib && !String(elMapelWajib.value || '').trim()) {
+    await hasilInfo_('Mapel Soal Wajib Diisi', 'Kolom Mapel soal tidak boleh kosong. Pilih salah satu mapel milik akun ini.');
+    return;
+  }
   ADMIN.operationBusy.editQuestion = true;
   setFormBusy('editQuestionForm', true);
   try {
     var payload = await buildQuestionPayload('e');
+    var elMapelTujuan = document.getElementById('eMapel');
+    var mapelTujuan = elMapelTujuan ? String(elMapelTujuan.value || '').trim() : '';
     var result = await apiWajib_('updateSoal', payload);
     closeEditQuestion();
     await segarkanSenyap_([loadQuestions, loadDashboard]);
-    await hasilSukses_('Perubahan Tersimpan', result.message || 'Perubahan soal berhasil disimpan.', [
+    // REVISI pindah mapel: pastikan server benar-benar menerapkan mapel baru.
+    var tersimpan = (DATA_MENTAH.soal || []).filter(function(x) { return String(x.id_soal) === String(payload.id_soal); })[0];
+    var mapelAktual = tersimpan ? String(tersimpan.mapel || '').trim() : mapelTujuan;
+    var rincianUbah = [
       { label: 'Nomor soal', nilai: '#' + String(payload.id_soal || '-') },
+      { label: 'Mapel', nilai: mapelAktual || '-' },
       { label: 'Tipe soal', nilai: labelTipeSoal_(payload.tipe) },
       { label: 'Kelas sasaran', nilai: labelTingkat_(payload.tingkat) + ' (hanya soal ini)' },
       { label: 'Status', nilai: payload.aktif ? 'Aktif' : 'Nonaktif' }
-    ]);
+    ];
+    if (EDIT_MAPEL_LAMA_ && mapelTujuan && EDIT_MAPEL_LAMA_.toLowerCase() !== mapelTujuan.toLowerCase()) {
+      rincianUbah.splice(2, 0, { label: 'Dipindahkan dari', nilai: EDIT_MAPEL_LAMA_ });
+    }
+    if (tersimpan && mapelTujuan && mapelAktual.toLowerCase() !== mapelTujuan.toLowerCase()) {
+      await hasilInfo_('Mapel Belum Berpindah',
+        'Perubahan soal lainnya tersimpan, tetapi mapel soal masih "' + (mapelAktual || '-') +
+        '". Server belum menerapkan kolom mapel pada pembaruan soal. ' +
+        'Solusi sementara: salin isi soal ini, hapus soal, aktifkan mapel "' + mapelTujuan +
+        '" di Pengaturan, lalu buat ulang / import via CSV dengan kolom mapel.',
+        rincianUbah);
+    } else {
+      await hasilSukses_('Perubahan Tersimpan', result.message || 'Perubahan soal berhasil disimpan.', rincianUbah);
+    }
   } catch (error) {
     await hasilGagal_('Perubahan Gagal Disimpan', error.message || 'Perubahan soal gagal disimpan.');
   } finally {
@@ -3510,6 +3553,28 @@ function perbaruiInfoMapelSoal_() {
     escapeAdmin(aktif || 'belum dipilih') + '</b><br>' +
     '<span style="font-size:11px">Bank soal milik akun ini &mdash; ' + ringkas +
     '. Untuk menambah soal mapel lain, ganti dulu mapel aktif di Pengaturan lalu simpan.</span>';
+}
+
+/* ==================================================================
+ * REVISI 2026-09-22 (lanjutan) — PINDAH MAPEL SOAL DARI MODAL EDIT
+ *
+ * Kolom "Mapel soal" pada Edit Soal Realtime memungkinkan guru
+ * memindahkan satu soal ke mapel lain milik akunnya (mis. soal yang
+ * tersimpan sebagai KKA dipindah ke Informatika). Kunci `mapel` hanya
+ * dikirim ke server bila nilainya berubah, sehingga perilaku tambah
+ * soal dan edit-tanpa-ubah-mapel tetap identik seperti sebelumnya.
+ * ================================================================== */
+
+/** Mapel soal sebelum diubah pada modal edit (acuan perbandingan). */
+var EDIT_MAPEL_LAMA_ = '';
+
+/** Mengisi datalist saran mapel pada modal edit soal. */
+function isiDatalistMapelSoal_() {
+  var daftar = document.getElementById('daftarMapelSoal');
+  if (!daftar) return;
+  daftar.innerHTML = daftarMapelMilik_('').map(function(m) {
+    return '<option value="' + escapeAdmin(m) + '"></option>';
+  }).join('');
 }
 
 function mapelDiujikan_() {

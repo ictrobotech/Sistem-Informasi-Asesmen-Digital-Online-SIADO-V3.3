@@ -333,9 +333,13 @@ async function loginPeserta() {
     }
     var pilihUjian = document.getElementById('ujianPeserta');
     if (pilihUjian && !pilihUjian.value.trim()) {
-      setLoginMessage(UJIAN.daftarUjian && UJIAN.daftarUjian.length
-        ? 'Pilih mata pelajaran yang akan Anda ujikan terlebih dahulu.'
-        : 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.', 'error');
+      var rombelLogin = rombelTerpilihPeserta_();
+      var adaTampil = (UJIAN.daftarUjian || []).some(function(x) { return ujianBolehUntukRombel_(x, rombelLogin); });
+      setLoginMessage(!adaTampil && (UJIAN.daftarUjian || []).length
+        ? 'Tidak ada ujian yang dibuka untuk rombel ' + (rombelLogin || 'Anda') + '. Hubungi pengawas.'
+        : (UJIAN.daftarUjian && UJIAN.daftarUjian.length
+          ? 'Pilih mata pelajaran yang akan Anda ujikan terlebih dahulu.'
+          : 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.'), 'error');
       return;
     }
   }
@@ -659,29 +663,54 @@ function perbaruiHintUjian_() {
   }
 }
 
+function rombelTerpilihPeserta_() {
+  var el = document.getElementById('kelasPeserta');
+  return el ? String(el.value || '').trim() : '';
+}
+
+/**
+ * REVISI batas kelas: true bila ujian boleh diikuti rombel terpilih.
+ * Ujian tanpa batas (server lama / daftar kosong) boleh diikuti semua.
+ */
+function ujianBolehUntukRombel_(item, rombel) {
+  var batas = item && item.rombelDiizinkan;
+  if (batas === undefined || batas === null || batas === '') return true;
+  var daftar = Array.isArray(batas) ? batas : String(batas).split(/[|,]/);
+  daftar = daftar.map(function(v) { return String(v || '').trim().toLowerCase(); }).filter(Boolean);
+  if (!daftar.length) return true;
+  if (!rombel) return true;
+  return daftar.indexOf(String(rombel).trim().toLowerCase()) !== -1;
+}
+
 function isiPilihanUjian_(list, selected) {
   var select = document.getElementById('ujianPeserta');
   if (!select) return;
   var daftar = Array.isArray(list) ? list.filter(function(item) { return item && item.pemilik; }) : [];
   UJIAN.daftarUjian = daftar;
+  var rombel = rombelTerpilihPeserta_();
+  var tampil = daftar.filter(function(item) { return ujianBolehUntukRombel_(item, rombel); });
 
   var options = [];
-  if (daftar.length !== 1) options.push('<option value="">Pilih ujian yang akan dikerjakan</option>');
-  daftar.forEach(function(item) {
+  if (tampil.length !== 1) options.push('<option value="">Pilih ujian yang akan dikerjakan</option>');
+  tampil.forEach(function(item) {
     var label = String(item.mapel || 'Mata Pelajaran');
     if (item.guru) label += ' — ' + item.guru;
     options.push('<option value="' + escapeHtml(String(item.pemilik)) + '"' +
       (String(item.pemilik) === String(selected) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
   });
-  if (!daftar.length) {
+  if (!tampil.length) {
     options = ['<option value="">Belum ada ujian yang dibuka</option>'];
   }
   select.innerHTML = options.join('');
-  if (daftar.length === 1) select.value = String(daftar[0].pemilik);
+  if (tampil.length === 1) select.value = String(tampil[0].pemilik);
+  else if (selected && tampil.some(function(x) { return String(x.pemilik) === String(selected); })) select.value = String(selected);
+  else select.value = '';
 
   var hint = document.getElementById('ujianHint');
-  if (hint && !daftar.length) {
-    hint.textContent = 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.';
+  if (hint && !tampil.length) {
+    hint.textContent = daftar.length
+      ? 'Tidak ada ujian yang dibuka untuk rombel ' + (rombel || 'Anda') + '. Hubungi pengawas atau guru mata pelajaran Anda.'
+      : 'Belum ada ujian yang dibuka. Hubungi pengawas atau guru mata pelajaran Anda.';
   } else if (hint) {
     perbaruiHintUjian_();
   }
@@ -693,6 +722,14 @@ function isiPilihanUjian_(list, selected) {
       el.addEventListener('change', perbaruiHintUjian_);
     }
   });
+  // Saring ulang pilihan ujian setiap rombel diganti.
+  var pilihRombel = document.getElementById('kelasPeserta');
+  if (pilihRombel && !pilihRombel.dataset.saringBound) {
+    pilihRombel.dataset.saringBound = '1';
+    pilihRombel.addEventListener('change', function() {
+      isiPilihanUjian_(UJIAN.daftarUjian, (document.getElementById('ujianPeserta') || {}).value || '');
+    });
+  }
 }
 
 /** Refresh halaman ujian: simpan jawaban lalu ambil ulang data dari server. */

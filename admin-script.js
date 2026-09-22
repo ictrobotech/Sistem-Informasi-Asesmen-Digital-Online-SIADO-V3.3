@@ -3708,13 +3708,117 @@ function himpunanKelasSama_(a, b) {
 }
 
 /** Peringatan bila server belum menyimpan batas kelas (migrasi SQL belum jalan). */
+/* REVISI batas kelas (backend): RPC langsung ke fungsi SQL baru. */
+function rpcBatasKelas_(namaFn, args) {
+  return new Promise(function(selesai, gagal) {
+    try {
+      var klien = window.siadoClient;
+      if (!klien || typeof klien.rpc !== 'function') {
+        gagal(new Error('Klien Supabase belum siap.'));
+        return;
+      }
+      klien.rpc(namaFn, args || {}).then(function(res) {
+        if (!res) { gagal(new Error('Server tidak memberi respons.')); return; }
+        if (res.error) { gagal(res.error); return; }
+        selesai(res.data);
+      }, function(galat) { gagal(galat || new Error('RPC gagal.')); });
+    } catch (galat) { gagal(galat); }
+  });
+}
+
+/** true bila galat berarti fungsi SQL belum terpasang / tak terjangkau. */
+function rpcBelumTerpasang_(galat) {
+  if (!galat) return false;
+  var teks = String(galat.code || '') + ' ' + String(galat.message || galat.details || galat.hint || galat);
+  return teks.indexOf('PGRST202') !== -1 || teks.indexOf('PGRST204') !== -1 ||
+    teks.indexOf('404') !== -1 || teks.indexOf('Could not find the function') !== -1 ||
+    teks.indexOf('Failed to fetch') !== -1 || teks.indexOf('belum siap') !== -1;
+}
+
+/**
+ * Menyimpan batas kelas akun guru via RPC simpan_batas_kelas.
+ * Mengembalikan teks status singkat untuk dialog (tidak pernah melempar).
+ */
+async function simpanBatasKelasGuru_(username, daftar1, daftar2) {
+  try {
+    var hasil = await rpcBatasKelas_('simpan_batas_kelas', {
+      p_admin_token: ADMIN.token,
+      p_username: username,
+      p_kelas1: daftar1 || [],
+      p_kelas2: daftar2 || []
+    });
+    if (hasil && hasil.success) return 'Tersimpan';
+    return 'Gagal: ' + ((hasil && hasil.message) || 'respons server tidak dikenal');
+  } catch (galat) {
+    if (rpcBelumTerpasang_(galat)) return 'Belum aktif \u2014 jalankan migrasi SQL dahulu';
+    return 'Gagal: ' + (galat && galat.message ? galat.message : String(galat));
+  }
+}
+
+/** Membaca peta batas kelas semua guru; null bila server belum mendukung. */
+async function bacaPetaBatasKelas_() {
+  if (!ADMIN.token || !ADMIN.isAdmin) return null;
+  try {
+    var hasil = await rpcBatasKelas_('baca_batas_kelas', { p_admin_token: ADMIN.token });
+    if (hasil && hasil.success && hasil.data) return hasil.data;
+  } catch (galat) { /* server lama: abaikan */ }
+  return null;
+}
+
+var SINKRON_BATAS_KELAS_JALAN_ = false;
+
+/** Menggabungkan batas kelas server ke daftar guru lalu menggambar ulang. */
+async function sinkronBatasKelasPanel_() {
+  if (!ADMIN.token || !ADMIN.isAdmin || SINKRON_BATAS_KELAS_JALAN_) return false;
+  SINKRON_BATAS_KELAS_JALAN_ = true;
+  try {
+    var peta = await bacaPetaBatasKelas_();
+    if (!peta) return false;
+    var berubah = false;
+    (ADMIN.teachers || []).forEach(function(g) {
+      var kunci = null;
+      var daftarKunci = Object.keys(peta);
+      for (var i = 0; i < daftarKunci.length; i++) {
+        if (daftarKunci[i].toLowerCase() === String(g.username || '').toLowerCase()) { kunci = daftarKunci[i]; break; }
+      }
+      var b = kunci ? peta[kunci] : null;
+      var b1 = normalisasiKelas_(b && b.kelasMapel1);
+      var b2 = normalisasiKelas_(b && b.kelasMapel2);
+      if (!himpunanKelasSama_(normalisasiKelas_(g.kelasMapel1), b1) ||
+          !himpunanKelasSama_(normalisasiKelas_(g.kelasMapel2), b2)) {
+        g.kelasMapel1 = b1;
+        g.kelasMapel2 = b2;
+        berubah = true;
+      }
+    });
+    if (berubah) terapkanFilterGuru_();
+    return berubah;
+  } catch (galat) { return false; }
+  finally { SINKRON_BATAS_KELAS_JALAN_ = false; }
+}
+
 async function verifikasiBatasKelas_(username, kirim1, kirim2) {
-  if (!kirim1.length && !kirim2.length) return;
+  var namaKunci = String(username || '').toLowerCase();
+  var peta = await bacaPetaBatasKelas_();
+  if (!peta) return; // tak dapat memverifikasi; mengandalkan baris status dialog
+  var b = null;
+  var daftarKunci = Object.keys(peta);
+  for (var i = 0; i < daftarKunci.length; i++) {
+    if (daftarKunci[i].toLowerCase() === namaKunci) { b = peta[daftarKunci[i]]; break; }
+  }
+  if (!b) return;
+  var simpan1 = normalisasiKelas_(b.kelasMapel1);
+  var simpan2 = normalisasiKelas_(b.kelasMapel2);
   var g = (ADMIN.teachers || []).filter(function(x) {
-    return String(x.username || '').toLowerCase() === String(username || '').toLowerCase();
+    return String(x.username || '').toLowerCase() === namaKunci;
   })[0];
-  if (!g) return;
-  if (himpunanKelasSama_(g.kelasMapel1, kirim1) && himpunanKelasSama_(g.kelasMapel2, kirim2)) return;
+  if (g && (!himpunanKelasSama_(normalisasiKelas_(g.kelasMapel1), simpan1) ||
+      !himpunanKelasSama_(normalisasiKelas_(g.kelasMapel2), simpan2))) {
+    g.kelasMapel1 = simpan1;
+    g.kelasMapel2 = simpan2;
+    terapkanFilterGuru_();
+  }
+  if (himpunanKelasSama_(simpan1, kirim1) && himpunanKelasSama_(simpan2, kirim2)) return;
   await hasilInfo_('Batas Kelas Belum Aktif',
     'Akun tersimpan, tetapi server belum menyimpan daftar kelas (kolom batas kelas belum ada di database). ' +
     'Jalankan file migrasi SQL batas kelas di Supabase, lalu ulangi penyimpanan akun ini.',
@@ -4585,6 +4689,7 @@ async function loadTeachers() {
     ADMIN.teachers = result.data || [];
     DATA_MENTAH.guru = ADMIN.teachers;
     terapkanFilterGuru_();
+    sinkronBatasKelasPanel_();
   } catch (error) {
     setTableMessage('teacherTable', 'Daftar guru gagal dimuat.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.guru = false; }
@@ -4664,6 +4769,7 @@ async function createTeacher() {
       kkm: document.getElementById('gKkm').value
     });
     if (!guardAdminResult(result)) throw new Error(result.message || 'Akun guru gagal dibuat.');
+    var statusKelas = await simpanBatasKelasGuru_(String(document.getElementById('gUsername').value || '').trim(), kirimKelas1, kirimKelas2);
     var namaGuru = document.getElementById('gNama').value;
     var userGuru = document.getElementById('gUsername').value;
     var kkmGuru = document.getElementById('gKkm').value;
@@ -4681,7 +4787,8 @@ async function createTeacher() {
       { label: 'Mapel 2', nilai: mapel2Baru || '-' },
       { label: 'Kelas Mapel 1', nilai: kirimKelas1.join(', ') || 'Semua kelas' },
       { label: 'Kelas Mapel 2', nilai: mapel2Baru ? (kirimKelas2.join(', ') || 'Semua kelas') : '-' },
-      { label: 'KKM', nilai: String(kkmGuru || 75) }
+      { label: 'KKM', nilai: String(kkmGuru || 75) },
+      { label: 'Status Batas Kelas', nilai: statusKelas }
     ]);
     await verifikasiBatasKelas_(userGuru, kirimKelas1, kirimKelas2);
   } catch (error) {
@@ -4769,6 +4876,7 @@ async function simpanEditGuru_() {
       passwordBaru: password,
       aktif: document.getElementById('egAktif').checked
     });
+    var statusKelas = await simpanBatasKelasGuru_(usernameBaru, kirimKelas1, kirimKelas2);
     tutupEditGuru_();
     await segarkanSenyap_([loadTeachers]);
     await hasilSukses_('Akun Guru Diperbarui', result.message || 'Perubahan akun guru berhasil disimpan.', [
@@ -4779,6 +4887,7 @@ async function simpanEditGuru_() {
       { label: 'Kelas Mapel 1', nilai: kirimKelas1.join(', ') || 'Semua kelas' },
       { label: 'Kelas Mapel 2', nilai: mapel2 ? (kirimKelas2.join(', ') || 'Semua kelas') : '-' },
       { label: 'KKM', nilai: String(kkm) },
+      { label: 'Status Batas Kelas', nilai: statusKelas },
       { label: 'Password', nilai: password ? 'Diubah — sampaikan ke guru' : 'Tidak diubah' }
     ]);
     await verifikasiBatasKelas_(result.username || usernameBaru, kirimKelas1, kirimKelas2);

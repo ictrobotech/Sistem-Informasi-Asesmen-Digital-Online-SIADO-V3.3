@@ -246,6 +246,7 @@ async function loadPublicConfig() {
     UJIAN.daftarRombel = result.daftarRombel || [];
     if (UJIAN.daftarRombel.length) isiPilihanRombel_(UJIAN.daftarRombel, '');
     UJIAN.daftarUjian = result.daftarUjian || [];
+    await tempelBatasKelasUjian_(UJIAN.daftarUjian);
     isiPilihanUjian_(UJIAN.daftarUjian, '');
     applyBrandingData_(result.branding);
     applyLoginBackground_(result.loginBackground);
@@ -672,6 +673,43 @@ function rombelTerpilihPeserta_() {
  * REVISI batas kelas: true bila ujian boleh diikuti rombel terpilih.
  * Ujian tanpa batas (server lama / daftar kosong) boleh diikuti semua.
  */
+/* REVISI batas kelas (backend): RPC langsung (publik, tanpa token admin). */
+function rpcBatasKelas_(namaFn, args) {
+  return new Promise(function(selesai, gagal) {
+    try {
+      var klien = window.siadoClient;
+      if (!klien || typeof klien.rpc !== 'function') {
+        gagal(new Error('Klien Supabase belum siap.'));
+        return;
+      }
+      klien.rpc(namaFn, args || {}).then(function(res) {
+        if (!res) { gagal(new Error('Server tidak memberi respons.')); return; }
+        if (res.error) { gagal(res.error); return; }
+        selesai(res.data);
+      }, function(galat) { gagal(galat || new Error('RPC gagal.')); });
+    } catch (galat) { gagal(galat); }
+  });
+}
+
+/** Menempelkan rombelDiizinkan dari server ke daftar ujian (diam bila gagal). */
+async function tempelBatasKelasUjian_(daftar) {
+  if (!daftar || !daftar.length) return;
+  try {
+    var hasil = await rpcBatasKelas_('batas_kelas_ujian', {});
+    var peta = (hasil && hasil.success && hasil.data) || null;
+    if (!peta) return;
+    daftar.forEach(function(u) {
+      if (!u || typeof u.rombelDiizinkan !== 'undefined') return;
+      var kunci = null;
+      var daftarKunci = Object.keys(peta);
+      for (var i = 0; i < daftarKunci.length; i++) {
+        if (daftarKunci[i].toLowerCase() === String(u.pemilik || '').toLowerCase()) { kunci = daftarKunci[i]; break; }
+      }
+      if (kunci) u.rombelDiizinkan = peta[kunci];
+    });
+  } catch (galat) { /* server lama: tampilkan semua seperti semula */ }
+}
+
 function ujianBolehUntukRombel_(item, rombel) {
   var batas = item && item.rombelDiizinkan;
   if (batas === undefined || batas === null || batas === '') return true;

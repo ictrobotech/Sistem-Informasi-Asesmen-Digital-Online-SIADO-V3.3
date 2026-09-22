@@ -1369,7 +1369,7 @@ async function loadDashboard() {
 function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
-    PG: '<strong>PG biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
+    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
     PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai.',
     PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>.',
     MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
@@ -1785,7 +1785,7 @@ function labelSumberMedia_(sumber) {
 
 /** Label tipe soal yang ramah dibaca pada kotak dialog. */
 function labelTipeSoal_(tipe) {
-  return { PG: 'PG biasa', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
+  return { PG: 'PG Biasa', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
            ISIAN: 'Isian', URAIAN: 'Uraian' }[String(tipe || '').toUpperCase()] || String(tipe || '-');
 }
 
@@ -2056,7 +2056,7 @@ function tingkatDariNilai_(nilai) {
 /** Label singkat tingkat untuk rincian hasil simpan. */
 function labelTingkat_(tingkat) {
   var bersih = tingkatDariNilai_(tingkat);
-  return bersih === 'SEMUA' ? 'Semua kelas' : 'Kelas ' + bersih;
+  return bersih === 'SEMUA' ? 'Semua Kelas' : 'Kelas ' + bersih;
 }
 
 async function buildQuestionPayload(prefix) {
@@ -3518,7 +3518,7 @@ function isiFilterMapel_(id, rows, ambil) {
     if (!ada) daftar.push(bersih);
   });
   daftar.sort(function(a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
-  el.innerHTML = '<option value="">Semua mapel</option>' + daftar.map(function(m) {
+  el.innerHTML = '<option value="">Semua Mapel</option>' + daftar.map(function(m) {
     return '<option value="' + escapeAdmin(m) + '">' + escapeAdmin(m) + '</option>';
   }).join('');
   var cocok = daftar.filter(function(m) { return m.toLowerCase() === sebelum.toLowerCase(); })[0];
@@ -3875,7 +3875,7 @@ async function exportLaporanFile(format) {
       'Berkas laporan tersimpan di folder unduhan perangkat Anda.', [
         { label: 'Nama berkas', nilai: fileName || '-' },
         { label: 'Format', nilai: namaFormat },
-        { label: 'Cakupan', nilai: kelasDipilih ? ('Kelas ' + kelasDipilih) : 'Semua kelas' }
+        { label: 'Cakupan', nilai: kelasDipilih ? ('Kelas ' + kelasDipilih) : 'Semua Kelas' }
       ]);
   } catch (error) {
     status.className = 'media-status show err';

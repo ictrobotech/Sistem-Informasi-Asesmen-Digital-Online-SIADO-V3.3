@@ -1033,6 +1033,7 @@ function renderQuestion() {
   SRich.typesetMath(document.getElementById('questionCard'));
   document.getElementById('questionNumber').textContent = 'SOAL ' + (UJIAN.index + 1);
   document.getElementById('questionType').textContent = labelTipe(type);
+  tampilkanPetunjukTipe_(type);
   document.getElementById('questionPosition').textContent = 'Soal ' + (UJIAN.index + 1) + ' dari ' + UJIAN.soal.length;
   document.getElementById('nextButton').disabled = UJIAN.index === UJIAN.soal.length - 1;
   document.getElementById('nextButton').style.display = UJIAN.index === UJIAN.soal.length - 1 ? 'none' : 'inline-flex';
@@ -3086,8 +3087,29 @@ function kembaliKeLogin(pesanAkhir) {
   switchScreen('loginScreen');
 }
 function labelTipe(type) {
-  return { PG: 'PG', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', ISIAN: 'ISIAN',
-           URAIAN: 'URAIAN', MENJODOHKAN: 'MENJODOHKAN' }[type] || type;
+  return { PG: 'Pilihan Ganda',
+           PGK: 'PGK Kategori (Pilihan Ganda Kompleks Kategori)',
+           PGK_MCMA: 'PGK MCMA (Pilihan Ganda Kompleks Multiple Choice Multiple Answer)',
+           ISIAN: 'ISIAN', URAIAN: 'URAIAN',
+           MENJODOHKAN: 'MENJODOHKAN' }[type] || type;
+}
+
+/** Keterangan cara menjawab untuk tiap tipe soal pada layar peserta. */
+function petunjukTipe_(type) {
+  var t = String(type || '').toUpperCase();
+  if (t === 'PG') return 'Pilihlah SATU jawaban yang paling tepat dengan memberi tanda centang (✓) pada huruf A, B, C, atau D!';
+  if (t === 'PGK') return 'Bacalah pernyataan dengan cermat, kemudian berilah tanda centang (✓) pada kolom kategori yang sesuai untuk SETIAP pernyataan!';
+  if (t === 'PGK_MCMA') return 'Pilihlah SEMUA jawaban yang benar dengan memberi tanda centang (✓) pada kotak di depan huruf pilihan! Jawaban benar LEBIH DARI SATU.';
+  return '';
+}
+
+/** Menampilkan / menyembunyikan keterangan di bawah lencana tipe soal. */
+function tampilkanPetunjukTipe_(type) {
+  var el = document.getElementById('questionTypeHint');
+  if (!el) return;
+  var teks = petunjukTipe_(type);
+  el.textContent = teks;
+  el.style.display = teks ? '' : 'none';
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? '' : value)

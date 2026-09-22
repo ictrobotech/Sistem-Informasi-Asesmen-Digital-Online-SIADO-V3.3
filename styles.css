@@ -441,3 +441,6 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 .rich-content table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
 }
 @media(max-width:370px){.nav-number{min-height:38px}}
+/* REVISI 2026-09-22: keterangan cara menjawab di bawah lencana tipe soal (client). */
+.question-type{line-height:1.5}
+.question-type-hint{margin:0 0 12px;padding:10px 14px;background:#fff8e7;border:1.5px dashed #eeb14a;border-radius:10px;color:#8a5a00;font-size:13px;font-style:italic;line-height:1.6}

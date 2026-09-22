@@ -2598,12 +2598,20 @@ function badgeJenisPelanggaran_(row) {
   return escapeAdmin(label);
 }
 
+/* REVISI rata tengah: sel deskripsi rata kiri-kanan bila panjang (>80 karakter),
+   rata tengah bila singkat. */
+function selDeskripsiTengah_(teks) {
+  var isi = (teks === null || teks === undefined || teks === '') ? '-' : String(teks);
+  var kelas = isi.length > 80 ? ' class="sel-justify"' : '';
+  return '<td' + kelas + '><div class="cell-wrap">' + escapeAdmin(isi) + '</div></td>';
+}
+
 function renderViolationTable(rows) {
   if (!rows.length) { setTableMessage('violationTable', 'Belum ada pelanggaran tercatat.', 'fa-shield-heart'); return; }
   var html = '<table class="admin-table"><thead><tr><th>Waktu</th><th>Peserta</th><th>Kelas</th><th>Jenis Pelanggaran</th><th>Detail</th><th>Ke-</th><th>Tindakan</th><th>Email</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td>' + escapeAdmin(formatDate(row.timestamp)) + '</td><td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
+      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td>' + selDeskripsiTengah_(row.detail) + '' +
       '<td>' + badge(String(row.jumlah), row.jumlah >= 3 ? 'red' : 'amber') + '</td><td>' + statusBadge(row.tindakan) + '</td><td><div class="cell-wrap">' + escapeAdmin(row.email_status || '-') + '</div></td></tr>';
   });
   html += '</tbody></table>';

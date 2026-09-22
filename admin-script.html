@@ -2599,12 +2599,20 @@ function badgeJenisPelanggaran_(row) {
   return escapeAdmin(label);
 }
 
+/* REVISI rata tengah: sel deskripsi rata kiri-kanan bila panjang (>80 karakter),
+   rata tengah bila singkat. */
+function selDeskripsiTengah_(teks) {
+  var isi = (teks === null || teks === undefined || teks === '') ? '-' : String(teks);
+  var kelas = isi.length > 80 ? ' class="sel-justify"' : '';
+  return '<td' + kelas + '><div class="cell-wrap">' + escapeAdmin(isi) + '</div></td>';
+}
+
 function renderViolationTable(rows) {
   if (!rows.length) { setTableMessage('violationTable', 'Belum ada pelanggaran tercatat.', 'fa-shield-heart'); return; }
   var html = '<table class="admin-table"><thead><tr><th>Waktu</th><th>Peserta</th><th>Kelas</th><th>Jenis Pelanggaran</th><th>Detail</th><th>Ke-</th><th>Tindakan</th><th>Email</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td>' + escapeAdmin(formatDate(row.timestamp)) + '</td><td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td><td><div class="cell-wrap">' + escapeAdmin(row.detail || '-') + '</div></td>' +
+      '<td>' + badge(row.kelas, 'blue') + '</td><td><div class="cell-wrap">' + badgeJenisPelanggaran_(row) + '</div></td>' + selDeskripsiTengah_(row.detail) + '' +
       '<td>' + badge(String(row.jumlah), row.jumlah >= 3 ? 'red' : 'amber') + '</td><td>' + statusBadge(row.tindakan) + '</td><td><div class="cell-wrap">' + escapeAdmin(row.email_status || '-') + '</div></td></tr>';
   });
   html += '</tbody></table>';
@@ -6007,4 +6015,5 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f0ddb58a0e0d23',t:'MTc5MDA3NTQ1Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f0f8300ac69c9f',t:'MTc5MDA3NjU0MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

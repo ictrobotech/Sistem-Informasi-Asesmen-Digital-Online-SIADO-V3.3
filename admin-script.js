@@ -1219,6 +1219,7 @@ function applySettingsData(setting) {
   var titipan = setting.mapelDiampu || setting.mapelGuru || '';
   if (titipan) ADMIN.mapelDiampu = pecahMapelGuru_(titipan);
   isiPilihanMapelUjian_(setting.mapel || '');
+  muatInfoBatasKelasGuru_();
   document.getElementById('sDurasi').value =
     (setting.durasiMenit === '' || setting.durasiMenit === undefined || setting.durasiMenit === null)
       ? '' : setting.durasiMenit;
@@ -3068,6 +3069,7 @@ async function saveSettings() {
   var mapelBaruAwal = mapelAktifTerpilih_();
   if (!mapelBaruAwal) {
     await hasilInfo_('Mapel Belum Dipilih',
+      kunciMapelGuru_() ? 'Mapel akun Anda belum ditetapkan admin. Hubungi admin.' :
       'Pilih mapel yang diujikan pada dropdown, atau pilih "+ Mapel lain" lalu ketik namanya.');
     return;
   }
@@ -3473,6 +3475,11 @@ function teksMapelGuru_(nilai) {
  * Daftar kandidat mapel aktif: mapel tersimpan + mapel yang diampu akun
  * + mapel yang sudah ada di bank soal milik akun (huruf dinormalisasi).
  */
+/** true bila akun ini (guru/proktor) dikunci ke mapel penetapan admin. */
+function kunciMapelGuru_() {
+  return !ADMIN.isAdmin;
+}
+
 function daftarMapelMilik_(terpilih) {
   var daftar = [];
   function tambah(nilai) {
@@ -3483,26 +3490,67 @@ function daftarMapelMilik_(terpilih) {
   }
   tambah(terpilih);
   (ADMIN.mapelDiampu || []).forEach(tambah);
-  (DATA_MENTAH.soal || []).forEach(function(soal) { tambah(soal && soal.mapel); });
+  if (!kunciMapelGuru_()) {
+    (DATA_MENTAH.soal || []).forEach(function(soal) { tambah(soal && soal.mapel); });
+  }
   return daftar;
+}
+
+/**
+ * REVISI kunci mapel: guru memuat mapel kanonik + batas kelasnya (read-only).
+ * Sumber: RPC info_mapel_guru. Diam bila gagal (server lama) atau bila admin.
+ */
+async function muatInfoBatasKelasGuru_() {
+  var kotak = document.getElementById('infoBatasKelasGuru');
+  if (ADMIN.isAdmin) { if (kotak) kotak.style.display = 'none'; return; }
+  var namaAkun = String(ADMIN.username || '').trim();
+  if (!namaAkun) return;
+  var hasil = null;
+  try {
+    hasil = await rpcBatasKelas_('info_mapel_guru', { p_username: namaAkun });
+  } catch (galat) { hasil = null; }
+  if (!hasil || !hasil.success || !hasil.data) return;
+  var info = hasil.data || {};
+  var kanon = String(info.mapelAkun || '').trim();
+  if (kanon) {
+    var pecah = pecahMapelGuru_(kanon);
+    var kini = (ADMIN.mapelDiampu || []).join('|').toLowerCase();
+    if (pecah.join('|').toLowerCase() !== kini) {
+      ADMIN.mapelDiampu = pecah;
+      try { isiPilihanMapelUjian_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || ''); } catch (abaikan) {}
+    }
+  }
+  if (!kotak) return;
+  var aktif = String(info.mapelAktif || mapelAktifTerpilih_() || '').trim();
+  var daftar = Array.isArray(info.kelasAktif) ? info.kelasAktif.filter(function(k) { return String(k || '').trim(); }) : [];
+  kotak.innerHTML = '<strong>Mapel aktif:</strong> ' + escapeAdmin(aktif || '-') +
+    ' &nbsp;·&nbsp; <strong>Kelas yang boleh mengikuti:</strong> ' +
+    escapeAdmin(daftar.length ? daftar.join(', ') : 'Semua kelas') +
+    '<br><span style="font-size:11px">Ditetapkan oleh admin dan tidak dapat diubah dari akun ini.</span>';
+  kotak.style.display = '';
 }
 
 /** Membangun dropdown #sMapel dan menyinkronkan kotak ketik manual. */
 function isiPilihanMapelUjian_(terpilih) {
   var pilih = document.getElementById('sMapel');
   if (!pilih) return;
+  var terkunci = kunciMapelGuru_();
   var daftar = daftarMapelMilik_(terpilih);
   var html = daftar.map(function(m) {
     return '<option value="' + escapeAdmin(m) + '">' + escapeAdmin(m) + '</option>';
   }).join('');
-  html += '<option value="' + MAPEL_MANUAL_ + '">+ Mapel lain (ketik manual)...</option>';
+  if (!terkunci) {
+    html += '<option value="' + MAPEL_MANUAL_ + '">+ Mapel lain (ketik manual)...</option>';
+  } else if (!daftar.length) {
+    html += '<option value="">Belum ditetapkan admin</option>';
+  }
   pilih.innerHTML = html;
   var aktif = String(terpilih || '').trim();
   var cocok = daftar.filter(function(m) { return m.toLowerCase() === aktif.toLowerCase(); })[0];
-  pilih.value = cocok || (daftar[0] || MAPEL_MANUAL_);
+  pilih.value = cocok || daftar[0] || (terkunci ? '' : MAPEL_MANUAL_);
   var manual = document.getElementById('sMapelManual');
-  if (manual && !cocok && aktif) manual.value = aktif;
-  tampilManualMapel_(pilih.value === MAPEL_MANUAL_);
+  if (manual && !terkunci && !cocok && aktif) manual.value = aktif;
+  tampilManualMapel_(!terkunci && pilih.value === MAPEL_MANUAL_);
   perbaruiInfoMapelSoal_();
 }
 
@@ -3747,13 +3795,14 @@ function rpcBelumTerpasang_(galat) {
  * Menyimpan batas kelas akun guru via RPC simpan_batas_kelas.
  * Mengembalikan teks status singkat untuk dialog (tidak pernah melempar).
  */
-async function simpanBatasKelasGuru_(username, daftar1, daftar2) {
+async function simpanBatasKelasGuru_(username, daftar1, daftar2, mapelGabung) {
   try {
     var hasil = await rpcBatasKelas_('simpan_batas_kelas', {
       p_admin_token: ADMIN.token,
       p_username: username,
       p_kelas1: daftar1 || [],
-      p_kelas2: daftar2 || []
+      p_kelas2: daftar2 || [],
+      p_mapel: mapelGabung || ''
     });
     if (hasil && hasil.success) return 'Tersimpan';
     return 'Gagal: ' + ((hasil && hasil.message) || 'respons server tidak dikenal');
@@ -3790,6 +3839,8 @@ async function sinkronBatasKelasPanel_() {
         if (daftarKunci[i].toLowerCase() === String(g.username || '').toLowerCase()) { kunci = daftarKunci[i]; break; }
       }
       var b = kunci ? peta[kunci] : null;
+      var kanon = (b && String(b.mapelAdmin || '').trim()) || '';
+      if (kanon && String(g.mapel || '').trim() !== kanon) { g.mapel = kanon; berubah = true; }
       var b1 = normalisasiKelas_(b && b.kelasMapel1);
       var b2 = normalisasiKelas_(b && b.kelasMapel2);
       if (!himpunanKelasSama_(normalisasiKelas_(g.kelasMapel1), b1) ||
@@ -3824,6 +3875,11 @@ async function verifikasiBatasKelas_(username, kirim1, kirim2) {
       !himpunanKelasSama_(normalisasiKelas_(g.kelasMapel2), simpan2))) {
     g.kelasMapel1 = simpan1;
     g.kelasMapel2 = simpan2;
+    terapkanFilterGuru_();
+  }
+  var kanon = String(b.mapelAdmin || '').trim();
+  if (g && kanon && String(g.mapel || '').trim() !== kanon) {
+    g.mapel = kanon;
     terapkanFilterGuru_();
   }
   if (himpunanKelasSama_(simpan1, kirim1) && himpunanKelasSama_(simpan2, kirim2)) return;
@@ -4785,7 +4841,7 @@ async function createTeacher() {
       kkm: document.getElementById('gKkm').value
     });
     if (!guardAdminResult(result)) throw new Error(result.message || 'Akun guru gagal dibuat.');
-    var statusKelas = await simpanBatasKelasGuru_(String(document.getElementById('gUsername').value || '').trim(), kirimKelas1, kirimKelas2);
+    var statusKelas = await simpanBatasKelasGuru_(String(document.getElementById('gUsername').value || '').trim(), kirimKelas1, kirimKelas2, mapelGabungBaru);
     var namaGuru = document.getElementById('gNama').value;
     var userGuru = document.getElementById('gUsername').value;
     var kkmGuru = document.getElementById('gKkm').value;
@@ -4892,7 +4948,7 @@ async function simpanEditGuru_() {
       passwordBaru: password,
       aktif: document.getElementById('egAktif').checked
     });
-    var statusKelas = await simpanBatasKelasGuru_(usernameBaru, kirimKelas1, kirimKelas2);
+    var statusKelas = await simpanBatasKelasGuru_(usernameBaru, kirimKelas1, kirimKelas2, mapel);
     tutupEditGuru_();
     await segarkanSenyap_([loadTeachers]);
     await hasilSukses_('Akun Guru Diperbarui', result.message || 'Perubahan akun guru berhasil disimpan.', [

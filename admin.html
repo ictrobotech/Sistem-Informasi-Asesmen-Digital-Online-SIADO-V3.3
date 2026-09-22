@@ -356,6 +356,7 @@
               <div class="admin-card-head">
                 <div><h2><i class="fa-solid fa-circle-plus"></i> Tambah Soal Baru</h2><p>Soal yang disimpan dapat diedit realtime. Peserta aktif menerima pembaruan pada sinkronisasi berikutnya.</p></div>
               </div>
+              <div id="mapelAktifInfo" class="form-help" style="margin-bottom:14px;border:1.5px dashed #c7d7e6;border-radius:12px;padding:10px 14px;background:#f8fbff">Memuat mapel aktif...</div>
               <form id="addQuestionForm">
                 <div class="admin-form-grid">
                   <div class="admin-field"><label for="fTipe">Tipe soal</label><select id="fTipe" class="admin-input"><option value="PG">PG biasa</option><option value="PGK">PGK Kategori</option><option value="PGK_MCMA">PGK MCMA</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian</option><option value="URAIAN">Uraian</option></select></div>
@@ -457,7 +458,7 @@
 
             <article class="admin-card">
               <div class="admin-card-head">
-                <div><h2><i class="fa-solid fa-file-import"></i> Import Soal</h2><p>Import massal dari file CSV atau Excel (.xlsx). Kolom wajib: tipe, pertanyaan, kunci_jawaban. Kolom opsional: opsi, poin, aktif, mapel, stimulus_gambar, stimulus_video.</p></div>
+                <div><h2><i class="fa-solid fa-file-import"></i> Import Soal</h2><p>Import massal dari file CSV atau Excel (.xlsx). Kolom wajib: tipe, pertanyaan, kunci_jawaban. Kolom opsional: opsi, poin, aktif, mapel, stimulus_gambar, stimulus_video. Baris tanpa kolom mapel otomatis masuk ke <b>mapel aktif</b> pada Pengaturan.</p></div>
                 <button id="downloadTemplateSoal" class="admin-secondary" type="button"><i class="fa-solid fa-download"></i> Unduh Template CSV</button>
               </div>
               <div class="upload-row">
@@ -482,6 +483,7 @@
                 <div class="admin-field"><label for="filterSoalTipe">Tipe soal</label><select id="filterSoalTipe" class="admin-input"><option value="">Semua tipe</option><option value="PG">Pilihan Ganda</option><option value="PGK">PGK Kategori</option><option value="PGK_MCMA">PG Kompleks (Banyak Jawaban)</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian Singkat</option><option value="URAIAN">Uraian</option></select></div>
                 <div class="admin-field"><label for="filterSoalStatus">Status</label><select id="filterSoalStatus" class="admin-input"><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
                 <div class="admin-field"><label for="filterSoalTingkat">Kelas sasaran</label><select id="filterSoalTingkat" class="admin-input"><option value="">Semua kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option><option value="SEMUA">Semua (SEMUA)</option></select></div>
+                <div class="admin-field"><label for="filterSoalMapel">Mapel</label><select id="filterSoalMapel" class="admin-input"><option value="">Semua mapel</option></select></div>
               </div>
               <div id="questionTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat soal...</div></div>
             </article>
@@ -512,6 +514,7 @@
               <div class="admin-card-head"><div><h2><i class="fa-solid fa-tower-broadcast"></i> Peserta Aktif dan Realtime</h2><p>Data diperbarui otomatis setiap 15 detik. Admin dapat mendiskualifikasi peserta secara langsung.</p></div><button id="refreshMonitor" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div>
               <div class="filter-bar">
                 <div class="admin-field" style="flex:1"><label for="cariMonitor">Cari peserta aktif</label><input id="cariMonitor" class="admin-input" type="search" placeholder="Ketik nama, username, atau kelas"></div>
+                <div class="admin-field"><label for="filterMonitorMapel">Mapel</label><select id="filterMonitorMapel" class="admin-input"><option value="">Semua mapel</option></select></div>
               </div>
               <div id="monitorTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-satellite-dish"></i> Memuat peserta aktif...</div></div>
             </article>
@@ -565,7 +568,7 @@
           <section id="pane-hasil" class="admin-pane">
             <article class="admin-card">
               <div class="admin-card-head"><div><h2><i class="fa-solid fa-square-poll-vertical"></i> Hasil Ujian Peserta</h2><p>Satu baris per peserta lengkap dengan KKM dan status Tuntas/Remedial.</p></div></div>
-              <div class="filter-bar"><div class="admin-field"><label for="filterHasilKelas">Filter kelas</label><input id="filterHasilKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div><div class="admin-field" style="flex:1"><label for="cariHasil">Cari peserta</label><input id="cariHasil" class="admin-input" type="search" placeholder="Ketik nama atau username peserta"></div><button id="refreshHasil" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh Hasil</button></div>
+              <div class="filter-bar"><div class="admin-field"><label for="filterHasilKelas">Filter kelas</label><input id="filterHasilKelas" class="admin-input" type="text" placeholder="Contoh: IX A"></div><div class="admin-field"><label for="filterHasilMapel">Mapel</label><select id="filterHasilMapel" class="admin-input"><option value="">Semua mapel</option></select></div><div class="admin-field" style="flex:1"><label for="cariHasil">Cari peserta</label><input id="cariHasil" class="admin-input" type="search" placeholder="Ketik nama atau username peserta"></div><button id="refreshHasil" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh Hasil</button></div>
               <div id="resultTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-chart-line"></i> Memuat hasil ujian...</div></div>
             </article>
           </section>
@@ -603,7 +606,7 @@
                 </div>
               </div>
               <div id="exportStatus" class="media-status"></div>
-              <p class="form-help" style="margin-top:14px"><strong>Saran:</strong> nilai seluruh jawaban uraian pada menu <b>Nilai Uraian</b> terlebih dahulu agar kolom status pada laporan tidak berisi "Menunggu Penilaian".</p>
+              <p class="form-help" style="margin-top:14px"><strong>Saran:</strong> nilai seluruh jawaban uraian pada menu <b>Nilai Uraian</b> terlebih dahulu agar kolom status pada laporan tidak berisi "Menunggu Penilaian". Laporan mengikuti <b>mapel aktif</b> — bila 1 akun memegang 2 mapel, export dilakukan per mapel (aktifkan mapelnya di Pengaturan, lalu export).</p>
             </article>
           </section>
 
@@ -658,13 +661,14 @@
           <!-- ================= AKUN GURU (ADMIN ONLY) ================= -->
           <section id="pane-pengguna" class="admin-pane" data-admin="true">
             <article class="admin-card">
-              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-plus"></i> Tambah Akun Guru Mapel</h2><p>Guru mapel dapat mengelola soal, menilai, dan mengexport laporan, tetapi <b>tidak dapat</b> mengubah logo aplikasi, kredensial admin, atau mereset aplikasi.</p></div></div>
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-user-plus"></i> Tambah Akun Guru Mapel</h2><p>Guru mapel dapat mengelola soal, menilai, dan mengexport laporan, tetapi <b>tidak dapat</b> mengubah logo aplikasi, kredensial admin, atau mereset aplikasi. Satu akun dapat memegang <b>maksimal 2 mapel</b> yang diujikan bergantian (tidak bersamaan).</p></div></div>
               <form id="teacherForm">
                 <div class="admin-form-grid">
                   <div class="admin-field"><label for="gNama">Nama guru</label><input id="gNama" class="admin-input" maxlength="120" placeholder="Contoh: Siti Nurhaliza, S.Pd." required></div>
                   <div class="admin-field"><label for="gUsername">Username</label><input id="gUsername" class="admin-input" maxlength="60" placeholder="Contoh: sitinur" required><small>Huruf kecil tanpa spasi.</small></div>
-                  <div class="admin-field"><label for="gMapel">Mata pelajaran diampu</label><input id="gMapel" class="admin-input" maxlength="150" placeholder="Contoh: IPA Terpadu" required></div>
-                  <div class="admin-field"><label for="gKkm">KKM mata pelajaran</label><input id="gKkm" class="admin-input" type="number" min="0" max="100" value="75" required><small>Menentukan batas Tuntas / Remedial untuk mapel ini.</small></div>
+                  <div class="admin-field"><label for="gMapel1">Mata pelajaran 1 (wajib)</label><input id="gMapel1" class="admin-input" maxlength="70" placeholder="Contoh: Informatika" required></div>
+                  <div class="admin-field"><label for="gMapel2">Mata pelajaran 2 (opsional)</label><input id="gMapel2" class="admin-input" maxlength="70" placeholder="Contoh: Koding dan Kecerdasan Artifisial (KKA)"><small>Diisi bila guru mengampu 2 mapel. Guru memilih salah satu sebagai mapel aktif di menu Pengaturan.</small></div>
+                  <div class="admin-field"><label for="gKkm">KKM mata pelajaran</label><input id="gKkm" class="admin-input" type="number" min="0" max="100" value="75" required><small>Berlaku untuk kedua mapel. Bila KKM tiap mapel berbeda, guru menyesuaikannya di Pengaturan setiap berganti mapel aktif.</small></div>
                   <div class="admin-field span-2"><label for="gPassword">Password akun guru</label><div class="password-field"><input id="gPassword" class="admin-input" type="password" minlength="8" maxlength="300" placeholder="Minimal 8 karakter" required><button id="toggleTeacherPassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button></div></div>
                 </div>
                 <button class="admin-primary" type="submit"><i class="fa-solid fa-user-check"></i> Buat Akun Guru</button>
@@ -672,7 +676,7 @@
             </article>
 
             <article class="admin-card">
-              <div class="admin-card-head"><div><h2><i class="fa-solid fa-users-gear"></i> Daftar Akun Guru Mapel</h2><p>Admin dapat mereset password atau menghapus akun guru kapan saja.</p></div><button id="refreshGuru" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div>
+              <div class="admin-card-head"><div><h2><i class="fa-solid fa-users-gear"></i> Daftar Akun Guru Mapel</h2><p>Admin dapat mereset password atau menghapus akun guru kapan saja. Kolom mapel menampilkan 1-2 mapel yang diampu tiap akun.</p></div><button id="refreshGuru" class="admin-secondary" type="button"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div>
               <div class="filter-bar">
                 <div class="admin-field" style="flex:1"><label for="cariGuru">Cari akun guru</label><input id="cariGuru" class="admin-input" type="search" placeholder="Ketik nama guru, username, atau mata pelajaran"></div>
               </div>
@@ -697,7 +701,7 @@
                   <div class="admin-field"><label for="sJenisUjian">Jenis ujian</label><select id="sJenisUjian" class="admin-input"><option value="SUMATIF_HARIAN">Sumatif Harian (SH)</option><option value="STS">Sumatif Tengah Semester (STS)</option><option value="SAS">Sumatif Akhir Semester (SAS)</option><option value="UAS">Ujian Akhir Sekolah (UAS)</option></select><small>Menu Kartu Soal aktif untuk STS, SAS, dan UAS.</small></div>
                   <div class="admin-field"><label for="sTahunAjaran">Tahun ajaran</label><input id="sTahunAjaran" class="admin-input" maxlength="30" placeholder="Contoh: 2026/2027"><small>Diketik manual dan ikut membentuk judul besar ujian.</small></div>
                   <div class="admin-field"><label for="sSemester">Semester</label><select id="sSemester" class="admin-input"><option value="GANJIL">Ganjil</option><option value="GENAP">Genap</option></select><small>Menentukan kata Ganjil atau Genap pada judul besar ujian.</small></div>
-                  <div class="admin-field"><label for="sMapel">Mata pelajaran yang diujikan</label><input id="sMapel" class="admin-input" maxlength="150" placeholder="Contoh: Matematika"><small>Diisi manual sesuai mapel yang sedang diujikan.</small></div>
+                  <div class="admin-field"><label for="sMapel">Mata pelajaran yang diujikan (mapel aktif)</label><select id="sMapel" class="admin-input"></select><div id="sMapelManualWrap" style="display:none;margin-top:8px"><input id="sMapelManual" class="admin-input" maxlength="150" placeholder="Ketik nama mapel lain"></div><small>Pilih salah satu mapel yang diampu. Hanya mapel aktif yang tampil di login peserta. Bank soal mapel lain tetap tersimpan dan tidak terhapus.</small></div>
                   <div class="admin-field"><label for="sGuruMapel">Nama guru mapel (tampil ke peserta)</label><input id="sGuruMapel" class="admin-input" maxlength="150" placeholder="Contoh: Sri Wahyuni, S.Pd."><small>Diisi manual. Ditampilkan di bawah nama mata pelajaran pada halaman peserta.</small></div>
                   <div class="admin-field"><label for="sDurasi">Durasi ujian (menit)</label><input id="sDurasi" class="admin-input" type="number" min="1" max="300" placeholder="Contoh: 90"><small>Diisi manual sesuai lama ujian yang direncanakan.</small></div>
                   <div class="admin-field"><label for="sKkm">KKM default</label><input id="sKkm" class="admin-input" type="number" min="0" max="100" value="75"><small>Dipakai bila mapel tidak terhubung ke akun guru tertentu.</small></div>
@@ -898,7 +902,8 @@
         <div class="admin-form-grid">
           <div class="admin-field"><label for="egNama">Nama guru</label><input id="egNama" class="admin-input" maxlength="150" required></div>
           <div class="admin-field"><label for="egUsername">Username</label><input id="egUsername" class="admin-input" maxlength="60" required><small>Huruf kecil tanpa spasi.</small></div>
-          <div class="admin-field"><label for="egMapel">Mata pelajaran</label><input id="egMapel" class="admin-input" maxlength="150" placeholder="Contoh: Matematika"></div>
+          <div class="admin-field"><label for="egMapel1">Mata pelajaran 1</label><input id="egMapel1" class="admin-input" maxlength="70" placeholder="Contoh: Informatika"></div>
+          <div class="admin-field"><label for="egMapel2">Mata pelajaran 2 (opsional)</label><input id="egMapel2" class="admin-input" maxlength="70" placeholder="Contoh: Koding dan Kecerdasan Artifisial (KKA)"></div>
           <div class="admin-field"><label for="egKkm">KKM mata pelajaran</label><input id="egKkm" class="admin-input" type="number" min="0" max="100" placeholder="Contoh: 75"></div>
           <div class="admin-field span-2"><label for="egPassword">Password baru (opsional)</label><div class="password-field"><input id="egPassword" class="admin-input" type="password" minlength="8" maxlength="300" placeholder="Kosongkan bila tidak diubah"><button id="toggleEgPassword" class="icon-button" type="button" aria-label="Tampilkan password"><i class="fa-regular fa-eye"></i></button></div><small>Minimal 8 karakter. Kosongkan bila password tidak ingin diganti.</small></div>
           <div class="admin-field span-2"><label class="small-check"><input id="egAktif" type="checkbox" checked> Akun aktif dan boleh masuk panel</label></div>
@@ -992,7 +997,7 @@
   <script src="exceljs.min.js?v=20260909b"></script>
   <script src="jspdf.umd.min.js?v=20260909"></script>
   <script src="jspdf.plugin.autotable.min.js?v=20260909"></script>
-  <script src="admin-script.js?v=20260921d"></script>
+  <script src="admin-script.js?v=20260922b"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -1037,5 +1042,6 @@
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3b0983a190d447c',t:'MTc4OTQwMTUyMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ebdf6018de7e2e',t:'MTc5MDAyMzA5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ebdf6018de7e2e',t:'MTc5MDAyMzA5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f000696a6c9cf6',t:'MTc5MDA2NjM5Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
 </html>

@@ -3437,11 +3437,11 @@ function gabungMapelGuru_(mapel1, mapel2) {
   return m1 || m2;
 }
 
-/** Menampilkan 1-2 mapel akun guru sebagai lencana pada tabel. */
-function lencanaMapelGuru_(nilai) {
+/** Menampilkan mapel yang diampu sebagai "Mapel1/Mapel2". */
+function teksMapelGuru_(nilai) {
   var daftar = pecahMapelGuru_(nilai);
   if (!daftar.length) return '-';
-  return daftar.map(function(m) { return badge(m, 'blue'); }).join(' ');
+  return escapeAdmin(daftar.join('/'));
 }
 
 /**
@@ -4465,7 +4465,7 @@ function renderTeacherTable_(rows) {
   rows.forEach(function(row) {
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong></td>' +
       '<td><code>' + escapeAdmin(row.username) + '</code></td>' +
-      '<td><div class="cell-wrap">' + lencanaMapelGuru_(row.mapel) + '</div></td>' +
+      '<td><div class="cell-wrap">' + teksMapelGuru_(row.mapel) + '</div></td>' +
       '<td>' + escapeAdmin(row.kkm || 75) + '</td>' +
       '<td>' + (row.aktif ? badge('Aktif', 'green') : badge('Nonaktif', 'gray')) + '</td>' +
       '<td>' + escapeAdmin(formatDate(row.created_at)) + '</td>' +

@@ -3431,11 +3431,11 @@ function gabungMapelGuru_(mapel1, mapel2) {
   return m1 || m2;
 }
 
-/** Menampilkan 1-2 mapel akun guru sebagai lencana pada tabel. */
-function lencanaMapelGuru_(nilai) {
+/** Menampilkan mapel yang diampu sebagai "Mapel1/Mapel2". */
+function teksMapelGuru_(nilai) {
   var daftar = pecahMapelGuru_(nilai);
   if (!daftar.length) return '-';
-  return daftar.map(function(m) { return badge(m, 'blue'); }).join(' ');
+  return escapeAdmin(daftar.join('/'));
 }
 
 /**
@@ -4435,7 +4435,7 @@ function renderTeacherTable_(rows) {
   rows.forEach(function(row) {
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong></td>' +
       '<td><code>' + escapeAdmin(row.username) + '</code></td>' +
-      '<td><div class="cell-wrap">' + lencanaMapelGuru_(row.mapel) + '</div></td>' +
+      '<td><div class="cell-wrap">' + teksMapelGuru_(row.mapel) + '</div></td>' +
       '<td>' + escapeAdmin(row.kkm || 75) + '</td>' +
       '<td>' + (row.aktif ? badge('Aktif', 'green') : badge('Nonaktif', 'gray')) + '</td>' +
       '<td>' + escapeAdmin(formatDate(row.created_at)) + '</td>' +
@@ -5721,4 +5721,4 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f056266825ef6c',t:'MTc5MDA2OTkwNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f069233983fceb',t:'MTc5MDA3MDY4Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

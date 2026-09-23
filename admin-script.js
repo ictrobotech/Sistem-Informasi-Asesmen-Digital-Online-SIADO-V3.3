@@ -6033,6 +6033,7 @@ async function simpanKartuSoal_(event) {
   var muatan = {
     id_soal: id,
     pertanyaan: pertanyaanAsal,
+    tipe: tipeDipilih,
     ks_capaian: nilaiInput_('ksCapaian').trim(),
     ks_kelas: nilaiInput_('ksKelas').trim(),
     ks_nomor_soal: nilaiInput_('ksNomorSoal').trim(),
@@ -6076,10 +6077,9 @@ async function simpanKartuSoal_(event) {
     }
   }
 
-  // Tipe soal hanya dikirim saat benar-benar diubah; menyimpan metadata saja
-  // tidak perlu memicu validasi/pembaruan tipe soal di server.
+  // API server mewajibkan tipe soal pada setiap permintaan simpan. Konfirmasi
+  // tambahan hanya ditampilkan bila pengguna benar-benar mengubah tipenya.
   if (tipeBerubah) {
-    muatan.tipe = tipeDipilih;
     var lanjut = await konfirmasi_(
       'Tipe soal #' + id + ' akan diubah dari ' + labelTipeSoalResmi_(tipeAwal) +
       ' menjadi ' + labelTipeSoalResmi_(tipeDipilih) + '. Perubahan ini otomatis berlaku juga pada menu Kelola Soal ' +
@@ -6106,6 +6106,8 @@ async function simpanKartuSoal_(event) {
     var pesanSimpan = error.message || 'Kartu soal gagal disimpan.';
     if (/PG harus memiliki 2 sampai 8 opsi/i.test(pesanSimpan)) {
       pesanSimpan = 'Soal PG wajib memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu coba simpan Kartu Soal kembali.';
+    } else if (/tipe soal tidak valid/i.test(pesanSimpan)) {
+      pesanSimpan = 'Tipe soal tidak valid. Pilih ulang salah satu tipe pada Kartu Soal. Jika tetap gagal, muat ulang panel agar daftar tipe terbaru diterapkan.';
     }
     await hasilGagal_('Kartu Soal Gagal Disimpan', pesanSimpan);
   } finally {

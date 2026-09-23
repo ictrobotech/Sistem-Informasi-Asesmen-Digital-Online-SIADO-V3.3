@@ -5993,19 +5993,42 @@ async function simpanKartuSoal_(event) {
   // API simpanKartuSoal memakai validator soal umum yang juga mewajibkan
   // field `pertanyaan`. Ambil pertanyaan asli dari bank soal, jangan kirim
   // payload metadata saja (yang akan dianggap sebagai pertanyaan kosong).
-  var soalAsal = (KARTU_SOAL.data || []).filter(function(q) {
+  var soalKartu = (KARTU_SOAL.data || []).filter(function(q) {
     return String(q.id_soal) === String(id);
   })[0];
-  if (!soalAsal) {
+  if (!soalKartu) {
     await hasilInfo_('Butir Soal Tidak Ditemukan',
       'Data soal sudah berubah. Tekan Refresh, lalu buka kembali Kartu Soal.');
     return;
   }
+  // Kartu Soal dan bank soal bisa mengembalikan kolom yang berbeda. Gabungkan
+  // agar opsi/kunci lama tersedia untuk validator server saat diperlukan.
+  var soalBank = (ADMIN.questions || []).concat(DATA_MENTAH.soal || []).filter(function(q) {
+    return String(q.id_soal) === String(id);
+  })[0] || null;
+  var soalAsal = Object.assign({}, soalBank || {}, soalKartu);
+  [
+    'opsi', 'kunci_jawaban', 'poin', 'mapel', 'tingkat', 'aktif',
+    'stimulus_deskripsi', 'stimulus_gambar', 'stimulus_alt',
+    'stimulus_video', 'stimulus_video_alt'
+  ].forEach(function(kolom) {
+    if ((soalAsal[kolom] === undefined || soalAsal[kolom] === null) && soalBank && soalBank[kolom] !== undefined) {
+      soalAsal[kolom] = soalBank[kolom];
+    }
+  });
   var pertanyaanAsal = String(soalAsal.pertanyaan || '');
   if (!pertanyaanAsal.trim()) {
     await hasilInfo_('Pertanyaan Soal Kosong',
       'Pertanyaan pada bank soal ini kosong. Perbaiki dahulu melalui menu Kelola Soal, lalu simpan Kartu Soal kembali.');
     return;
+  }
+  var tipeDipilih = String(nilaiInput_('ksTipe') || 'PG').toUpperCase();
+  var tipeAwal = String(KARTU_SOAL.tipeAwal || '').toUpperCase();
+  var tipeBerubah = tipeDipilih !== tipeAwal;
+  var opsiAsal = Array.isArray(soalAsal.opsi) ? soalAsal.opsi : null;
+  if (!opsiAsal && typeof soalAsal.opsi === 'string') {
+    var opsiTerurai = tryJson(soalAsal.opsi, null);
+    if (Array.isArray(opsiTerurai)) opsiAsal = opsiTerurai;
   }
   var muatan = {
     id_soal: id,
@@ -6016,9 +6039,20 @@ async function simpanKartuSoal_(event) {
     ks_materi: nilaiInput_('ksMateri').trim(),
     ks_kompetensi: nilaiInput_('ksKompetensi').trim(),
     ks_indikator: nilaiInput_('ksIndikator').trim(),
-    ks_level_kognitif: nilaiInput_('ksLevel'),
-    tipe: nilaiInput_('ksTipe')
+    ks_level_kognitif: nilaiInput_('ksLevel')
   };
+  // Bila server memvalidasi ulang soal, teruskan data soal yang sudah ada agar
+  // opsi/kunci tidak dianggap kosong saat hanya menyimpan metadata kartu.
+  if (Array.isArray(opsiAsal)) muatan.opsi = opsiAsal;
+  [
+    'poin', 'kunci_jawaban', 'mapel', 'tingkat', 'aktif',
+    'stimulus_deskripsi', 'stimulus_gambar', 'stimulus_alt',
+    'stimulus_video', 'stimulus_video_alt'
+  ].forEach(function(kolom) {
+    if (Object.prototype.hasOwnProperty.call(soalAsal, kolom) && soalAsal[kolom] !== undefined) {
+      muatan[kolom] = soalAsal[kolom];
+    }
+  });
   if (!muatan.ks_materi) {
     await hasilInfo_('Materi Belum Diisi', 'Kolom materi atau elemen wajib diisi agar kartu soal dapat dibaca.');
     return;
@@ -6028,12 +6062,27 @@ async function simpanKartuSoal_(event) {
     return;
   }
 
-  // Perubahan tipe soal berdampak pada Kelola Soal, jadi dikonfirmasi dulu.
-  var tipeBerubah = muatan.tipe !== KARTU_SOAL.tipeAwal;
+  // Validasi awal agar server tidak menerima soal PG tanpa jumlah opsi yang sah.
+  if (tipeDipilih === 'PG' && tipeBerubah) {
+    if (!Array.isArray(opsiAsal)) {
+      await hasilInfo_('Opsi PG Belum Termuat',
+        'Data opsi soal belum termuat. Refresh Kartu Soal, lalu coba lagi. Jika tetap muncul, lengkapi opsi melalui menu Kelola Soal.');
+      return;
+    }
+    if (opsiAsal.length < 2 || opsiAsal.length > 8) {
+      await hasilInfo_('Jumlah Opsi PG Tidak Sesuai',
+        'Tipe PG harus memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu ubah tipe di Kartu Soal kembali.');
+      return;
+    }
+  }
+
+  // Tipe soal hanya dikirim saat benar-benar diubah; menyimpan metadata saja
+  // tidak perlu memicu validasi/pembaruan tipe soal di server.
   if (tipeBerubah) {
+    muatan.tipe = tipeDipilih;
     var lanjut = await konfirmasi_(
-      'Tipe soal #' + id + ' akan diubah dari ' + labelTipeSoalResmi_(KARTU_SOAL.tipeAwal) +
-      ' menjadi ' + labelTipeSoalResmi_(muatan.tipe) + '. Perubahan ini otomatis berlaku juga pada menu Kelola Soal ' +
+      'Tipe soal #' + id + ' akan diubah dari ' + labelTipeSoalResmi_(tipeAwal) +
+      ' menjadi ' + labelTipeSoalResmi_(tipeDipilih) + '. Perubahan ini otomatis berlaku juga pada menu Kelola Soal ' +
       'dan hanya berhasil bila opsi serta kunci jawaban yang ada masih sesuai dengan tipe baru.',
       { judul: 'Ubah Tipe Soal?', nada: 'warn', teksOk: 'Ya, Ubah Tipe' });
     if (!lanjut) return;
@@ -6049,12 +6098,16 @@ async function simpanKartuSoal_(event) {
     await hasilSukses_('Kartu Soal Tersimpan', result.message || 'Kartu soal berhasil disimpan.', [
       { label: 'Butir soal', nilai: '#' + id },
       { label: 'Kelas', nilai: muatan.ks_kelas || 'Belum diisi' },
-      { label: 'Tipe soal', nilai: labelTipeSoalResmi_(result.tipe || muatan.tipe) +
+      { label: 'Tipe soal', nilai: labelTipeSoalResmi_(result.tipe || tipeDipilih || tipeAwal) +
         (result.tipeBerubah ? ' (diperbarui juga di Kelola Soal)' : '') },
       { label: 'Level kognitif', nilai: muatan.ks_level_kognitif || 'Belum ditentukan' }
     ]);
   } catch (error) {
-    await hasilGagal_('Kartu Soal Gagal Disimpan', error.message || 'Kartu soal gagal disimpan.');
+    var pesanSimpan = error.message || 'Kartu soal gagal disimpan.';
+    if (/PG harus memiliki 2 sampai 8 opsi/i.test(pesanSimpan)) {
+      pesanSimpan = 'Soal PG wajib memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu coba simpan Kartu Soal kembali.';
+    }
+    await hasilGagal_('Kartu Soal Gagal Disimpan', pesanSimpan);
   } finally {
     ADMIN.operationBusy.kartuSoal = false;
     setFormBusy('kartuSoalForm', false);

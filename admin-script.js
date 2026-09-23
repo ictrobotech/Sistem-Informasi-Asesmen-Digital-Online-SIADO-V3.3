@@ -5924,6 +5924,12 @@ function terapkanFilterKartuSoal_() {
   renderKartuSoalTable_(rows);
 }
 
+/** Teks pendek di tabel Kartu Soal dipusatkan; deskripsi panjang diratakan kiri-kanan. */
+function kelasRataTeksKartuSoal_(nilai) {
+  var teks = String(nilai || '').replace(/\s+/g, ' ').trim();
+  return teks.length >= 50 ? 'kartu-soal-teks-panjang' : 'kartu-soal-teks-pendek';
+}
+
 function renderKartuSoalTable_(rows) {
   if (!rows.length) {
     setTableMessage('kartuSoalTable', 'Belum ada soal pada bank soal. Tambahkan soal terlebih dahulu di menu Kelola Soal.', 'fa-inbox');
@@ -5932,14 +5938,17 @@ function renderKartuSoalTable_(rows) {
   var html = '<table class="admin-table"><thead><tr><th>No</th><th>Butir Soal</th><th>Tipe</th>' +
     '<th>Kelas</th><th>Materi / Elemen</th><th>Indikator Soal</th><th>Level</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
+    var teksPertanyaan = truncate(SRich.stripHtml(row.pertanyaan), 110);
+    var teksMateri = row.ks_materi || '-';
+    var teksIndikator = truncate(row.ks_indikator || '-', 110);
     html += '<tr><td><strong>' + escapeAdmin(row.ks_nomor_soal || ('#' + row.id_soal)) + '</strong></td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(row.pertanyaan), 110)) + '</div></td>' +
+      '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksPertanyaan) + '">' + escapeAdmin(teksPertanyaan) + '</div></td>' +
       '<td>' + typeBadge(row.tipe) + '</td>' +
       '<td>' + escapeAdmin(row.ks_kelas || '-') + '</td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(row.ks_materi || '-') + '</div></td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(row.ks_indikator || '-', 110)) + '</div></td>' +
+      '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksMateri) + '">' + escapeAdmin(teksMateri) + '</div></td>' +
+      '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksIndikator) + '">' + escapeAdmin(teksIndikator) + '</div></td>' +
       '<td>' + (row.ks_level_kognitif ? badge(row.ks_level_kognitif, 'blue') : badge('-', 'gray')) + '</td>' +
-      '<td>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum lengkap', 'amber')) + '</td>' +
+      '<td>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
       '<td><div class="row-actions"><button class="mini-button edit" type="button" data-kartu-soal="' +
       escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-pen"></i> Isi Kartu</button></div></td></tr>';
   });
@@ -5981,8 +5990,26 @@ async function simpanKartuSoal_(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (ADMIN.operationBusy.kartuSoal) return;
   var id = document.getElementById('ksIdSoal').value;
+  // API simpanKartuSoal memakai validator soal umum yang juga mewajibkan
+  // field `pertanyaan`. Ambil pertanyaan asli dari bank soal, jangan kirim
+  // payload metadata saja (yang akan dianggap sebagai pertanyaan kosong).
+  var soalAsal = (KARTU_SOAL.data || []).filter(function(q) {
+    return String(q.id_soal) === String(id);
+  })[0];
+  if (!soalAsal) {
+    await hasilInfo_('Butir Soal Tidak Ditemukan',
+      'Data soal sudah berubah. Tekan Refresh, lalu buka kembali Kartu Soal.');
+    return;
+  }
+  var pertanyaanAsal = String(soalAsal.pertanyaan || '');
+  if (!pertanyaanAsal.trim()) {
+    await hasilInfo_('Pertanyaan Soal Kosong',
+      'Pertanyaan pada bank soal ini kosong. Perbaiki dahulu melalui menu Kelola Soal, lalu simpan Kartu Soal kembali.');
+    return;
+  }
   var muatan = {
     id_soal: id,
+    pertanyaan: pertanyaanAsal,
     ks_capaian: nilaiInput_('ksCapaian').trim(),
     ks_kelas: nilaiInput_('ksKelas').trim(),
     ks_nomor_soal: nilaiInput_('ksNomorSoal').trim(),

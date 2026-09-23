@@ -259,10 +259,15 @@
     }
     #kartuSoalTable .admin-table .row-actions { justify-content: center; }
     #kartuSoalTable .admin-table .kartu-soal-teks-panjang {
-      text-align: justify;
-      text-align-last: center;
+      text-align: justify !important;
+      text-align-last: left !important;
     }
     #kartuSoalTable .admin-table .kartu-soal-teks-pendek { text-align: center; }
+    #kartuSoalTable .admin-table tbody td:nth-child(2) .kartu-soal-teks-panjang,
+    #kartuSoalTable .admin-table tbody td:nth-child(6) .kartu-soal-teks-panjang {
+      text-align: justify !important;
+      text-align-last: left !important;
+    }
   </style>
 </head>
 <body class="admin-body">
@@ -838,16 +843,16 @@
         <h2 id="kartuSoalTitle"><i class="fa-solid fa-address-card"></i> Kartu Soal</h2>
         <button id="closeKartuSoal" class="close-modal" type="button" aria-label="Tutup">&times;</button>
       </div>
-      <form id="kartuSoalForm">
+      <form id="kartuSoalForm" autocomplete="off">
         <input id="ksIdSoal" type="hidden">
         <div class="form-help" style="margin-bottom:15px">Butir soal: <b id="ksRingkasSoal">-</b></div>
         <div class="admin-form-grid">
-          <div class="admin-field span-2"><label for="ksCapaian">Capaian pembelajaran</label><textarea id="ksCapaian" class="admin-input" maxlength="2000" rows="3" placeholder="Tuliskan capaian pembelajaran yang diukur butir soal ini"></textarea></div>
-          <div class="admin-field"><label for="ksKelas">Kelas</label><input id="ksKelas" class="admin-input" maxlength="60" placeholder="Contoh: IX"></div>
-          <div class="admin-field"><label for="ksNomorSoal">Nomor soal pada kartu</label><input id="ksNomorSoal" class="admin-input" maxlength="20" placeholder="Contoh: 1"></div>
-          <div class="admin-field span-2"><label for="ksMateri">Materi / elemen</label><input id="ksMateri" class="admin-input" maxlength="500" placeholder="Contoh: Bilangan Berpangkat"></div>
-          <div class="admin-field span-2"><label for="ksKompetensi">Kompetensi</label><textarea id="ksKompetensi" class="admin-input" maxlength="1000" rows="2" placeholder="Kompetensi yang diukur butir soal ini"></textarea></div>
-          <div class="admin-field span-2"><label for="ksIndikator">Indikator soal</label><textarea id="ksIndikator" class="admin-input" maxlength="1000" rows="2" placeholder="Disajikan ..., peserta didik dapat ..."></textarea></div>
+          <div class="admin-field span-2"><label for="ksCapaian">Capaian pembelajaran</label><textarea id="ksCapaian" autocomplete="off" class="admin-input" maxlength="2000" rows="3" placeholder="Tuliskan capaian pembelajaran yang diukur butir soal ini"></textarea></div>
+          <div class="admin-field"><label for="ksKelas">Kelas</label><input id="ksKelas" autocomplete="off" class="admin-input" maxlength="60" placeholder="Contoh: IX"></div>
+          <div class="admin-field"><label for="ksNomorSoal">Nomor soal pada kartu</label><input id="ksNomorSoal" autocomplete="off" class="admin-input" maxlength="20" placeholder="Contoh: 1"></div>
+          <div class="admin-field span-2"><label for="ksMateri">Materi / elemen</label><input id="ksMateri" autocomplete="off" class="admin-input" maxlength="500" placeholder="Contoh: Bilangan Berpangkat"></div>
+          <div class="admin-field span-2"><label for="ksKompetensi">Kompetensi</label><textarea id="ksKompetensi" autocomplete="off" class="admin-input" maxlength="1000" rows="2" placeholder="Kompetensi yang diukur butir soal ini"></textarea></div>
+          <div class="admin-field span-2"><label for="ksIndikator">Indikator soal</label><textarea id="ksIndikator" autocomplete="off" class="admin-input" maxlength="1000" rows="2" placeholder="Disajikan ..., peserta didik dapat ..."></textarea></div>
           <div class="admin-field"><label for="ksLevel">Level kognitif</label><select id="ksLevel" class="admin-input"><option value="">Belum ditentukan</option><option value="C1">C1 - Mengingat</option><option value="C2">C2 - Memahami</option><option value="C3">C3 - Menerapkan</option><option value="C4">C4 - Menganalisis</option><option value="C5">C5 - Mengevaluasi</option><option value="C6">C6 - Mencipta</option></select></div>
           <div class="admin-field"><label for="ksTipe">Tipe soal</label><select id="ksTipe" class="admin-input"><option value="PG">Pilihan Ganda</option><option value="PGK">PGK Kategori</option><option value="PGK_MCMA">Pilihan Ganda Kompleks (Banyak Jawaban)</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian Singkat</option><option value="URAIAN">Uraian</option></select><small>Dapat diubah di sini; perubahan otomatis ikut berlaku pada menu Kelola Soal.</small></div>
           <div class="admin-field span-2"><label for="ksKunci">Kunci jawaban</label><textarea id="ksKunci" class="admin-input" rows="2" readonly></textarea><small>Terisi otomatis dari kunci jawaban soal. Ubah melalui menu Kelola Soal bila perlu.</small></div>
@@ -1015,7 +1020,7 @@
   <script src="exceljs.min.js?v=20260909b"></script>
   <script src="jspdf.umd.min.js?v=20260909"></script>
   <script src="jspdf.plugin.autotable.min.js?v=20260909"></script>
-  <script src="admin-script.js?v=20260923d"></script>
+  <script src="admin-script.js?v=20260923e"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -1061,6 +1066,5 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ebdf6018de7e2e',t:'MTc5MDAyMzA5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f13f0b4fd768f5',t:'MTc5MDA3OTQ0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3fa4037be9ffb86',t:'MTc5MDE3Mzg2Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

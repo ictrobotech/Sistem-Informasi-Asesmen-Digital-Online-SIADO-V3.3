@@ -5927,7 +5927,7 @@ function terapkanFilterKartuSoal_() {
 /** Teks pendek di tabel Kartu Soal dipusatkan; deskripsi panjang diratakan kiri-kanan. */
 function kelasRataTeksKartuSoal_(nilai) {
   var teks = String(nilai || '').replace(/\s+/g, ' ').trim();
-  return teks.length >= 50 ? 'kartu-soal-teks-panjang' : 'kartu-soal-teks-pendek';
+  return teks.length >= 40 ? 'kartu-soal-teks-panjang' : 'kartu-soal-teks-pendek';
 }
 
 function renderKartuSoalTable_(rows) {
@@ -5984,6 +5984,17 @@ function bukaKartuSoal_(id) {
 
 function tutupKartuSoal_() {
   document.getElementById('kartuSoalModal').classList.remove('show');
+}
+
+/** Bersihkan isi editor hanya setelah server berhasil menyimpan. */
+function bersihkanKartuSoalForm_() {
+  var form = document.getElementById('kartuSoalForm');
+  if (form && form.reset) form.reset();
+  var id = document.getElementById('ksIdSoal');
+  if (id) id.value = '';
+  var ringkas = document.getElementById('ksRingkasSoal');
+  if (ringkas) ringkas.textContent = '-';
+  KARTU_SOAL.tipeAwal = '';
 }
 
 async function simpanKartuSoal_(event) {
@@ -6092,6 +6103,7 @@ async function simpanKartuSoal_(event) {
   setFormBusy('kartuSoalForm', true);
   try {
     var result = await apiWajib_('simpanKartuSoal', muatan);
+    bersihkanKartuSoalForm_();
     tutupKartuSoal_();
     // Kelola Soal ikut disegarkan agar tipe barunya langsung terlihat.
     await segarkanSenyap_([loadKartuSoal, loadQuestions]);

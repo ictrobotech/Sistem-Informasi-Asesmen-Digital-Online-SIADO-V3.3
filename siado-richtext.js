@@ -274,6 +274,10 @@
    * ter-render rapi oleh KaTeX. Aturan dibuat konservatif agar teks biasa
    * (mis. "harga $5") tidak berubah menjadi rumus.
    */
+  // Komando LaTeX yang sah berdiri sendiri tanpa kurung {...} — sering
+  // muncul pada hasil copy AI tanpa delimiter (mis. "... + \sum L sisi").
+  var BARE_CMD_OK = { sum: 1, prod: 1, int: 1, oint: 1, lim: 1, pi: 1, theta: 1, alpha: 1, beta: 1, gamma: 1, delta: 1, epsilon: 1, lambda: 1, mu: 1, sigma: 1, phi: 1, omega: 1, rho: 1, infty: 1, pm: 1, mp: 1, times: 1, div: 1, cdot: 1, leq: 1, geq: 1, neq: 1, approx: 1, sim: 1, propto: 1, sin: 1, cos: 1, tan: 1, cot: 1, log: 1, ln: 1, exp: 1, min: 1, max: 1, det: 1 };
+
   function isMathy(content) {
     var c = String(content == null ? '' : content).trim();
     if (!c) return false;
@@ -333,9 +337,13 @@
             if (ck === '^' || ck === '_') {
               var nx = t.charAt(k + 1) || '';
               if (nx === '{') {
-                var kl = k + 2;
-                while (kl < n && t.charAt(kl) !== '}') kl += 1;
-                k = kl + 1; hasBrace = true; continue;
+                var kl = k + 2, dl = 1;
+                while (kl < n && dl > 0) {
+                  if (t.charAt(kl) === '{') dl += 1;
+                  else if (t.charAt(kl) === '}') dl -= 1;
+                  kl += 1;
+                }
+                k = kl; hasBrace = true; continue;
               }
               if (/[A-Za-z0-9]/.test(nx)) { k += 2; continue; }
               break;
@@ -343,7 +351,7 @@
             if (ck === '\\' && /[A-Za-z]/.test(t.charAt(k + 1) || '')) { k += 1; continue; }
             break;
           }
-          if (!bad && hasBrace && k - i <= 500) { push(i, k, t.slice(i, k)); jump = k; }
+          if (!bad && (hasBrace || BARE_CMD_OK[mCmd[1]]) && k - i <= 500) { push(i, k, t.slice(i, k)); jump = k; }
         }
       } else if (/[A-Za-z0-9)\]]/.test(ch)) {
         // Superskrip/subskrip polos: x^2, a_{ij}, 10^-5 — dasar harus satu
@@ -355,9 +363,13 @@
           var p = i + 2, end = -1;
           var t2 = t.charAt(p) || '';
           if (t2 === '{') {
-            var k2 = p + 1;
-            while (k2 < n && t.charAt(k2) !== '}') k2 += 1;
-            if (k2 < n) end = k2 + 1;
+            var k2 = p + 1, dep = 1;
+            while (k2 < n && dep > 0) {
+              if (t.charAt(k2) === '{') dep += 1;
+              else if (t.charAt(k2) === '}') dep -= 1;
+              k2 += 1;
+            }
+            if (dep === 0) end = k2;
           } else if (/^[0-9]/.test(t2)) {
             var k3 = p;
             while (k3 < n && /[0-9]/.test(t.charAt(k3))) k3 += 1;
@@ -1331,7 +1343,21 @@
       } else {
         clean = sanitizeHtml(text);
       }
-      if (clean) insertHtml(clean);
+      if (clean) {
+        // Jalur HTML dari halaman AI/web: bila LaTeX mentah masih tersisa
+        // di node teks, bungkus SEGERA agar data yang tersimpan rapi dan
+        // konsisten dengan hasil tombol rumus.
+        if (/\\|\$/.test(clean)) {
+          var baki = document.createElement('div');
+          baki.innerHTML = clean;
+          autoMathTextNodes(baki);
+          clean = baki.innerHTML;
+        }
+        insertHtml(clean);
+        // Render langsung agar guru melihat hasilnya saat itu juga
+        // (termasuk bila KaTeX baru saja termuat).
+        typesetMath(area);
+      }
     });
     area.addEventListener('drop', function (e) { e.preventDefault(); });
 

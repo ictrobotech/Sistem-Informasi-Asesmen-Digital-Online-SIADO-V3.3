@@ -241,15 +241,48 @@
   <script src="siado-api.js"></script>
   <!-- Rich text (tebal/miring/tabel/grafik/rumus) + sanitizer tempelan;
        dipakai panel dan peserta agar tampilan konsisten. -->
-  <script src="siado-richtext.js?v=20260924a"></script>
-  <!-- KaTeX opsional: merender rumus LaTeX. Bila CDN tak terjangkau,
-       rumus tetap tampil sebagai teks sumber yang rapi. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="siado-richtext.js?v=20260924b"></script>
+  <!-- KaTeX (render rumus LaTeX) — dimuat dengan 3 CDN cadangan: bila CDN
+       utama tak terjangkau (mis. pembatasan jaringan sekolah), sistem
+       otomatis mencoba berikutnya. Bila semuanya gagal, rumus tetap tampil
+       sebagai teks sumber LaTeX yang rapi (tidak hilang). -->
   <script>
-    window.addEventListener('load', function () {
-      if (window.SRich && window.katex) SRich.typesetMath(document.body);
-    });
+    (function () {
+      var VER = '0.16.11';
+      var css = [
+        'https://cdn.jsdelivr.net/npm/katex@' + VER + '/dist/katex.min.css',
+        'https://unpkg.com/katex@' + VER + '/dist/katex.min.css',
+        'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/' + VER + '/katex.min.css'
+      ];
+      var js = [
+        'https://cdn.jsdelivr.net/npm/katex@' + VER + '/dist/katex.min.js',
+        'https://unpkg.com/katex@' + VER + '/dist/katex.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/' + VER + '/katex.min.js'
+      ];
+      function siap() {
+        if (window.SRich && SRich.typesetMath) { try { SRich.typesetMath(document.body); } catch (e) {} }
+      }
+      function muatCss(i) {
+        if (i >= css.length) return;
+        var l = document.createElement('link');
+        l.rel = 'stylesheet'; l.href = css[i];
+        l.onerror = function () { l.remove(); muatCss(i + 1); };
+        document.head.appendChild(l);
+      }
+      function muatJs(i) {
+        if (i >= js.length) return;
+        var s = document.createElement('script');
+        s.src = js[i];
+        s.onload = siap;
+        s.onerror = function () { s.remove(); muatJs(i + 1); };
+        document.head.appendChild(s);
+      }
+      muatCss(0); muatJs(0);
+      // Jaring pengaman akhir (mis. KaTeX tiba dari cache sangat cepat)
+      window.addEventListener('load', function () {
+        if (window.SRich && window.katex) SRich.typesetMath(document.body);
+      });
+    })();
   </script>
   <style id="kartuSoalTableAlignment">
     #kartuSoalTable .admin-table th,
@@ -1066,6 +1099,6 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ebdf6018de7e2e',t:'MTc5MDAyMzA5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f13f0b4fd768f5',t:'MTc5MDA3OTQ0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4021a80995ece26',t:'MTc5MDI1NjIwNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

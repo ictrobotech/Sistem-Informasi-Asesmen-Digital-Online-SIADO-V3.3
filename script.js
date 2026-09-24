@@ -3191,8 +3191,11 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
-function formatText(value) { return escapeHtml(value).replace(/\n/g, '<br>'); }
-function formatTextInline(value) { return escapeHtml(value).replace(/\n/g, '<br>'); }
+// REVISI RUMUS 2026-09-24: teks polos ikut melewati auto-deteksi LaTeX
+// (SRich.mathifyPlainText) sehingga rumus $x^2$ / \frac{a}{b} pada
+// deskripsi stimulus & pernyataan menjodohkan ter-render seperti pada soal.
+function formatText(value) { return window.SRich ? SRich.mathifyPlainText(value) : escapeHtml(value).replace(/\n/g, '<br>'); }
+function formatTextInline(value) { return window.SRich ? SRich.mathifyPlainText(value) : escapeHtml(value).replace(/\n/g, '<br>'); }
 function safeMediaUrl(value) { return /^https:\/\//i.test(String(value || '')) ? String(value) : ''; }
 function safeImageUrl(value) { return safeMediaUrl(value); }
 

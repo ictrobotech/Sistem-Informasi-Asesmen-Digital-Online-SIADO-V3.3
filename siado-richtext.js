@@ -35,14 +35,17 @@
 
   /* ------------------- SANITIZER (allowlist) ------------------- */
 
-  var DROP_WITH_CONTENT = { script: 1, style: 1, iframe: 1, object: 1, embed: 1, applet: 1, form: 1, textarea: 1, select: 1, head: 1, title: 1, noscript: 1, template: 1, frame: 1, frameset: 1, link: 1, meta: 1 };
+  // CATATAN: elemen void (meta, link, frame, input, br, ...) TIDAK boleh
+  // masuk daftar ini — penutupnya tidak pernah ada, sehingga state "buang
+  // sampai </x>" akan menelan seluruh konten setelahnya.
+  var DROP_WITH_CONTENT = { script: 1, style: 1, iframe: 1, object: 1, embed: 1, applet: 1, form: 1, textarea: 1, select: 1, head: 1, title: 1, noscript: 1, template: 1, frameset: 1 };
   var VOID_TAGS = { br: 1, hr: 1, img: 1, input: 0 };
   var BLOCK_TAGS = { p: 1, div: 1, table: 1, ul: 1, ol: 1, li: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, blockquote: 1, pre: 1 };
 
   // Tag yang diizinkan beserta atribut yang boleh lolos.
   var ALLOWED = {
     p: {}, br: {}, b: {}, strong: {}, i: {}, em: {}, u: {}, s: {}, strike: {}, del: {},
-    sub: {}, sup: {}, ul: {}, ol: { start: 1 }, li: {}, blockquote: {}, pre: {}, hr: {},
+    sub: {}, sup: {}, code: {}, ul: {}, ol: { start: 1 }, li: {}, blockquote: {}, pre: {}, hr: {},
     table: {}, thead: {}, tbody: {}, tfoot: {}, tr: {}, td: { colspan: 1, rowspan: 1 }, th: { colspan: 1, rowspan: 1 }, caption: {},
     img: { src: 1, alt: 1, width: 1, height: 1 },
     span: { 'class': 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1, hidden: 1 },
@@ -108,7 +111,9 @@
     var s = String(input === undefined || input === null ? '' : input);
     if (!s.trim()) return '';
     if (!/<[a-zA-Z][^>]*>/.test(s)) {
-      return escapeHtml(s.replace(/\r\n?/g, '\n').trim()).replace(/\n/g, '<br>');
+      // Teks polos: tetap aman (escape), tapi rumus LaTeX yang ditempel
+      // dari AI/Word ikut dibungkus [data-tex] agar ter-render rapi.
+      return mathifyPlainText(s);
     }
 
     var token = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<!DOCTYPE[^>]*>|<\?[\s\S]*?\?>|<([/!]?)([a-zA-Z][a-zA-Z0-9:-]*)((?:"[^"]*"|'[^']*'|[^"'>])*)>|([^<]+)/g;
@@ -152,7 +157,7 @@
       }
 
       if (DROP_WITH_CONTENT[name] && !isClose) { dropName = name; dropDepth = 1; continue; }
-      if (name === 'input' || name === 'button') continue;
+      if (name === 'input' || name === 'button' || name === 'link' || name === 'meta' || name === 'frame') continue;
 
       if (isClose) {
         if (name === 'p') { closeP(); continue; }
@@ -236,9 +241,15 @@
     return '<span class="siado-tex" data-tex="' + escapeHtml(t) + '">' + escapeHtml(t) + '</span>';
   }
 
-  /** Render semua [data-tex] di dalam root memakai KaTeX bila tersedia. */
+  /**
+   * Render semua [data-tex] di dalam root memakai KaTeX bila tersedia.
+   * Sebelumnya, teks polos yang ternyata memuat LaTeX (mis. soal lama yang
+   * diketik $x^2$ atau ditempel dari AI tanpa diproses) otomatis dibungkus
+   * menjadi [data-tex] juga, sehingga ter-render tanpa perlu menyimpan ulang.
+   */
   function typesetMath(root) {
     if (!root || !root.querySelectorAll) return;
+    autoMathTextNodes(root);
     var nodes = root.querySelectorAll('[data-tex]');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
@@ -253,6 +264,655 @@
       el.textContent = tex;
       el.classList.add('siado-tex-fallback');
     }
+  }
+
+  /* ------------------- DETEKSI RUMUS DALAM TEKS POLOS -------------------
+   *
+   * Rumus hasil copy dari AI (ChatGPT, dll) biasanya berupa LaTeX polos:
+   *   $...$  $$...$$  \( ... \)  \[ ... \]  \frac{a}{b}  x^2
+   * Pendeteksikan segmen-segmen itu agar bisa dibungkus [data-tex] dan
+   * ter-render rapi oleh KaTeX. Aturan dibuat konservatif agar teks biasa
+   * (mis. "harga $5") tidak berubah menjadi rumus.
+   */
+  function isMathy(content) {
+    var c = String(content == null ? '' : content).trim();
+    if (!c) return false;
+    if (/^[\\^_{}]/.test(c) === false && /[\\^_{}]/.test(c) === false) {
+      // Tanpa balok/skrip/backslash: harus ada operator matematika agar
+      // tidak salah mengenali angka atau kata (contoh: "$5", "$abc").
+      return /[=+\-×÷≤≥<>√∑∫∂≈≠∞π]/.test(c) || /\d\s*[-+*/÷×]\s*\d/.test(c);
+    }
+    return true;
+  }
+
+  /**
+   * Pindai teks dan kembalikan daftar segmen rumus: [{s, e, latex}].
+   * s/e = indeks [mulai, akhir) dalam teks; latex = isi rumus tanpa delimiter.
+   */
+  function detectMathSegments(text) {
+    var t = String(text == null ? '' : text);
+    var segs = [];
+    var n = t.length;
+    var i = 0;
+    function push(s, e, latex) {
+      latex = String(latex || '').replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (latex && e > s) segs.push({ s: s, e: e, latex: latex });
+    }
+    while (i < n) {
+      var ch = t.charAt(i);
+      var jump = 0; // bila segmen cocok, lanjutkan scan dari indeks ini
+      var prev = i > 0 ? t.charAt(i - 1) : '';
+      if (ch === '$' && t.charAt(i + 1) === '$') {
+        var e1 = t.indexOf('$$', i + 2);
+        if (e1 !== -1 && e1 - i <= 600) { push(i, e1 + 2, t.slice(i + 2, e1)); jump = e1 + 2; }
+      } else if (ch === '$' && prev !== '\\') {
+        var e2 = t.indexOf('$', i + 1);
+        var lineEnd = t.indexOf('\n', i);
+        var limit = lineEnd === -1 ? n : lineEnd;
+        if (e2 !== -1 && e2 < limit && e2 - i <= 300 && isMathy(t.slice(i + 1, e2))) {
+          push(i, e2 + 1, t.slice(i + 1, e2)); jump = e2 + 1;
+        }
+      } else if (ch === '\\' && t.charAt(i + 1) === '[') {
+        var e3 = t.indexOf('\\]', i + 2);
+        if (e3 !== -1 && e3 - i <= 600) { push(i, e3 + 2, t.slice(i + 2, e3)); jump = e3 + 2; }
+      } else if (ch === '\\' && t.charAt(i + 1) === '(') {
+        var e4 = t.indexOf('\\)', i + 2);
+        if (e4 !== -1 && e4 - i <= 600) { push(i, e4 + 2, t.slice(i + 2, e4)); jump = e4 + 2; }
+      } else if (ch === '\\') {
+        // Komando LaTeX polos, mis. \frac{a}{b} — wajib punya kurung {...}
+        // agar path Windows (C:\Users\file) tidak tersalah kenali.
+        var mCmd = /^\\([A-Za-z][A-Za-z]*)/.exec(t.slice(i, i + 40));
+        if (mCmd && !/[A-Za-z0-9]/.test(prev)) {
+          var j = i + mCmd[0].length;
+          var hasBrace = false, depth = 0, k = j, bad = false;
+          while (k < n && t.charAt(k) !== '\n') {
+            var ck = t.charAt(k);
+            if (ck === '{') { depth += 1; hasBrace = true; k += 1; continue; }
+            if (ck === '}') { depth -= 1; if (depth < 0) { bad = true; break; } k += 1; continue; }
+            if (depth > 0) { k += 1; continue; }
+            if (ck === '^' || ck === '_') {
+              var nx = t.charAt(k + 1) || '';
+              if (nx === '{') {
+                var kl = k + 2;
+                while (kl < n && t.charAt(kl) !== '}') kl += 1;
+                k = kl + 1; hasBrace = true; continue;
+              }
+              if (/[A-Za-z0-9]/.test(nx)) { k += 2; continue; }
+              break;
+            }
+            if (ck === '\\' && /[A-Za-z]/.test(t.charAt(k + 1) || '')) { k += 1; continue; }
+            break;
+          }
+          if (!bad && hasBrace && k - i <= 500) { push(i, k, t.slice(i, k)); jump = k; }
+        }
+      } else if (/[A-Za-z0-9)\]]/.test(ch)) {
+        // Superskrip/subskrip polos: x^2, a_{ij}, 10^-5 — dasar harus satu
+        // token (karakter sebelumnya bukan huruf/angka/./-) agar teks seperti
+        // "file_1" atau "v1.2_3" tidak berubah menjadi rumus.
+        var nxt = t.charAt(i + 1) || '';
+        var prevOK = !prev || !/[A-Za-z0-9.\-]/.test(prev);
+        if ((nxt === '^' || nxt === '_') && prevOK) {
+          var p = i + 2, end = -1;
+          var t2 = t.charAt(p) || '';
+          if (t2 === '{') {
+            var k2 = p + 1;
+            while (k2 < n && t.charAt(k2) !== '}') k2 += 1;
+            if (k2 < n) end = k2 + 1;
+          } else if (/^[0-9]/.test(t2)) {
+            var k3 = p;
+            while (k3 < n && /[0-9]/.test(t.charAt(k3))) k3 += 1;
+            end = k3;
+          } else if (/[A-Za-z]/.test(t2)) {
+            end = p + 1;
+          }
+          if (end > 0 && end - i <= 40) { push(i, end, t.slice(i, end)); jump = end; }
+        }
+      }
+      i = jump ? jump : i + 1;
+    }
+    return segs;
+  }
+
+  /** Konversi markdown ringan (hasil copy dari AI) ke tag yang diizinkan.
+   *  Input WAJIB sudah di-escapeHtml — hanya tanda * _ ` yang diproses. */
+  function mdInline(s) {
+    return String(s == null ? '' : s)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/__([^_]+)__/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+      .replace(/(^|[^\w_])_([^_\n]+)_(?!\w)/g, '$1<i>$2</i>');
+  }
+
+  /**
+   * Teks polos -> HTML aman dengan rumus terbungkus [data-tex].
+   * Dipakai: path polos renderRich (opsi jawaban, dsb), tempelan tanpa
+   * HTML, dan pratinjau. Escape + markdown ringan + auto-rumus.
+   */
+  function mathifyPlainText(text) {
+    var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim();
+    if (!t) return '';
+    var segs = detectMathSegments(t);
+    if (!segs.length) return mdInline(escapeHtml(t)).replace(/\n/g, '<br>');
+    var out = [], pos = 0;
+    segs.forEach(function (sg) {
+      if (sg.s > pos) out.push(mdInline(escapeHtml(t.slice(pos, sg.s))));
+      out.push(texSpan(sg.latex));
+      pos = sg.e;
+    });
+    if (pos < t.length) out.push(mdInline(escapeHtml(t.slice(pos))));
+    return out.join('').replace(/\n/g, '<br>');
+  }
+
+  /** Bungkus segmen LaTeX yang ditemukan di node teks (DOM) menjadi
+   *  [data-tex], sehingga soal lama yang menyimpan $x^2$ polos ikut
+   *  ter-render. Aman dipanggil berulang: node [data-tex] dilewati. */
+  function autoMathTextNodes(root) {
+    if (!root || !root.ownerDocument) return;
+    var doc = root.ownerDocument;
+    if (!doc.createTreeWalker) return;
+    var walker = doc.createTreeWalker(root, 4 /* SHOW_TEXT */, {
+      acceptNode: function (node) {
+        var parent = node.parentNode;
+        if (!parent) return 2;
+        var tag = (parent.nodeName || '').toUpperCase();
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') return 2;
+        if (parent.hasAttribute && (parent.hasAttribute('data-tex') || parent.hasAttribute('data-math-done'))) return 2;
+        var cls = (typeof parent.className === 'string') ? parent.className : '';
+        if (cls.indexOf('katex') !== -1) return 2;
+        if (!/\\|\$|\^|_/.test(node.nodeValue)) return 2;
+        return 1;
+      }
+    }, false);
+    var list = [];
+    while (walker.nextNode()) list.push(walker.currentNode);
+    list.forEach(function (tn) {
+      var text = tn.nodeValue;
+      var segs = detectMathSegments(text);
+      if (!segs.length) return;
+      var frag = doc.createDocumentFragment();
+      var pos = 0;
+      segs.forEach(function (sg) {
+        if (sg.s > pos) frag.appendChild(doc.createTextNode(text.slice(pos, sg.s)));
+        var span = doc.createElement('span');
+        span.className = 'siado-tex';
+        span.setAttribute('data-tex', sg.latex);
+        span.textContent = sg.latex;
+        frag.appendChild(span);
+        pos = sg.e;
+      });
+      if (pos < text.length) frag.appendChild(doc.createTextNode(text.slice(pos)));
+      tn.parentNode.replaceChild(frag, tn);
+    });
+  }
+
+  /* -------------- EKSTRAKSI RUMUS DARI TEMPATAN (WORD/AI/WEB) --------------
+   *
+   * Sumber yang didukung:
+   *  - Microsoft Word / Google Docs: rumus OMML (m:oMath) di dalam
+   *    format text/html clipboard.
+   *  - AI & situs web (MathJax v3): mjx-container yang menyimpan sumber
+   *    LaTeX pada atribut aria-label.
+   *  - Situs web (MathJax v2): <script type="math/tex">.
+   *  - MathML: <math> dengan <annotation encoding="...tex"> atau struktur
+   *    mfrac/msup/... yang dikonversi langsung.
+   *
+   * Semua hasilnya diseragamkan menjadi <span class="siado-tex"
+   * data-tex="..."> agar sanitizer & KaTeX bisa memprosesnya.
+   */
+  function hasMathMarkup(html) {
+    var s = String(html == null ? '' : html);
+    return /m:oMath|m:OMATH|<math[\s>]|mjx-container|<script[^>]*type="[^"]*math/i.test(s);
+  }
+
+  function escapeTexChar(ch) {
+    if (ch === '{') return '\\{';
+    if (ch === '}') return '\\}';
+    if (ch === '[') return '\\[';
+    if (ch === ']') return '\\]';
+    if ('%&#$~_\\^'.indexOf(ch) !== -1) return '\\' + ch;
+    return ch;
+  }
+  function escapeTexPlain(s) {
+    return String(s == null ? '' : s).replace(/[\\{}%&#$]/g, function (c) { return '\\' + c; });
+  }
+
+  function collectByName(root, name) {
+    var out = [];
+    (function walk(el) {
+      var kids = el.children;
+      for (var i = 0; i < kids.length; i++) {
+        if ((kids[i].localName || '').toLowerCase() === name) out.push(kids[i]);
+        walk(kids[i]);
+      }
+    })(root);
+    return out;
+  }
+  function allElements(root) {
+    var out = [root], kids = root.children;
+    for (var i = 0; i < kids.length; i++) out = out.concat(allElements(kids[i]));
+    return out;
+  }
+
+  /* ------------------- KONVERTER OMML (Word) -> LaTeX ------------------- */
+  var OMML_NARY_CMD = {
+    '\u2211': '\\sum', '\u220F': '\\prod', '\u222B': '\\int', '\u222C': '\\iint',
+    '\u222D': '\\iiint', '\u222E': '\\oint', '\u22C3': '\\bigcup', '\u22C2': '\\bigcap', '\u2210': '\\coprod'
+  };
+  var OMML_ACC_CMD = {
+    '\u02C6': '\\hat', '\u02C7': '\\widehat', '\u00B4': '\\acute', '\u02C9': '\\bar',
+    '\u02D8': '\\breve', '\u02D9': '\\dot', '\u02DD': '\\ddot', '\u00A8': '\\ddot',
+    '\u02DA': '\\ring', '\u02DC': '\\tilde', '\u02D0': '\\widetilde', '\u2192': '\\vec',
+    '\u02D7': '\\check', '\u02DB': '\\ogonek', '\u02D3': '\\hat'
+  };
+  var OMML_FUNC_PLAIN = { sin: 1, cos: 1, tan: 1, cot: 1, sec: 1, csc: 1, log: 1, ln: 1, min: 1, max: 1, lim: 1, exp: 1, det: 1, arg: 1, gcd: 1, sinh: 1, cosh: 1, tanh: 1, coth: 1, abs: 1 };
+
+  function ommlChild(el, name) {
+    var kids = el.children;
+    for (var i = 0; i < kids.length; i++) {
+      if ((kids[i].localName || '').toLowerCase() === name) return kids[i];
+    }
+    return null;
+  }
+  function ommlChildren(el, name) {
+    var out = [], kids = el.children;
+    for (var i = 0; i < kids.length; i++) {
+      if ((kids[i].localName || '').toLowerCase() === name) out.push(kids[i]);
+    }
+    return out;
+  }
+  /** Ambil nilai atribut m:val (nilai OMML selalu di atribut m:val). */
+  function ommlVal(el) {
+    if (!el || !el.getAttribute) return '';
+    return el.getAttribute('m:val') || el.getAttribute('val') || '';
+  }
+  /** Ambil elemen properti OMML (mis. <m:naryPr><m:chr m:val="\u2211"/>). */
+  function ommlProp(el, propName) {
+    return el ? ommlChild(el, 'm:' + propName) : null;
+  }
+  /**
+   * Perbaikan struktur: pada HTML yang ditulis longgar, tag OMML yang
+   * "seharusnya kosong" (<m:deg/>, <m:begChr .../>, <m:radPr/>) tidak
+   * benar-benar menutup (parser HTML mengabaikan "/>" pada elemen asing),
+   * sehingga menelan saudara kandungnya. Elemen yang seharusnya di luar
+   * dipindahkan kembali agar konversi tetap benar.
+   */
+  function repairOmmlPr(root) {
+    var LEAF_CONTENT = { 'm:deg': 1, 'm:sub': 1, 'm:sup': 1, 'm:num': 1, 'm:den': 1, 'm:fname': 1, 'm:lim': 1 };
+    var LEAF_PROP = { 'm:chr': 1, 'm:begchr': 1, 'm:endchr': 1, 'm:pos': 1, 'm:deghide': 1, 'm:subhide': 1, 'm:suphide': 1, 'm:lit': 1, 'm:sty': 1, 'm:scr': 1, 'm:sz': 1, 'm:type': 1, 'm:base': 1, 'm:brk': 1 };
+    var list = [];
+    allElements(root).forEach(function (el) {
+      var n = (el.localName || '').toLowerCase();
+      if (n.indexOf('m:') !== 0) return;
+      var isPr = n.length > 4 && n.slice(-2) === 'pr' && n !== 'm:ctrlpr';
+      if (isPr || LEAF_CONTENT[n] || LEAF_PROP[n]) list.push(el);
+    });
+    list.forEach(function (box) {
+      var n = (box.localName || '').toLowerCase();
+      var isProp = !!LEAF_PROP[n];
+      var isContent = !!LEAF_CONTENT[n];
+      var moved = [];
+      for (var i = 0; i < box.children.length; i++) {
+        var kn = (box.children[i].localName || '').toLowerCase();
+        var asing;
+        if (isProp) asing = true; // elemen properti tak memiliki anak
+        else if (isContent) asing = !(kn === 'm:r' || kn === 'm:t'); // wadah isi: hanya run teks yang sah
+        else asing = !LEAF_PROP[kn] && kn !== 'm:bdr' && kn !== 'm:ctrlpr'; // elemen Pr: hanya properti yang sah
+        if (asing) moved.push(box.children[i]);
+      }
+      moved.forEach(function (kid) {
+        if (box.parentNode && box.parentNode !== kid) box.parentNode.insertBefore(kid, box.nextSibling);
+      });
+    });
+  }
+  function ommlRunText(el) {
+    return collectByName(el, 'm:t').map(function (t) { return t.textContent || ''; }).join('');
+  }
+  function ommlSeq(el) {
+    var out = '', kids = el.children;
+    for (var i = 0; i < kids.length; i++) out += ommlLatex(kids[i]);
+    return out;
+  }
+  function ommlClean(s) {
+    return String(s == null ? '' : s)
+      .replace(/\u200b/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .trim();
+  }
+  function ommlLatex(el) {
+    var name = (el.localName || '').toLowerCase();
+    switch (name) {
+      case 'm:omathpara': {
+        var maths = ommlChildren(el, 'm:omath');
+        return maths.length ? maths.map(ommlLatex).join(' ') : ommlSeq(el);
+      }
+      case 'm:omath': return ommlSeq(el);
+      case 'm:r': return ommlRunText(el);
+      case 'm:t': return el.textContent || '';
+      case 'm:f': {
+        var num = ommlChild(el, 'm:num'), den = ommlChild(el, 'm:den');
+        return '\\frac{' + (num ? ommlLatex(num) : '') + '}{' + (den ? ommlLatex(den) : '') + '}';
+      }
+      case 'm:ssub': {
+        var b1 = ommlChild(el, 'm:e'), s1 = ommlChild(el, 'm:sub');
+        return (b1 ? ommlLatex(b1) : '') + '_{' + (s1 ? ommlLatex(s1) : '') + '}';
+      }
+      case 'm:ssup': {
+        var b2 = ommlChild(el, 'm:e'), s2 = ommlChild(el, 'm:sup');
+        return (b2 ? ommlLatex(b2) : '') + '^{' + (s2 ? ommlLatex(s2) : '') + '}';
+      }
+      case 'm:ssubsup': {
+        var b3 = ommlChild(el, 'm:e'), s3 = ommlChild(el, 'm:sub'), s4 = ommlChild(el, 'm:sup');
+        return (b3 ? ommlLatex(b3) : '') + '_{' + (s3 ? ommlLatex(s3) : '') + '}^{' + (s4 ? ommlLatex(s4) : '') + '}';
+      }
+      case 'm:rad': {
+        var deg = ommlChild(el, 'm:deg'), e1 = ommlChild(el, 'm:e');
+        var radPr = ommlChild(el, 'm:radpr');
+        var degHide = ommlVal(ommlProp(radPr, 'deghide'));
+        var degTxt = deg ? ommlClean(ommlLatex(deg)) : '';
+        if (degTxt && degHide !== '1') {
+          return '\\sqrt[' + degTxt + ']{' + (e1 ? ommlLatex(e1) : '') + '}';
+        }
+        return '\\sqrt{' + (e1 ? ommlLatex(e1) : '') + '}';
+      }
+      case 'm:d': {
+        var dpr = ommlChild(el, 'm:dpr');
+        var begC = '(', endC = ')';
+        if (dpr) {
+          var begEl = ommlProp(dpr, 'begchr'), endEl = ommlProp(dpr, 'endchr');
+          if (begEl) begC = ommlVal(begEl);
+          if (endEl) endC = ommlVal(endEl);
+        }
+        var de = ommlChild(el, 'm:e');
+        return escapeTexChar(begC) + (de ? ommlLatex(de) : '') + escapeTexChar(endC);
+      }
+      case 'm:nary': {
+        var npr = ommlChild(el, 'm:narypr');
+        var chr = ommlVal(ommlProp(npr, 'chr'));
+        var cmd = OMML_NARY_CMD[chr] || (chr ? escapeTexChar(chr) : '\\int');
+        var sub = ommlChild(el, 'm:sub'), sup = ommlChild(el, 'm:sup');
+        var out = cmd;
+        if (sub && ommlVal(ommlProp(npr, 'subhide')) !== '1') out += '_{' + ommlLatex(sub) + '}';
+        if (sup && ommlVal(ommlProp(npr, 'suphide')) !== '1') out += '^{' + ommlLatex(sup) + '}';
+        var ne = ommlChild(el, 'm:e');
+        return out + '{' + (ne ? ommlLatex(ne) : '') + '}';
+      }
+      case 'm:func': {
+        var fnEl = ommlChild(el, 'm:fname'), fe = ommlChild(el, 'm:e');
+        var fnTxt = fnEl ? ommlClean(ommlLatex(fnEl)) : '';
+        var fnCmd = OMML_FUNC_PLAIN[fnTxt] ? '\\' + fnTxt
+          : (/^[A-Za-z][A-Za-z ]*$/.test(fnTxt) ? '\\mathrm{' + fnTxt + '}' : fnTxt);
+        return fnCmd + '\\left(' + (fe ? ommlLatex(fe) : '') + '\\right)';
+      }
+      case 'm:m': {
+        var rows = ommlChildren(el, 'm:e');
+        var body = rows.map(function (row) {
+          return ommlChildren(row, 'm:e').map(ommlLatex).join(' & ');
+        }).join(' \\\\ ');
+        return '\\begin{matrix} ' + body + ' \\end{matrix}';
+      }
+      case 'm:eqArr': {
+        var rows2 = ommlChildren(el, 'm:e');
+        return rows2.map(function (row) { return ommlLatex(row); }).join(' \\\\ ');
+      }
+      case 'm:acc': {
+        var apr = ommlChild(el, 'm:accpr');
+        var ach = ommlVal(ommlProp(apr, 'chr'));
+        var ae = ommlChild(el, 'm:e');
+        if (OMML_ACC_CMD[ach]) return OMML_ACC_CMD[ach] + '{' + (ae ? ommlLatex(ae) : '') + '}';
+        if (ach) return '\\stackrel{' + escapeTexChar(ach) + '}{' + (ae ? ommlLatex(ae) : '') + '}';
+        return '\\hat{' + (ae ? ommlLatex(ae) : '') + '}';
+      }
+      case 'm:bar': {
+        var bpr = ommlChild(el, 'm:barpr');
+        var pos = ommlVal(ommlProp(bpr, 'pos')) || 'top';
+        var be = ommlChild(el, 'm:e');
+        return (pos === 'bottom' ? '\\underline{' : '\\overline{') + (be ? ommlLatex(be) : '') + '}';
+      }
+      case 'm:limLow': {
+        var ll = ommlChild(el, 'm:lim'), le = ommlChild(el, 'm:e');
+        return '\\underset{' + (ll ? ommlLatex(ll) : '') + '}{' + (le ? ommlLatex(le) : '') + '}';
+      }
+      case 'm:limUpp': {
+        var lu = ommlChild(el, 'm:lim'), ue = ommlChild(el, 'm:e');
+        return '\\overset{' + (lu ? ommlLatex(lu) : '') + '}{' + (ue ? ommlLatex(ue) : '') + '}';
+      }
+      case 'm:box': case 'm:phant': case 'm:nor': case 'm:num': case 'm:deg':
+      case 'm:sub': case 'm:sup': case 'm:lim': case 'm:e':
+        return ommlSeq(el);
+      case 'm:dpr': case 'm:rpr': case 'm:fpr': case 'm:narypr': case 'm:radpr':
+      case 'm:sSubPr': case 'm:sSupPr': case 'm:sSubSupPr': case 'm:funcPr':
+      case 'm:mpr': case 'm:eqarrpr': case 'm:accpr': case 'm:barpr':
+      case 'm:limlowpr': case 'm:limuppr': case 'm:boxpr': case 'm:phantpr':
+      case 'm:groupchrpr': case 'm:ctrlpr': case 'm:bdr':
+        return '';
+      default:
+        return ommlSeq(el);
+    }
+  }
+
+  /* ------------------- KONVERTER MathML -> LaTeX ------------------- */
+  var MATHML_ELEMS = { mi: 1, mn: 1, mo: 1, mtext: 1, mfrac: 1, msub: 1, msup: 1, msubsup: 1, msqrt: 1, mroot: 1, mrow: 1, mtable: 1, mtr: 1, mtd: 1, mover: 1, munder: 1, munderover: 1, mfenced: 1, mspace: 1, semantics: 1, annotation: 1, mphantom: 1, mstyle: 1, maction: 1 };
+  function mathmlKids(el) {
+    var out = [], kids = el.children;
+    for (var i = 0; i < kids.length; i++) {
+      var kn = (kids[i].localName || '').toLowerCase();
+      if (kn && MATHML_ELEMS[kn]) out.push(kids[i]);
+    }
+    return out;
+  }
+  function mathmlLatex(el) {
+    var name = (el.localName || '').toLowerCase();
+    var k = mathmlKids(el);
+    function L(x) { return x ? mathmlLatex(x) : ''; }
+    switch (name) {
+      case 'mfrac': return '\\frac{' + L(k[0]) + '}{' + L(k[1] || k[0]) + '}';
+      case 'msub': return L(k[0]) + '_{' + L(k[1] || k[0]) + '}';
+      case 'msup': return L(k[0]) + '^{' + L(k[1] || k[0]) + '}';
+      case 'msubsup': return L(k[0]) + '_{' + L(k[1] || k[0]) + '}^{' + L(k[2] || k[0]) + '}';
+      case 'msqrt': return '\\sqrt{' + L(k[0]) + '}';
+      case 'mroot': return '\\sqrt[' + L(k[1] || k[0]) + ']{' + L(k[0]) + '}';
+      case 'mover': {
+        var over = k[k.length - 1], mainO = k[0];
+        return ((over.localName || '').toLowerCase() === 'mo' ? '\\overset{' + escapeTexPlain((over.textContent || '').trim()) + '}' : '\\overset{' + L(over) + '}') + '{' + L(mainO) + '}';
+      }
+      case 'munder': {
+        var under = k[k.length - 1], mainU = k[0];
+        return ((under.localName || '').toLowerCase() === 'mo' ? '\\underset{' + escapeTexPlain((under.textContent || '').trim()) + '}' : '\\underset{' + L(under) + '}') + '{' + L(mainU) + '}';
+      }
+      case 'munderover':
+        return '\\underset{' + L(k[1] || k[0]) + '}^{' + L(k[2] || k[1] || k[0]) + '}{' + L(k[0]) + '}';
+      case 'mtable': {
+        var rows = [];
+        var trs = el.children;
+        for (var i = 0; i < trs.length; i++) {
+          if ((trs[i].localName || '').toLowerCase() !== 'mtr') continue;
+          var cells = [];
+          for (var j = 0; j < trs[i].children.length; j++) {
+            var c = trs[i].children[j];
+            if ((c.localName || '').toLowerCase() === 'mtd') cells.push(mathmlLatex(c));
+          }
+          rows.push(cells.join(' & '));
+        }
+        return rows.length ? '\\begin{matrix} ' + rows.join(' \\\\ ') + ' \\end{matrix}' : (el.textContent || '');
+      }
+      case 'mfenced': return '(' + k.map(L).join('') + ')';
+      case 'mspace': return ' ';
+      case 'mtext': return '\\text{' + String(el.textContent || '').trim() + '}';
+      case 'mo': return escapeTexPlain((el.textContent || '').trim());
+      case 'mi': case 'mn': return String(el.textContent || '').trim();
+      case 'annotation': return String(el.textContent || '');
+      case 'math': case 'mrow': case 'semantics': case 'mphantom': case 'mstyle': case 'maction':
+        return k.length ? k.map(L).join('') : String(el.textContent || '').trim();
+      default: return String(el.textContent || '').trim();
+    }
+  }
+
+  /**
+   * Ganti semua node rumus di dalam HTML tempelan (OMML/MathJax/MathML)
+   * dengan [data-tex]. Mengembalikan {html, mathCount}.
+   */
+  function mathifyHtml(html) {
+    var s = String(html == null ? '' : html);
+    if (!s || typeof document === 'undefined') return { html: s, mathCount: 0 };
+    var tmp = document.createElement('div');
+    tmp.innerHTML = s;
+    repairOmmlPr(tmp);
+    var count = 0;
+    function toTex(node, latex) {
+      var span = document.createElement('span');
+      span.className = 'siado-tex';
+      span.setAttribute('data-tex', latex);
+      span.textContent = latex;
+      if (node.parentNode) node.parentNode.replaceChild(span, node);
+      count += 1;
+    }
+    // 1) OMML (Word) — hanya node terluar agar tidak dobel
+    collectByName(tmp, 'm:omathpara').concat(collectByName(tmp, 'm:omath')).forEach(function (node) {
+      if (!node.parentNode) return;
+      var anc = node.parentNode;
+      while (anc && anc !== tmp) {
+        var an = (anc.localName || '').toLowerCase();
+        if (an === 'm:omath' || an === 'm:omathpara') return;
+        anc = anc.parentNode;
+      }
+      var latex = ommlClean(ommlLatex(node));
+      if (latex) toTex(node, latex);
+    });
+    // 2) MathJax v3 (AI/web): sumber LaTeX ada di aria-label
+    allElements(tmp).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() !== 'mjx-container') return;
+      var label = ommlClean(el.getAttribute('aria-label') || '');
+      if (label && (label.indexOf('\\') !== -1 || isMathy(label) || /^[0-9]+(\.[0-9]+)?$/.test(label))) toTex(el, label);
+    });
+    // 3) MathML: annotation LaTeX lebih diutamakan
+    allElements(tmp).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() !== 'math') return;
+      var tex = '';
+      var anns = collectByName(el, 'annotation');
+      for (var i = 0; i < anns.length && !tex; i++) {
+        var enc = (anns[i].getAttribute('encoding') || '').toLowerCase();
+        if (enc.indexOf('tex') !== -1) tex = anns[i].textContent || '';
+      }
+      if (!tex) tex = mathmlLatex(el);
+      tex = ommlClean(tex);
+      if (tex) toTex(el, tex);
+    });
+    // 4) MathJax v2: <script type="math/tex">...</script>
+    allElements(tmp).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() !== 'script') return;
+      var type = (el.getAttribute('type') || '').toLowerCase();
+      if (type.indexOf('math') === -1) return;
+      var src = (el.textContent || '').trim().replace(/^\$\$?|\$\$?$/g, '').trim();
+      if (src) toTex(el, src);
+    });
+    return { html: tmp.innerHTML, mathCount: count };
+  }
+
+  /**
+   * HTML tempelan (Word/Google Docs) -> teks polos rapi per baris, dengan
+   * rumus ditulis $latex$ sehingga kolom teks (opsi/kunci) tetap bisa
+   * menyimpannya dan renderRich ikut merendernya.
+   */
+  function ommlToPlainText(html) {
+    var s = String(html == null ? '' : html);
+    if (!s || typeof document === 'undefined') return '';
+    var tmp = document.createElement('div');
+    tmp.innerHTML = s;
+    repairOmmlPr(tmp);
+    // rumus -> $...$
+    collectByName(tmp, 'm:omathpara').concat(collectByName(tmp, 'm:omath')).forEach(function (node) {
+      if (!node.parentNode) return;
+      var anc = node.parentNode;
+      while (anc && anc !== tmp) {
+        var an = (anc.localName || '').toLowerCase();
+        if (an === 'm:omath' || an === 'm:omathpara') return;
+        anc = anc.parentNode;
+      }
+      var latex = ommlClean(ommlLatex(node));
+      if (latex) {
+        var tx = document.createTextNode('$' + latex + '$');
+        node.parentNode.replaceChild(tx, node);
+      }
+    });
+    allElements(tmp).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() !== 'mjx-container') return;
+      var label = ommlClean(el.getAttribute('aria-label') || '');
+      if (label) el.parentNode.replaceChild(document.createTextNode('$' + label + '$'), el);
+    });
+    allElements(tmp).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() !== 'math') return;
+      var tex = '';
+      var anns = collectByName(el, 'annotation');
+      for (var i = 0; i < anns.length && !tex; i++) {
+        if ((anns[i].getAttribute('encoding') || '').toLowerCase().indexOf('tex') !== -1) tex = anns[i].textContent || '';
+      }
+      if (!tex) tex = ommlClean(mathmlLatex(el));
+      if (tex) el.parentNode.replaceChild(document.createTextNode('$' + tex + '$'), el);
+    });
+    // baca ulang struktur menjadi teks: elemen blok -> baris baru,
+    // sel tabel -> spasi (isi semua TETAP DIPERTAHANKAN)
+    var BLOCKS = { p: 1, li: 1, tr: 1, table: 1, ul: 1, ol: 1, blockquote: 1, pre: 1, section: 1, article: 1, header: 1, footer: 1, figure: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1 };
+    var textOut = [];
+    (function walk(node) {
+      if (node.nodeType === 3) { textOut.push(node.nodeValue || ''); return; }
+      if (node.nodeType !== 1) return;
+      var tag = (node.localName || '').toLowerCase();
+      if (tag === 'br') { textOut.push('\n'); return; }
+      if (tag === 'td' || tag === 'th') {
+        textOut.push(' ');
+        for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);
+        textOut.push(' ');
+        return;
+      }
+      if (BLOCKS[tag]) {
+        textOut.push('\n');
+        for (var j = 0; j < node.childNodes.length; j++) walk(node.childNodes[j]);
+        textOut.push('\n');
+      } else {
+        for (var k = 0; k < node.childNodes.length; k++) walk(node.childNodes[k]);
+      }
+    })(tmp);
+    var lines = textOut.join('')
+      .split(/\n/)
+      .map(function (line) {
+        return line.replace(/[\u00a0\u200b\u2007]/g, ' ').replace(/[ \t]+/g, ' ').trim();
+      })
+      .filter(Boolean);
+    return lines.join('\n');
+  }
+
+  /**
+   * Penanganan tempelan untuk KOLOM TEKS (textarea opsi/kunci):
+   * mengembalikan {text, changed}. changed=true bila teks perlu diganti
+   * (ada rumus Word/AI yang berhasil dikonversi ke bentuk $...$).
+   */
+  function plainFieldPaste(html, text) {
+    var plain = String(text == null ? '' : text);
+    var converted = null;
+    if (html && hasMathMarkup(html)) {
+      var t = ommlToPlainText(html);
+      if (t) converted = t;
+    }
+    if (converted == null) {
+      var segs = detectMathSegments(plain);
+      if (segs.length) {
+        var pos = 0, parts = [];
+        segs.forEach(function (sg) {
+          parts.push(plain.slice(pos, sg.s));
+          parts.push('$' + sg.latex + '$');
+          pos = sg.e;
+        });
+        parts.push(plain.slice(pos));
+        converted = parts.join('');
+      } else if (/\$\$/.test(plain)) {
+        converted = plain.replace(/\$\$([\s\S]+?)\$\$/g, function (all, inner) {
+          return '$' + inner.replace(/\s*\n\s*/g, ' ').trim() + '$';
+        });
+      }
+    }
+    var changed = converted != null && converted !== plain;
+    return { text: changed ? converted : plain, changed: changed };
   }
 
   /* ------------------------- GRAFIK ------------------------- */
@@ -577,18 +1237,59 @@
         });
       });
     }
-    // Rumus
-    toolBtn('fa-solid fa-square-root-variable', 'Sisipkan rumus (LaTeX)', function () {
+    // Rumus (dengan pratinjau langsung; copy-paste dari Word/AI langsung
+    // boleh ditempel ke kotak ini — sumber LaTeX diambil otomatis)
+    toolBtn('fa-solid fa-square-root-variable', 'Sisipkan rumus (LaTeX) — boleh copy-paste langsung dari Word/AI', function () {
       var pop = popover(function (p) {
-        var f1 = field('LaTeX, contoh: \\frac{a}{b} atau x^2 + y^2 = z^2', 'input', '');
-        f1.querySelector('input').style.minWidth = '260px';
+        var f1 = document.createElement('label');
+        f1.className = 'srte-field';
+        f1.innerHTML = '<span>LaTeX, contoh: \\frac{a}{b} atau x^2 + y^2 = z^2</span>';
+        var ta = document.createElement('textarea');
+        ta.className = 'srte-field srte-tex-input';
+        ta.rows = 3;
+        ta.placeholder = '\\frac{a}{b}   atau   x^2 + y^2 = z^2';
+        f1.appendChild(ta);
+        var prev = document.createElement('div');
+        prev.className = 'srte-tex-preview';
+        p.appendChild(f1); p.appendChild(prev);
         var ok = document.createElement('button'); ok.type = 'button'; ok.className = 'srte-btn srte-ok'; ok.textContent = 'Sisipkan Rumus';
-        p.appendChild(f1); p.appendChild(ok);
+        p.appendChild(ok);
+        function bersihkanTex(t) {
+          return String(t || '').replace(/^\s*\$\$?|\$\$?\s*$/g, '').trim();
+        }
+        function perbaruiPratinjau() {
+          var t = bersihkanTex(ta.value);
+          if (!t) { prev.innerHTML = '<span class="srte-tex-cap">Pratinjau:</span> <span class="srte-tex-dim">ketik atau tempel rumus…</span>'; return; }
+          if (w.katex && w.katex.render) {
+            var body = document.createElement('span');
+            body.className = 'srte-tex-body';
+            try { w.katex.render(t, body, { throwOnError: false, output: 'html' }); }
+            catch (e) { body.textContent = t; }
+            prev.innerHTML = '<span class="srte-tex-cap">Pratinjau:</span> ';
+            prev.appendChild(body);
+            return;
+          }
+          prev.innerHTML = '<span class="srte-tex-cap">Pratinjau (KaTeX belum termuat):</span> ' + escapeHtml(t);
+        }
+        ta.addEventListener('input', perbaruiPratinjau);
+        ta.addEventListener('paste', function (e) {
+          var cd = e.clipboardData || window.clipboardData;
+          if (!cd) return;
+          var teks = String(cd.getData('text/plain') || '');
+          var hasil = plainFieldPaste(String(cd.getData('text/html') || ''), teks);
+          var sisipan = hasil.changed ? hasil.text : teks;
+          if (!sisipan) return;
+          e.preventDefault();
+          ta.value = (ta.value ? ta.value.replace(/\s*$/, ' ') : '') + sisipan;
+          perbaruiPratinjau();
+        });
         ok.addEventListener('click', function () {
-          var t = f1.querySelector('input').value.trim();
+          var t = bersihkanTex(ta.value);
           if (t) { insertHtml(texSpan(t) + '&nbsp;'); typesetMath(area); }
           p.close();
         });
+        perbaruiPratinjau();
+        ta.focus();
       });
     });
     // Bersihkan format
@@ -601,14 +1302,36 @@
     host.appendChild(area);
 
     // Tempel: selalu lewat sanitizer agar rapi & konsisten dengan peserta.
+    // REVISI RUMUS 2026-09-24: rumus dari Word (OMML), AI (MathJax/MathML/
+    // LaTeX $...$), dan teks LaTeX polos otomatis diubah menjadi rumus
+    // [data-tex] yang dirender KaTeX — guru cukup copy-paste apa adanya.
     area.addEventListener('paste', function (e) {
       e.preventDefault();
       var cd = e.clipboardData || window.clipboardData;
       if (!cd) return;
-      var html = cd.getData('text/html');
-      var text = cd.getData('text/plain');
-      var clean = html ? normalizeStyled(sanitizeHtml(html)) : sanitizeHtml(text || '');
-      insertHtml(clean);
+      var html = String(cd.getData('text/html') || '');
+      var text = String(cd.getData('text/plain') || '');
+      var clean = '';
+      if (html) {
+        var conv = mathifyHtml(html);
+        // Format span[style] hasil Word/GDocs -> tag semantik SEBELUM
+        // sanitizer (dulu posisinya keliru sehingga format hilang).
+        conv.html = normalizeStyled(conv.html);
+        var masihRender = /mjx-container|<mjx-|class="[^"]*(?:katex|MathJax)[^"]*"/i.test(conv.html);
+        var dariHtml = sanitizeHtml(conv.html);
+        var dariTeks = sanitizeHtml(text);
+        if (masihRender) {
+          // Rumus yang hanya tersisa sebagai hasil render (tanpa sumber):
+          // teks polos sering justru memuat sumber LaTeX-nya (umum pada AI).
+          clean = stripHtml(dariTeks) ? dariTeks : dariHtml;
+        } else {
+          clean = dariHtml;
+          if (!stripHtml(clean)) clean = dariTeks;
+        }
+      } else {
+        clean = sanitizeHtml(text);
+      }
+      if (clean) insertHtml(clean);
     });
     area.addEventListener('drop', function (e) { e.preventDefault(); });
 
@@ -669,6 +1392,13 @@
     renderRich: renderRich,
     typesetMath: typesetMath,
     texSpan: texSpan,
+    detectMathSegments: detectMathSegments,
+    mathifyPlainText: mathifyPlainText,
+    mathifyHtml: mathifyHtml,
+    ommlToPlainText: ommlToPlainText,
+    plainFieldPaste: plainFieldPaste,
+    hasMathMarkup: hasMathMarkup,
+    autoMathTextNodes: autoMathTextNodes,
     chartSvg: chartSvg,
     pgkMarkerEmbed: pgkMarkerEmbed,
     pgkMarkerParse: pgkMarkerParse,

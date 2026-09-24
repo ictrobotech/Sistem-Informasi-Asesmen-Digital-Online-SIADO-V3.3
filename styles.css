@@ -362,6 +362,7 @@ body.konten-disamarkan .privacy-veil{display:flex}
 .rich-content svg{max-width:100%;height:auto;display:block;margin:8px auto}
 .rich-content blockquote{border-left:4px solid #bcd8fb;margin:8px 0;padding:6px 12px;background:#f5faff;color:#3c5c80}
 .rich-content pre{background:#f2f6fa;border:1px solid #dbe6f0;border-radius:8px;padding:8px 10px;overflow:auto;font-size:.9em}
+.rich-content code,.srte-area code{background:#f2f6fa;border:1px solid #dbe6f0;border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;color:#0f5132;white-space:pre-wrap}
 .siado-tex{display:inline-block;padding:0 3px}
 .siado-tex-fallback{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f2f6fa;border:1px solid #dbe6f0;border-radius:6px;padding:1px 6px;font-size:.88em;color:#174f90}
 .siado-tex .katex{font-size:1.06em}
@@ -380,6 +381,12 @@ body.konten-disamarkan .privacy-veil{display:flex}
 .srte-field{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:800;color:#4c6680}
 .srte-field input,.srte-field select{border:1px solid #c9d8e6;border-radius:8px;padding:6px 8px;font-size:12px;color:#294865;outline:none}
 .srte-field input:focus,.srte-field select:focus{border-color:#1f6feb}
+.srte-tex-input{border:1px solid #c9d8e6;border-radius:8px;padding:6px 8px;font-size:12px;color:#294865;outline:none;min-width:280px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical}
+.srte-tex-input:focus{border-color:#1f6feb}
+.srte-tex-preview{background:#f7fafc;border:1px dashed #c9d8e6;border-radius:8px;padding:7px 10px;font-size:13px;color:#294865;min-height:30px;overflow-x:auto}
+.srte-tex-cap{font-size:10px;font-weight:800;color:#4c6680;text-transform:uppercase;letter-spacing:.4px}
+.srte-tex-dim{color:#93a7bb;font-weight:400}
+.srte-tex-body .katex{font-size:1.05em}
 
 /* ---- editor terstruktur PGK Kategori & Menjodohkan (panel) ---- */
 .soal-struct-box{border:1.5px dashed #c7d7e6;border-radius:12px;background:#f8fbff;padding:14px;margin-top:6px}

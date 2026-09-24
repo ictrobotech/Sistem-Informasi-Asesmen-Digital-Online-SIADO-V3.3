@@ -589,6 +589,30 @@ function bindAdminInterface() {
     var kolomOpsi = document.getElementById(prefix + 'Opsi');
     // Kunci menjodohkan mengikuti isi kolom pasangan secara langsung.
     if (kolomOpsi) kolomOpsi.addEventListener('input', function() { perbaruiKunciJodoh_(prefix); });
+    // REVISI RUMUS 2026-09-24: tempelan dari Word (OMML) atau AI (LaTeX
+    // $...$ / \frac{...} / MathJax) di kolom Opsi & Kunci otomatis diubah
+    // menjadi rumus $latex$ sehingga ter-render rapi saat tampil.
+    ['Opsi', 'Kunci'].forEach(function(col) {
+      var el = document.getElementById(prefix + col);
+      if (!el) return;
+      el.addEventListener('paste', function(event) {
+        var cd = event.clipboardData || window.clipboardData;
+        if (!cd || !window.SRich) return;
+        var hasil = SRich.plainFieldPaste(String(cd.getData('text/html') || ''), String(cd.getData('text/plain') || ''));
+        if (!hasil.changed) return; // tempelan biasa: biarkan browser
+        event.preventDefault();
+        el.focus();
+        var ok = false;
+        try { ok = document.execCommand('insertText', false, hasil.text); } catch (err) { ok = false; }
+        if (!ok) {
+          var s = el.selectionStart == null ? el.value.length : el.selectionStart;
+          var en = el.selectionEnd == null ? s : el.selectionEnd;
+          el.value = el.value.slice(0, s) + hasil.text + el.value.slice(en);
+          el.selectionStart = el.selectionEnd = s + hasil.text.length;
+        }
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
     updateQuestionFormatHelp(prefix);
   });
   bindClick_('ePreviewMedia', previewEditMedia);
@@ -1388,12 +1412,16 @@ async function loadDashboard() {
 function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
-    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
-    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai.',
-    PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>.',
+    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>. ' +
+      '<strong>Rumus:</strong> copy-paste langsung dari Word/AI didukung otomatis, atau tulis <strong>$x^2 + y^2 = z^2$</strong> / <strong>\\frac{a}{b}</strong> — tampil rapi di peserta.',
+    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai. ' +
+      'Rumus pada pernyataan: copy-paste langsung dari Word/AI didukung otomatis.',
+    PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>. ' +
+      'Rumus boleh ditempel dari Word/AI, atau tulis <strong>$...$</strong> / <strong>\\frac{a}{b}</strong>.',
     MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
-      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta.',
-    ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta.',
+      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta. Rumus boleh ditempel dari Word/AI.',
+    ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta. ' +
+      'Jawaban ber-rumus boleh ditempel dari Word/AI atau ditulis <strong>$3\\sqrt{2}$</strong>.',
     URAIAN: '<strong>Uraian:</strong> opsi tidak diperlukan. Isi rubrik/pedoman penilaian pada kolom kunci jawaban.'
   }[type];
   document.getElementById(prefix + 'FormatHelp').innerHTML = help;
@@ -2460,8 +2488,10 @@ function stimulusBadges_(question) {
 function optionsToLines(question) {
   return (question.opsi || []).map(function(option) {
     // Menjodohkan disajikan ulang dalam format "pernyataan = jawaban".
-    if (option.pasangan) return (option.text || '') + ' = ' + option.pasangan;
-    return option.text || '';
+    // stripHtml: bila opsi tersimpan sebagai HTML (mis. rumus [data-tex]),
+    // ditampilkan sebagai teks LaTeX polos agar bisa disunting ulang.
+    if (option.pasangan) return SRich.stripHtml(option.text || '') + ' = ' + SRich.stripHtml(option.pasangan || '');
+    return SRich.stripHtml(option.text || '');
   }).join('\n');
 }
 function readableKey(question) {

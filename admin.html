@@ -241,7 +241,7 @@
   <script src="siado-api.js"></script>
   <!-- Rich text (tebal/miring/tabel/grafik/rumus) + sanitizer tempelan;
        dipakai panel dan peserta agar tampilan konsisten. -->
-  <script src="siado-richtext.js?v=20260922"></script>
+  <script src="siado-richtext.js?v=20260924a"></script>
   <!-- KaTeX opsional: merender rumus LaTeX. Bila CDN tak terjangkau,
        rumus tetap tampil sebagai teks sumber yang rapi. -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -380,7 +380,7 @@
                   <div class="admin-field"><label for="fTipe">Tipe soal</label><select id="fTipe" class="admin-input"><option value="PG">PG Biasa</option><option value="PGK">PGK Kategori</option><option value="PGK_MCMA">PGK MCMA</option><option value="MENJODOHKAN">Menjodohkan</option><option value="ISIAN">Isian</option><option value="URAIAN">Uraian</option></select></div>
                   <div class="admin-field"><label for="fPoin">Poin</label><input id="fPoin" class="admin-input" type="number" min="1" max="1000" value="10"></div>
                   <div class="admin-field"><label for="fTingkat">Kelas sasaran soal</label><select id="fTingkat" class="admin-input"><option value="SEMUA">Semua Kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option></select><small>Bank soal per kelas: soal yang dikhususkan untuk kelas VII hanya dikerjakan kelas VII.</small></div>
-                  <div class="admin-field span-2"><label for="fPertanyaan">Pertanyaan</label><div id="fPertanyaanRte"></div><textarea id="fPertanyaan" class="admin-input" maxlength="12000" placeholder="Tulis pertanyaan. Gunakan baris baru bila diperlukan." style="display:none"></textarea><small>Mendukung huruf <b>tebal</b>, <i>miring</i>, garis bawah, coret, tabel, grafik, gambar, dan rumus. Tempelan (salin) dari Word, Google Docs, atau web dibersihkan otomatis agar tetap rapi dan tampil konsisten pada peserta.</small></div>
+                  <div class="admin-field span-2"><label for="fPertanyaan">Pertanyaan</label><div id="fPertanyaanRte"></div><textarea id="fPertanyaan" class="admin-input" maxlength="12000" placeholder="Tulis pertanyaan. Gunakan baris baru bila diperlukan." style="display:none"></textarea><small>Mendukung huruf <b>tebal</b>, <i>miring</i>, garis bawah, coret, tabel, grafik, gambar, dan rumus. Tempelan (salin) dari Word, Google Docs, atau web dibersihkan otomatis agar tetap rapi dan tampil konsisten pada peserta. <b>Rumus:</b> copy-paste langsung dari Word/AI didukung otomatis (LaTeX <b>$x^2$</b>, <b>\frac{a}{b}</b>, OMML Word, MathJax) — akan ter-render rapi.</small></div>
                   <div class="admin-field span-2" id="fPgkBox" hidden>
                     <div class="soal-struct-box">
                       <h4><i class="fa-solid fa-table-cells-large"></i> Format PGK Kategori (tabel pernyataan &times; kategori)</h4>
@@ -397,7 +397,7 @@
                       <small>Peserta mencari pasangan setiap pernyataan; pilihan pasangan diacak otomatis oleh server.</small>
                     </div>
                   </div>
-                  <div class="admin-field span-2" id="fOpsiWrap"><label for="fOpsi">Opsi / Pernyataan</label><textarea id="fOpsi" class="admin-input" placeholder="Satu opsi atau pernyataan pada setiap baris."></textarea><small id="fFormatHelp" class="form-help"></small></div>
+                  <div class="admin-field span-2" id="fOpsiWrap"><label for="fOpsi">Opsi / Pernyataan</label><textarea id="fOpsi" class="admin-input" placeholder="Satu opsi atau pernyataan pada setiap baris. Rumus boleh ditempel dari Word/AI (mis. $x^2$ atau \frac{a}{b})."></textarea><small id="fFormatHelp" class="form-help"></small><small>Satu opsi per baris. Rumus (matematika/IPA/informatika) boleh copy-paste langsung dari Word atau AI — sistem mengubahnya otomatis menjadi bentuk yang rapi saat tampil pada peserta.</small></div>
                   <div class="admin-field span-2"><label for="fKunci">Kunci jawaban / rubrik</label><textarea id="fKunci" class="admin-input" placeholder="Isi berdasarkan petunjuk format di atas."></textarea></div>
                   <div class="admin-field span-2"><label for="fDeskripsiStimulus">Deskripsi stimulus (opsional)</label><textarea id="fDeskripsiStimulus" class="admin-input" rows="2" maxlength="1000" placeholder="Contoh: Perhatikan gambar berikut dengan saksama, kemudian jawablah pertanyaan di bawahnya."></textarea><small>Tampil di atas gambar/video pada soal ini saja. Hanya muncul bila soal memiliki gambar atau video.</small></div>
                 </div>
@@ -949,7 +949,7 @@
           <div class="admin-field"><label for="ePoin">Poin</label><input id="ePoin" class="admin-input" type="number" min="1" max="1000"></div>
           <div class="admin-field"><label for="eTingkat">Kelas sasaran soal</label><select id="eTingkat" class="admin-input"><option value="SEMUA">Semua Kelas</option><option value="VII">Kelas VII</option><option value="VIII">Kelas VIII</option><option value="IX">Kelas IX</option></select><small>Bank soal per kelas: soal VII hanya diakses peserta kelas VII.</small></div>
           <div class="admin-field"><label for="eMapel">Mapel soal</label><input id="eMapel" class="admin-input" maxlength="150" list="daftarMapelSoal" placeholder="Pilih atau ketik mapel"><datalist id="daftarMapelSoal"></datalist><small>Ubah untuk memindahkan soal ke mapel lain milik akun ini (mis. dari KKA ke Informatika).</small></div>
-          <div class="admin-field span-2"><label for="ePertanyaan">Pertanyaan</label><div id="ePertanyaanRte"></div><textarea id="ePertanyaan" class="admin-input" maxlength="12000" style="display:none"></textarea><small>Mendukung huruf tebal/miring/garis bawah/coret, tabel, grafik, gambar, dan rumus; tempelan dibersihkan otomatis.</small></div>
+          <div class="admin-field span-2"><label for="ePertanyaan">Pertanyaan</label><div id="ePertanyaanRte"></div><textarea id="ePertanyaan" class="admin-input" maxlength="12000" style="display:none"></textarea><small>Mendukung huruf tebal/miring/garis bawah/coret, tabel, grafik, gambar, dan rumus; tempelan dibersihkan otomatis. Rumus dari Word/AI cukup copy-paste langsung.</small></div>
           <div class="admin-field span-2"><label for="eDeskripsiStimulus">Deskripsi stimulus (opsional)</label><textarea id="eDeskripsiStimulus" class="admin-input" rows="2" maxlength="1000" placeholder="Tampil di atas gambar/video soal ini."></textarea></div>
           <div class="admin-field span-2" id="ePgkBox" hidden>
             <div class="soal-struct-box">
@@ -966,7 +966,7 @@
               <button id="eJodohAddRow" class="admin-secondary" type="button" style="margin-top:9px"><i class="fa-solid fa-plus"></i> Tambah Pasangan</button>
             </div>
           </div>
-          <div class="admin-field span-2" id="eOpsiWrap"><label for="eOpsi">Opsi / Pernyataan</label><textarea id="eOpsi" class="admin-input"></textarea><small id="eFormatHelp" class="form-help"></small></div>
+          <div class="admin-field span-2" id="eOpsiWrap"><label for="eOpsi">Opsi / Pernyataan</label><textarea id="eOpsi" class="admin-input" placeholder="Satu opsi atau pernyataan pada setiap baris. Rumus boleh ditempel dari Word/AI (mis. $x^2$ atau \frac{a}{b})."></textarea><small id="eFormatHelp" class="form-help"></small><small>Satu opsi per baris. Rumus (matematika/IPA/informatika) boleh copy-paste langsung dari Word atau AI — sistem mengubahnya otomatis menjadi bentuk yang rapi saat tampil pada peserta.</small></div>
           <div class="admin-field span-2"><label for="eKunci">Kunci jawaban / rubrik</label><textarea id="eKunci" class="admin-input"></textarea></div>
           <div class="admin-field span-2"><label for="eImageLink">Link stimulus gambar (otomatis terisi setelah upload)</label><input id="eImageLink" class="admin-input" type="text" placeholder="https://..."></div>
           <div class="admin-field"><label for="eImageFile">Ganti gambar dari komputer</label><input id="eImageFile" class="file-input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp"></div>
@@ -1020,7 +1020,7 @@
   <script src="exceljs.min.js?v=20260909b"></script>
   <script src="jspdf.umd.min.js?v=20260909"></script>
   <script src="jspdf.plugin.autotable.min.js?v=20260909"></script>
-  <script src="admin-script.js?v=20260923e"></script>
+  <script src="admin-script.js?v=20260924a"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -1066,5 +1066,6 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ebdf6018de7e2e',t:'MTc5MDAyMzA5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f13f0b4fd768f5',t:'MTc5MDA3OTQ0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

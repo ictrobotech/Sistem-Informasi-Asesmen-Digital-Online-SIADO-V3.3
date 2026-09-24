@@ -590,6 +590,30 @@ function bindAdminInterface() {
     var kolomOpsi = document.getElementById(prefix + 'Opsi');
     // Kunci menjodohkan mengikuti isi kolom pasangan secara langsung.
     if (kolomOpsi) kolomOpsi.addEventListener('input', function() { perbaruiKunciJodoh_(prefix); });
+    // REVISI RUMUS 2026-09-24: tempelan dari Word (OMML) atau AI (LaTeX
+    // $...$ / \frac{...} / MathJax) di kolom Opsi & Kunci otomatis diubah
+    // menjadi rumus $latex$ sehingga ter-render rapi saat tampil.
+    ['Opsi', 'Kunci'].forEach(function(col) {
+      var el = document.getElementById(prefix + col);
+      if (!el) return;
+      el.addEventListener('paste', function(event) {
+        var cd = event.clipboardData || window.clipboardData;
+        if (!cd || !window.SRich) return;
+        var hasil = SRich.plainFieldPaste(String(cd.getData('text/html') || ''), String(cd.getData('text/plain') || ''));
+        if (!hasil.changed) return; // tempelan biasa: biarkan browser
+        event.preventDefault();
+        el.focus();
+        var ok = false;
+        try { ok = document.execCommand('insertText', false, hasil.text); } catch (err) { ok = false; }
+        if (!ok) {
+          var s = el.selectionStart == null ? el.value.length : el.selectionStart;
+          var en = el.selectionEnd == null ? s : el.selectionEnd;
+          el.value = el.value.slice(0, s) + hasil.text + el.value.slice(en);
+          el.selectionStart = el.selectionEnd = s + hasil.text.length;
+        }
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
     updateQuestionFormatHelp(prefix);
   });
   bindClick_('ePreviewMedia', previewEditMedia);
@@ -1389,12 +1413,16 @@ async function loadDashboard() {
 function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
-    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>.',
-    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai.',
-    PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>.',
+    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>. ' +
+      '<strong>Rumus:</strong> copy-paste langsung dari Word/AI didukung otomatis, atau tulis <strong>$x^2 + y^2 = z^2$</strong> / <strong>\\frac{a}{b}</strong> — tampil rapi di peserta.',
+    PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai. ' +
+      'Rumus pada pernyataan: copy-paste langsung dari Word/AI didukung otomatis.',
+    PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>. ' +
+      'Rumus boleh ditempel dari Word/AI, atau tulis <strong>$...$</strong> / <strong>\\frac{a}{b}</strong>.',
     MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
-      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta.',
-    ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta.',
+      'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta. Rumus boleh ditempel dari Word/AI.',
+    ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta. ' +
+      'Jawaban ber-rumus boleh ditempel dari Word/AI atau ditulis <strong>$3\\sqrt{2}$</strong>.',
     URAIAN: '<strong>Uraian:</strong> opsi tidak diperlukan. Isi rubrik/pedoman penilaian pada kolom kunci jawaban.'
   }[type];
   document.getElementById(prefix + 'FormatHelp').innerHTML = help;
@@ -1599,7 +1627,7 @@ function perbaruiKunciPgk_(prefix) {
   var keyField = document.getElementById(prefix + 'Kunci');
   var state = PGK_STATE[prefix];
   if (!keyField || !state) return;
-  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(',');
+  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(' / ');
 }
 
 /** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */
@@ -2461,8 +2489,10 @@ function stimulusBadges_(question) {
 function optionsToLines(question) {
   return (question.opsi || []).map(function(option) {
     // Menjodohkan disajikan ulang dalam format "pernyataan = jawaban".
-    if (option.pasangan) return (option.text || '') + ' = ' + option.pasangan;
-    return option.text || '';
+    // stripHtml: bila opsi tersimpan sebagai HTML (mis. rumus [data-tex]),
+    // ditampilkan sebagai teks LaTeX polos agar bisa disunting ulang.
+    if (option.pasangan) return SRich.stripHtml(option.text || '') + ' = ' + SRich.stripHtml(option.pasangan || '');
+    return SRich.stripHtml(option.text || '');
   }).join('\n');
 }
 function readableKey(question) {
@@ -2473,7 +2503,7 @@ function readableKey(question) {
   }
   if (type === 'PGK') {
     var object = tryJson(question.kunci_jawaban, {});
-    return Object.keys(object).map(function(key) { return object[key]; }).join(', ');
+    return Object.keys(object).map(function(key) { return object[key]; }).join(' / ');
   }
   if (type === 'MENJODOHKAN') {
     var jodoh = tryJson(question.kunci_jawaban, {});
@@ -3394,9 +3424,13 @@ async function changeAdminCredential() {
  * STATUS MASSAL DAN IMPORT SOAL
  * ================================================================== */
 async function setAllQuestionStatus(aktif) {
-  var pesan = aktif
+  var mapelStatus = ADMIN.isAdmin ? '' : mapelDiujikan_();
+  var batasStatus = ADMIN.isAdmin ? ''
+    : (mapelStatus ? ' Hanya soal milik Anda pada mapel "' + mapelStatus + '" yang diubah.'
+       : ' Hanya soal milik Anda yang diubah.');
+  var pesan = (aktif
     ? 'Aktifkan SEMUA soal di bank soal? Soal akan langsung tersedia untuk peserta baru.'
-    : 'Nonaktifkan SEMUA soal sekaligus? Peserta yang belum memulai ujian tidak akan menerima soal apa pun sampai ada soal yang diaktifkan kembali.';
+    : 'Nonaktifkan SEMUA soal sekaligus? Peserta yang belum memulai ujian tidak akan menerima soal apa pun sampai ada soal yang diaktifkan kembali.') + batasStatus;
   var setujuStatus = await konfirmasi_(pesan,
     { judul: aktif ? 'Aktifkan Semua Soal' : 'Nonaktifkan Semua Soal', nada: aktif ? 'warn' : 'danger',
       teksOk: aktif ? 'Ya, Aktifkan Semua' : 'Ya, Nonaktifkan Semua' });
@@ -3404,7 +3438,9 @@ async function setAllQuestionStatus(aktif) {
   if (ADMIN.operationBusy.bulkStatus) return;
   ADMIN.operationBusy.bulkStatus = true;
   try {
-    var result = await apiWajib_('setStatusSemuaSoal', { aktif: !!aktif });
+    var payloadStatus = { aktif: !!aktif };
+    if (mapelStatus) payloadStatus.mapel = mapelStatus;
+    var result = await apiWajib_('setStatusSemuaSoal', payloadStatus);
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     await hasilSukses_(aktif ? 'Semua Soal Diaktifkan' : 'Semua Soal Dinonaktifkan',
       result.message || 'Status seluruh soal berhasil diperbarui.', [
@@ -3417,10 +3453,11 @@ async function setAllQuestionStatus(aktif) {
 }
 
 /**
- * REVISI 4.0 — Hapus SEMUA soal (menyeluruh).
- * Server tidak menyediakan aksi hapus massal, jadi setiap soal dihapus
- * lewat aksi hapusSoal yang sudah ada (kontrak tidak berubah). Dua tahap
- * konfirmasi agar tidak terpicu tanpa sengaja.
+ * REVISI 2026-09-22 — Hapus SEMUA soal per peran.
+ * Admin: seluruh bank soal dari semua mapel. Guru: hanya soal sendiri
+ * pada mapel yang diujikan (soal mapel lain dilewati; soal milik akun
+ * lain tetap ditolak server). Setiap soal dihapus lewat aksi hapusSoal
+ * yang sudah ada. Dua tahap konfirmasi agar tidak terpicu tanpa sengaja.
  */
 /* ==================================================================
  * REVISI 2026-09-22 — SATU AKUN GURU, DUA MAPEL BERGANTIAN
@@ -3926,18 +3963,37 @@ function mapelDiujikan_() {
   return m;
 }
 
+function soalSeMapelUjian_(soal, mapelUjian) {
+  if (!mapelUjian) return true;
+  var m = String((soal && soal.mapel) || '').trim();
+  if (!m) return true;
+  return m.toLowerCase() === String(mapelUjian).toLowerCase();
+}
 async function deleteAllQuestions() {
   var semua = (DATA_MENTAH.soal || []).slice();
   if (!semua.length) {
     await hasilInfo_('Bank Soal Kosong', 'Tidak ada soal yang dapat dihapus.');
     return;
   }
-  var setuju = await konfirmasi_('SELURUH bank soal (' + semua.length + ' soal) akan dihapus permanen, ' +
+  var mapelUjian = ADMIN.isAdmin ? '' : mapelDiujikan_();
+  var target = semua.filter(function(q) { return ADMIN.isAdmin || soalSeMapelUjian_(q, mapelUjian); });
+  var dilewati = semua.length - target.length;
+  if (!target.length) {
+    await hasilInfo_('Tidak Ada Soal Dalam Cakupan',
+      'Tidak ada soal mapel "' + mapelUjian + '" milik Anda. ' + semua.length + ' soal mapel lain tidak dihapus.');
+    return;
+  }
+  var cakupan = ADMIN.isAdmin
+    ? 'SELURUH bank soal (' + target.length + ' soal dari semua mapel)'
+    : 'Soal milik Anda pada mapel "' + (mapelUjian || 'yang diujikan') + '" (' + target.length + ' soal)';
+  var setuju = await konfirmasi_(cakupan + ' akan dihapus permanen, ' +
     'termasuk berkas gambar/video-nya di penyimpanan aplikasi. Soal yang sedang dipakai peserta aktif ' +
-    'hanya dinonaktifkan demi menjaga ujian yang berjalan. Tindakan ini TIDAK dapat dibatalkan.',
+    'hanya dinonaktifkan demi menjaga ujian yang berjalan.' +
+    (dilewati ? ' ' + dilewati + ' soal mapel lain dilewati (tidak dihapus).' : '') +
+    ' Tindakan ini TIDAK dapat dibatalkan.',
     { judul: 'Hapus Semua Soal', nada: 'danger', teksOk: 'Lanjutkan' });
   if (!setuju) return;
-  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan seluruh bank soal.',
+  var ketik = await tanya_('Ketik <b>HAPUS</b> (huruf besar) untuk mengkonfirmasi penghapusan ' + escapeAdmin(cakupan.toLowerCase()) + '.',
     { judul: 'Konfirmasi Akhir', label: 'Ketik HAPUS', placeholder: 'HAPUS', teksOk: 'Hapus Permanen' });
   if (ketik === null || String(ketik).trim() !== 'HAPUS') {
     await hasilInfo_('Hapus Dibatalkan', 'Konfirmasi tidak cocok. Bank soal tidak diubah.');
@@ -3948,21 +4004,26 @@ async function deleteAllQuestions() {
   var berhasil = 0;
   var gagalList = [];
   try {
-    for (var i = 0; i < semua.length; i++) {
+    for (var i = 0; i < target.length; i++) {
       try {
-        var r = await adminApi('hapusSoal', { id_soal: semua[i].id_soal });
+        var payloadHapus = { id_soal: target[i].id_soal };
+        if (mapelUjian) payloadHapus.mapel_scope = mapelUjian;
+        var r = await adminApi('hapusSoal', payloadHapus);
         if (r && r.success) berhasil += 1;
-        else gagalList.push('#' + semua[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
+        else gagalList.push('#' + target[i].id_soal + ': ' + ((r && r.message) || 'ditolak server'));
       } catch (error) {
-        gagalList.push('#' + semua[i].id_soal + ': ' + (error.message || error));
+        gagalList.push('#' + target[i].id_soal + ': ' + (error.message || error));
       }
     }
     await segarkanSenyap_([loadQuestions, loadDashboard]);
+    var sisa = (DATA_MENTAH.soal || []).length;
+    var rincianHapus = [
+      { label: 'Dihapus', nilai: String(berhasil) },
+      { label: 'Sisa soal', nilai: String(sisa) }
+    ];
+    if (dilewati) rincianHapus.splice(1, 0, { label: 'Dilewati (mapel lain)', nilai: String(dilewati) });
     if (!gagalList.length) {
-      await hasilSukses_('Semua Soal Dihapus', berhasil + ' soal dihapus permanen dari bank soal.', [
-        { label: 'Dihapus', nilai: String(berhasil) },
-        { label: 'Sisa soal', nilai: '0' }
-      ]);
+      await hasilSukses_('Hapus Massal Selesai', berhasil + ' soal dihapus permanen.', rincianHapus);
     } else {
       await hasilGagal_('Hapus Selesai Sebagian',
         berhasil + ' soal terhapus; ' + gagalList.length + ' gagal. ' + gagalList.slice(0, 5).join('; '));
@@ -4500,7 +4561,7 @@ function tambahSheetExcelProfesional_(workbook, opsi) {
   var catatan = sheet.addRow(['Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online']);
   sheet.mergeCells(catatan.number, 1, catatan.number, panjang);
   catatan.height = 21;
-  catatan.getCell(1).font = { name: 'Aptos', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  catatan.getCell(1).font = { name: 'Apts', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
   catatan.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
 
   sheet.pageSetup.printTitlesRow = '1:4';
@@ -6198,8 +6259,5 @@ function formatDate(value) { if (!value) return '-'; var date = new Date(value);
 function escapeAdmin(value) { return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
-
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3f13f3bea3f68f5',t:'MTc5MDA3OTQ1MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

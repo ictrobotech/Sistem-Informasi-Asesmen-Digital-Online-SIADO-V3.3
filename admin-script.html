@@ -2411,6 +2411,107 @@ function urutkanSoalMenurutNomor_(rows, peta) {
   });
 }
 
+/* ==================================================================
+ * REVISI 7 — TABEL BANK SOAL GAYA DOKUMEN (RAPI)
+ * Pengganti renderQuestionTable() versi REVISI 5. Mengikuti sampel guru:
+ * garis penuh, kolom pendek rata tengah sebagai teks polos (tanpa
+ * lencana), PERTANYAAN & OPSI/KUNCI rata kiri-kanan dan rata atas, satu
+ * opsi per baris ditutup "Kunci :", tombol aksi di tengah sel.
+ * Perataan memakai kelas sel (bs-tengah / bs-teks / bs-aksi), bukan
+ * urutan kolom — aturan lama #questionTable td:nth-child(4)/(6) ikut
+ * bergeser saat kolom NOMOR disisipkan (REVISI 5) dan kini tidak dipakai.
+ * Bergantung pada: escapeAdmin, truncate, tryJson, SRich.stripHtml,
+ * tingkatDariNilai_, petaNomorSoal_, urutkanSoalMenurutNomor_,
+ * DATA_MENTAH, setTableMessage, openEditQuestion, deleteQuestion.
+ * ================================================================== */
+
+/** Label tipe berupa teks polos untuk tabel Bank Soal (sesuai sampel). */
+function labelTipeBankSoal_(tipe) {
+  var kode = String(tipe || '').toUpperCase();
+  return {
+    PG: 'PG', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA',
+    MENJODOHKAN: 'Menjodohkan', ISIAN: 'Isian', URAIAN: 'Uraian'
+  }[kode] || String(tipe || '-');
+}
+
+/** Kunci berbentuk objek/array (teks JSON atau sudah objek); null bila bukan. */
+function kunciTeruraiBankSoal_(nilai) {
+  if (nilai && typeof nilai === 'object') return nilai;
+  var hasil = tryJson(nilai, null);
+  return (hasil && typeof hasil === 'object') ? hasil : null;
+}
+
+/**
+ * Satu baris opsi dengan penanda menggantung (huruf A./B. atau nomor 1./2.).
+ * `teksBawah` (opsional) tampil di baris sendiri di bawah teks — dipakai
+ * pasangan Menjodohkan agar tidak muncul celah lebar akibat rata kiri-kanan.
+ */
+function barisOpsiBankSoal_(penanda, teks, jenisPenanda, teksBawah) {
+  return '<div class="bs-opsi"><span class="bs-opsi-tanda ' + jenisPenanda + '">' + escapeAdmin(penanda) + '</span>' +
+    '<span class="bs-opsi-teks">' + escapeAdmin(teks) +
+    (teksBawah ? '<span class="bs-opsi-pasangan"><span class="bs-pasangan-tanda">=</span>' +
+      '<span class="bs-pasangan-teks">' + escapeAdmin(teksBawah) + '</span></span>' : '') + '</span></div>';
+}
+
+/**
+ * Isi sel OPSI/KUNCI: satu opsi per baris, lalu baris "Kunci :".
+ * PG/PGK MCMA: A. B. C. ...; PGK Kategori: pernyataan bernomor + kunci per
+ * nomor; Menjodohkan: "pernyataan = pasangan"; Isian/Uraian: kunci saja.
+ */
+function selOpsiKunciBankSoal_(question) {
+  var tipe = String(question.tipe || '').toUpperCase();
+  var opsi = Array.isArray(question.opsi) ? question.opsi : [];
+  var teks = function(nilai) { return truncate(SRich.stripHtml(nilai === undefined || nilai === null ? '' : nilai), 140); };
+  var baris = '';
+  var kunci = '';
+  if (tipe === 'PG' || tipe === 'PGK_MCMA') {
+    opsi.forEach(function(op, i) {
+      var huruf = String(op.label || op.id || String.fromCharCode(65 + i));
+      baris += barisOpsiBankSoal_(huruf + '.', teks(op.text), 'huruf');
+    });
+    var pilihan = kunciTeruraiBankSoal_(question.kunci_jawaban);
+    kunci = (Array.isArray(pilihan) ? pilihan : String(question.kunci_jawaban || '').split(','))
+      .map(function(k) { return String(k).trim(); }).filter(Boolean).join(', ');
+  } else if (tipe === 'PGK') {
+    var peta = kunciTeruraiBankSoal_(question.kunci_jawaban);
+    var daftar = Array.isArray(peta) ? peta : (peta ? null : String(question.kunci_jawaban || '').split(','));
+    kunci = opsi.map(function(op, i) {
+      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor');
+      var k;
+      if (daftar) k = daftar[i];
+      else {
+        k = peta[op.id !== undefined ? op.id : String(i)];
+        if (k === undefined) k = peta[String(i)];
+      }
+      // Spasi tak-terputus: nomor pernyataan tidak terpisah dari kuncinya saat pindah baris.
+      return (i + 1) + '.\u00a0' + (String(k === undefined || k === null ? '' : k).trim() || '-');
+    }).join('; ');
+  } else if (tipe === 'MENJODOHKAN') {
+    var jodoh = kunciTeruraiBankSoal_(question.kunci_jawaban) || {};
+    opsi.forEach(function(op, i) {
+      var pasangan = (jodoh[op.id] !== undefined && jodoh[op.id] !== '') ? jodoh[op.id] : op.pasangan;
+      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor', teks(pasangan) || '-');
+    });
+    kunci = opsi.length ? 'sesuai pasangan di atas' : SRich.stripHtml(String(question.kunci_jawaban || ''));
+  } else {
+    // ISIAN / URAIAN: tanpa opsi, cukup kunci/rubrik.
+    kunci = SRich.stripHtml(String(question.kunci_jawaban === undefined || question.kunci_jawaban === null ? '' : question.kunci_jawaban));
+  }
+  kunci = truncate(kunci || '-', 220);
+  // Kunci panjang (mis. rubrik uraian): label di baris sendiri agar rata kiri-kanan
+  // tidak meregangkan jarak setelah "Kunci :". Kunci pendek tetap satu baris.
+  return baris + '<div class="bs-kunci' + (kunci.length > 24 ? ' panjang' : '') + '">' +
+    '<b class="bs-kunci-label">Kunci :</b> ' + escapeAdmin(kunci) + '</div>';
+}
+
+/** Kolom STIMULUS: teks polos "Gambar" / "Video", atau "-" bila kosong. */
+function selStimulusBankSoal_(question) {
+  var isi = [];
+  if (question.stimulus_gambar) isi.push('<span class="bs-media"><i class="fa-regular fa-image"></i> Gambar</span>');
+  if (question.stimulus_video) isi.push('<span class="bs-media"><i class="fa-solid fa-film"></i> Video</span>');
+  return isi.length ? isi.join('') : '<span class="bs-kosong">-</span>';
+}
+
 function renderQuestionTable(rows) {
   if (!rows.length) {
     setTableMessage('questionTable', 'Belum ada soal. Tambahkan soal pertama Anda.', 'fa-inbox');
@@ -2419,27 +2520,35 @@ function renderQuestionTable(rows) {
   // REVISI 5: nomor dihitung dari seluruh bank soal, baris ditampilkan urut nomor.
   var petaNomor = petaNomorSoal_((DATA_MENTAH.soal && DATA_MENTAH.soal.length) ? DATA_MENTAH.soal : rows);
   rows = urutkanSoalMenurutNomor_(rows, petaNomor);
-  var html = '<table class="admin-table"><thead><tr><th>ID</th><th class="kolom-nomor-soal">Nomor</th><th>Tipe</th><th>Mapel</th><th>Pertanyaan</th><th>Kelas</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+  var html = '<table class="admin-table bank-soal-rapi"><colgroup>' +
+    '<col class="bs-c-id"><col class="bs-c-nomor"><col class="bs-c-tipe"><col class="bs-c-mapel"><col class="bs-c-tanya">' +
+    '<col class="bs-c-kelas"><col class="bs-c-opsi"><col class="bs-c-stimulus"><col class="bs-c-poin"><col class="bs-c-status"><col class="bs-c-aksi">' +
+    '</colgroup><thead><tr><th>ID</th><th>Nomor</th><th>Tipe</th><th>Mapel</th><th>Pertanyaan</th><th>Kelas</th>' +
+    '<th>Opsi/Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(question) {
-    var tingkatSoal = tingkatDariNilai_(question.tingkat);
     var nomorSoal = petaNomor[String(question.id_soal)];
-    html += '<tr><td><strong>#' + escapeAdmin(question.id_soal) + '</strong></td>' +
-      '<td class="kolom-nomor-soal"><span class="nomor-soal" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') +
-        ' pada mapel ' + escapeAdmin(question.mapel || '-') + '">' + escapeAdmin(nomorSoal || '-') + '</span></td>' +
-      '<td>' + typeBadge(question.tipe) + '</td>' +
-      '<td><div class="cell-wrap">' + badge(question.mapel || '-', 'blue') + '</div></td>' +
-      '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</div></td>' +
-      // Kolom kelas sasaran: memudahkan memastikan satu perubahan kelas tidak
-      // ikut menyeret soal nomor lain.
-      '<td>' + badge(tingkatSoal === 'SEMUA' ? 'SEMUA' : tingkatSoal, tingkatSoal === 'SEMUA' ? 'gray' : 'blue') + '</td>' +
-      '<td><div class="cell-wrap"><strong>Opsi:</strong> ' + escapeAdmin(optionSummary(question)) + '<br><strong>Kunci:</strong> ' + escapeAdmin(readableKey(question)) + '</div></td>' +
-      '<td>' + stimulusBadges_(question) + '</td>' +
-      '<td>' + escapeAdmin(question.poin) + '</td>' +
-      '<td>' + (question.aktif ? '<span class="badge green">Aktif</span>' : '<span class="badge gray">Nonaktif</span>') + '</td>' +
-      '<td><div class="row-actions"><button class="mini-button edit" data-edit-question="' + escapeAdmin(question.id_soal) + '" type="button"><i class="fa-solid fa-pen"></i> Edit</button><button class="mini-button delete" data-delete-question="' + escapeAdmin(question.id_soal) + '" type="button"><i class="fa-solid fa-trash"></i></button></div></td></tr>';
+    var id = escapeAdmin(question.id_soal);
+    var aktif = !!question.aktif;
+    html += '<tr>' +
+      '<td class="bs-tengah bs-id"><strong>#' + id + '</strong></td>' +
+      '<td class="bs-tengah bs-nomor" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') + ' pada mapel ' + escapeAdmin(question.mapel || '-') + '">' + escapeAdmin(nomorSoal || '-') + '</td>' +
+      '<td class="bs-tengah">' + escapeAdmin(labelTipeBankSoal_(question.tipe)) + '</td>' +
+      '<td class="bs-tengah">' + escapeAdmin(question.mapel || '-') + '</td>' +
+      '<td class="bs-teks">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</td>' +
+      '<td class="bs-tengah">' + escapeAdmin(tingkatDariNilai_(question.tingkat)) + '</td>' +
+      '<td class="bs-teks">' + selOpsiKunciBankSoal_(question) + '</td>' +
+      '<td class="bs-tengah">' + selStimulusBankSoal_(question) + '</td>' +
+      '<td class="bs-tengah">' + escapeAdmin(question.poin) + '</td>' +
+      '<td class="bs-tengah"><span class="bs-status ' + (aktif ? 'aktif' : 'nonaktif') + '">' + (aktif ? 'AKTIF' : 'NONAKTIF') + '</span></td>' +
+      '<td class="bs-tengah bs-aksi"><div class="row-actions">' +
+        '<button class="mini-button edit" data-edit-question="' + id + '" type="button"><i class="fa-solid fa-pen"></i> Edit</button>' +
+        '<button class="mini-button delete" data-delete-question="' + id + '" type="button" aria-label="Hapus soal #' + id + '"><i class="fa-solid fa-trash"></i></button>' +
+      '</div></td></tr>';
   });
   html += '</tbody></table>';
-  document.getElementById('questionTable').innerHTML = html;
+  var wadah = document.getElementById('questionTable');
+  wadah.classList.add('bs-rapi');   // bingkai kontainer mengikuti garis tabel
+  wadah.innerHTML = html;
   document.querySelectorAll('[data-edit-question]').forEach(function(button) { button.addEventListener('click', function() { openEditQuestion(this.dataset.editQuestion); }); });
   document.querySelectorAll('[data-delete-question]').forEach(function(button) { button.addEventListener('click', function() { deleteQuestion(this.dataset.deleteQuestion); }); });
 }
@@ -6627,5 +6736,4 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a402c0a10abcce4a',t:'MTc5MDI2MzAwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

@@ -2299,6 +2299,8 @@ async function loadQuestions() {
     // REVISI 2 mapel: segarkan kandidat dropdown mapel aktif + spanduk info
     // tanpa mengubah pilihan mapel yang sedang tampil di Pengaturan.
     isiPilihanMapelUjian_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || '');
+    // REVISI 4: segarkan dropdown "Mapel tujuan" pada kartu Import Soal.
+    isiPilihanMapelImport_();
   } catch (error) {
     setTableMessage('questionTable', 'Gagal memuat bank soal.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.questions = false; }
@@ -3701,10 +3703,10 @@ function perbaruiInfoMapelSoal_() {
     ? kunci.map(function(k) { return escapeAdmin(k) + ' (' + hitung[k] + ' soal)'; }).join(' · ')
     : 'bank soal masih kosong';
   el.innerHTML = '<i class="fa-solid fa-circle-info" style="color:#1f6feb"></i> ' +
-    'Soal baru &amp; import tanpa kolom mapel akan masuk ke mapel aktif: <b>' +
+    'Soal baru &amp; import tersimpan otomatis ke bank soal akun ini. Mapel aktif sekarang: <b>' +
     escapeAdmin(aktif || 'belum dipilih') + '</b><br>' +
     '<span style="font-size:11px">Bank soal milik akun ini &mdash; ' + ringkas +
-    '. Untuk menambah soal mapel lain, ganti dulu mapel aktif di Pengaturan lalu simpan.</span>';
+    '. Soal import masuk ke mapel yang dipilih pada kartu Import Soal (default: mapel aktif ini).</span>';
 }
 
 /* ==================================================================
@@ -4045,28 +4047,144 @@ async function deleteAllQuestions() {
   }
 }
 
-function unduhTemplateSoal() {
-  var rows = [
-    ['tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'],
-    ['PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', '10', 'VII', 'YA', '', ''],
-    ['PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', '10', 'VIII', 'YA', '', ''],
-    ['PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', '10', 'VIII', 'YA', '', ''],
-    ['PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', '10', 'VIII', 'YA', '', ''],
-    ['MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya',
-     'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', '10', 'IX', 'YA', '', ''],
-    ['ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', '5', 'IX', 'YA', '', ''],
-    ['URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', '20', 'SEMUA', 'YA', '', '']
+/* ==================================================================
+ * REVISI 2026-09-24 (REVISI 4) — TEMPLATE IMPORT SOAL FORMAT EXCEL
+ *
+ * Template unduhan kini berupa berkas Excel asli (.xlsx) dengan dua
+ * sheet: "SOAL" (header + 7 contoh semua tipe) dan "PETUNJUK"
+ * (panduan isi per kolom), dibangun ExcelJS langsung di browser.
+ * Struktur kolom mengikuti form edit soal realtime dan memuat kolom
+ * `nomor` di antara `id` dan `tipe` sehingga guru/admin tidak perlu
+ * menulis nomor di dalam teks pertanyaan. Kolom mapel dihapus: soal
+ * hasil import otomatis tersimpan ke bank soal akun ini sesuai mapel
+ * yang diampu (dipilih pada dropdown "Mapel tujuan" di kartu Import).
+ * ================================================================== */
+var SOAL_TEMPLATE_HEADERS_ = ['id', 'nomor', 'tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'];
+var SOAL_TEMPLATE_LEBAR_ = [10, 8, 15, 55, 45, 32, 7, 9, 8, 24, 24];
+var SOAL_TEMPLATE_CONTOH_ = [
+  ['', 1, 'PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', 10, 'VII', 'YA', '', ''],
+  ['', 2, 'PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', 10, 'VIII', 'YA', '', ''],
+  ['', 3, 'PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', 10, 'VIII', 'YA', '', ''],
+  ['', 4, 'PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', 10, 'VIII', 'YA', '', ''],
+  ['', 5, 'MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya', 'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', 10, 'IX', 'YA', '', ''],
+  ['', 6, 'ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', 5, 'IX', 'YA', '', ''],
+  ['', 7, 'URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', 20, 'SEMUA', 'YA', '', '']
+];
+var SOAL_TEMPLATE_PETUNJUK_ = [
+  'Isi satu soal pada satu baris di sheet "SOAL". Baris pertama (header) tidak boleh diubah; baris contoh boleh dihapus dan ditimpa data Anda.',
+  'id — dikosongkan. Nomor ID soal dibuat otomatis oleh sistem saat soal tersimpan di bank soal.',
+  'nomor — nomor soal ditulis DI KOLOM INI. Jangan menulis nomor di dalam kolom pertanyaan (contoh salah: "1. Ibu kota..."; yang benar: "Ibu kota...").',
+  'tipe — pilih salah satu: PG, PGK, PGK_MCMA, MENJODOHKAN, ISIAN, URAIAN.',
+  'pertanyaan — teks soal. Rumus matematika/IPA boleh ditulis LaTeX, mis. $x^2$ atau $\\frac{a}{b}$; sistem merender otomatis.',
+  'opsi — PG & PGK MCMA: pisahkan setiap opsi dengan | (pipa). PGK: pisahkan setiap pernyataan dengan |. MENJODOHKAN: tulis pasangan "pernyataan = jawaban" dan pisahkan antar pasangan dengan |.',
+  'kunci_jawaban — PG: satu huruf (A–D). PGK MCMA: beberapa huruf dipisah koma (mis. A,C). PGK kategori: nama kategori tiap pernyataan dipisah koma. MENJODOHKAN: kosongkan. ISIAN/URAIAN: kunci/rubrik singkat.',
+  'poin — angka (kosong = 10). tingkat — SEMUA, VII, VIII, atau IX. aktif — YA atau TIDAK.',
+  'stimulus_gambar / stimulus_video — opsional. Boleh dikosongkan, lalu unggah berkas gambar/video lewat tombol Edit pada Bank Soal.',
+  'Mata pelajaran — tidak ada kolom mapel. Soal otomatis tersimpan ke bank soal akun Anda sesuai mapel yang diampu (dipilih pada dropdown "Mapel tujuan" di kartu Import Soal).',
+  'Simpan berkas tetap berformat .xlsx (jangan diubah ke format lain), lalu tekan "Import Sekarang" di panel admin.',
+  'Baris yang tidak lengkap (tipe/pertanyaan/kunci) akan dilewati; rinciannya tampil pada hasil import.'
+];
+
+/**
+ * Membangun berkas template Excel (.xlsx) di browser memakai ExcelJS.
+ * Mengembalikan Blob, atau null bila pustaka ExcelJS belum termuat
+ * (panggilannya lalu jatuh ke template CSV cadangan).
+ */
+async function buatTemplateExcelSoal_() {
+  var ExcelJS = window.ExcelJS;
+  if (!ExcelJS || !ExcelJS.Workbook) return null;
+  var workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIADO — Sistem Informasi Asesmen Digitalisasi Online';
+  workbook.lastModifiedBy = 'SIADO';
+  workbook.properties.title = 'Template Import Soal SIADO';
+  workbook.properties.description = 'Format panduan import soal: sheet SOAL (data) + PETUNJUK (panduan isi).';
+
+  var sheet = workbook.addWorksheet('SOAL', { views: [{ state: 'frozen', ySplit: 1 }] });
+  sheet.columns = SOAL_TEMPLATE_HEADERS_.map(function(h, i) {
+    return { header: h, key: h, width: SOAL_TEMPLATE_LEBAR_[i] };
+  });
+  sheet.getRow(1).eachCell(function(cell) {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  });
+  SOAL_TEMPLATE_CONTOH_.forEach(function(baris, i) {
+    var row = sheet.getRow(2 + i);
+    baris.forEach(function(nilai, j) {
+      row.getCell(j + 1).value = (nilai === '' ? null : nilai);
+    });
+    row.eachCell({ includeEmpty: false }, function(cell) {
+      var wrap = ['pertanyaan', 'opsi', 'kunci_jawaban'].indexOf(SOAL_TEMPLATE_HEADERS_[cell.col - 1]) !== -1;
+      cell.alignment = { vertical: 'top', wrapText: wrap };
+    });
+  });
+  sheet.dataValidations.add('B2:B200', {
+    type: 'whole', operator: 'greaterThanOrEqual', formula1: '1', formula2: '99999',
+    allowBlank: true, showErrorMessage: true, errorStyle: 'warning',
+    errorTitle: 'Nomor soal', error: 'Nomor soal sebaiknya berupa angka positif.'
+  });
+  sheet.dataValidations.add('C2:C200', {
+    type: 'list', allowBlank: true, showErrorMessage: true,
+    formula1: '"PG,PGK,PGK_MCMA,MENJODOHKAN,ISIAN,URAIAN"',
+    errorTitle: 'Tipe soal', error: 'Pilih salah satu tipe: PG, PGK, PGK_MCMA, MENJODOHKAN, ISIAN, URAIAN.'
+  });
+  sheet.dataValidations.add('H2:H200', {
+    type: 'list', allowBlank: true, showErrorMessage: true,
+    formula1: '"SEMUA,VII,VIII,IX"',
+    errorTitle: 'Tingkat', error: 'Pilih SEMUA, VII, VIII, atau IX.'
+  });
+  sheet.dataValidations.add('I2:I200', {
+    type: 'list', allowBlank: true, showErrorMessage: true,
+    formula1: '"YA,TIDAK"',
+    errorTitle: 'Status', error: 'Pilih YA atau TIDAK.'
+  });
+
+  var petunjuk = workbook.addWorksheet('PETUNJUK', { views: [{ state: 'frozen', ySplit: 1 }] });
+  petunjuk.columns = [{ width: 6 }, { width: 110 }];
+  petunjuk.mergeCells('A1:B1');
+  var judul = petunjuk.getRow(1).getCell(1);
+  judul.value = 'PETUNJUK ISI TEMPLATE IMPORT SOAL SIADO';
+  judul.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+  judul.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+  judul.alignment = { vertical: 'middle' };
+  SOAL_TEMPLATE_PETUNJUK_.forEach(function(teks, i) {
+    var row = petunjuk.getRow(2 + i);
+    row.getCell(1).value = i + 1;
+    row.getCell(2).value = teks;
+    row.getCell(2).alignment = { vertical: 'top', wrapText: true };
+    row.getCell(1).alignment = { vertical: 'top', horizontal: 'center' };
+  });
+
+  var buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+async function unduhTemplateSoal() {
+  var rincian = [
+    { label: 'Pemisah opsi/pernyataan', nilai: 'tanda | (pipa)' },
+    { label: 'Nomor soal', nilai: 'kolom khusus antar id dan tipe — jangan ditulis di pertanyaan' },
+    { label: 'Tingkat', nilai: 'SEMUA / VII / VIII / IX (kosong = SEMUA)' },
+    { label: 'Mapel', nilai: 'otomatis: mapel yang diampu akun ini (dipilih di kartu Import)' },
+    { label: 'Stimulus', nilai: 'kosongkan — unggah gambar/video lewat tombol Edit pada Bank Soal' },
+    { label: 'Contoh baris', nilai: String(SOAL_TEMPLATE_CONTOH_.length) + ' contoh (semua tipe soal)' }
   ];
-  unduhCsv_(rows, 'template-import-soal.csv');
-  hasilSukses_('Template Soal Diunduh',
-    'Berkas template tersimpan di folder unduhan perangkat Anda. Isi datanya lalu simpan kembali sebagai CSV UTF-8 sebelum diimport.', [
-      { label: 'Nama berkas', nilai: 'template-import-soal.csv' },
-      { label: 'Pemisah opsi', nilai: 'tanda | (pipa)' },
-      { label: 'Kolom tingkat', nilai: 'VII / VIII / IX / SEMUA (kosong = SEMUA)' },
-      { label: 'Menjodohkan', nilai: 'tulis pasangan sebagai pernyataan = jawaban, kunci otomatis' },
-      { label: 'PGK Kategori', nilai: 'kolom kunci_jawaban berisi nama kategori per pernyataan dipisah koma (mis. Informasi Penting,Dapat Diabaikan,...)' },
-      { label: 'Contoh baris', nilai: String(rows.length - 1) + ' contoh soal' }
-    ]);
+  try {
+    var blob = await buatTemplateExcelSoal_();
+    if (!blob) throw new Error('Pustaka ExcelJS belum termuat.');
+    unduhBlob_(blob, 'template-import-soal.xlsx');
+    await hasilSukses_('Template Soal Diunduh (Excel)',
+      'Berkas <b>template-import-soal.xlsx</b> tersimpan di folder unduhan perangkat Anda. Isi sesuai panduan pada sheet <b>PETUNJUK</b>, simpan, lalu tekan <b>Import Sekarang</b> pada kartu Import Soal.',
+      [{ label: 'Nama berkas', nilai: 'template-import-soal.xlsx' }].concat(rincian));
+  } catch (error) {
+    var rows = [SOAL_TEMPLATE_HEADERS_].concat(SOAL_TEMPLATE_CONTOH_.map(function(b) {
+      return b.map(function(nilai) { return String(nilai === null ? '' : nilai); });
+    }));
+    unduhCsv_(rows, 'template-import-soal.csv');
+    await hasilInfo_('Template Diunduh (CSV cadangan)',
+      'Pustaka Excel belum termuat pada perangkat ini, sehingga template diunduh sebagai CSV. ' +
+      (error && error.message ? error.message : ''),
+      [{ label: 'Nama berkas', nilai: 'template-import-soal.csv' }].concat(rincian));
+  }
 }
 
 function unduhTemplatePeserta() {
@@ -4162,18 +4280,150 @@ function setImportMessage_(id, text, tone) {
   element.innerHTML = text;
 }
 
+/** Membaca berkas biner (ArrayBuffer) — dipakai untuk file Excel. */
+function bacaFileBinar_(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
+    reader.onerror = function() { reject(new Error('Berkas tidak dapat dibaca.')); };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Mengubah berkas hasil pilih (Excel .xlsx/.xls atau CSV) menjadi daftar
+ * baris. Sheet pertama dipakai; header dikenali dari baris pertama.
+ */
+async function barisDariBerkasSoal_(file) {
+  var nama = String(file.name || '');
+  if (/\.(xlsx|xls)$/i.test(nama)) {
+    if (!window.XLSX || !window.XLSX.read || !window.XLSX.utils) {
+      throw new Error('Pustaka pembaca Excel belum termuat. Muat ulang halaman panel, lalu coba lagi.');
+    }
+    var buffer = await bacaFileBinar_(file);
+    var buku = window.XLSX.read(buffer, { type: 'array' });
+    if (!buku.SheetNames || !buku.SheetNames.length || !buku.Sheets[buku.SheetNames[0]]) {
+      throw new Error('Berkas Excel tidak berisi sheet apa pun.');
+    }
+    return window.XLSX.utils.sheet_to_json(buku.Sheets[buku.SheetNames[0]], { header: 1, defval: '' });
+  }
+  return parseCsv_(await bacaFileTeks_(file));
+}
+
+/**
+ * Menyusun payload import dari baris objek. REVISI 4:
+ * - `mapel` setiap baris DIPAKSA ke mapel tujuan (mapel yang diampu akun
+ *   ini) — kolom mapel pada berkas diabaikan;
+ * - baris diurutkan berdasarkan kolom `nomor` (baris tanpa nomor
+ *   mengikuti urutan berkas di akhir), sehingga susunan bank soal sesuai
+ *   penomoran guru;
+ * - awalan nomor lama ("1. ...") dihilangkan dari teks pertanyaan agar
+ *   kolom pertanyaan tetap bersih.
+ */
+function susunPayloadImportSoal_(objects, mapelTujuan) {
+  var mapel = String(mapelTujuan || '').trim();
+  var diberiNomor = (objects || []).map(function(item, index) {
+    var nomorTeks = String(item.nomor || item.nomor_soal || item.no || '').trim();
+    var bersih = nomorTeks.replace(/[^0-9]/g, '');
+    return {
+      index: index,
+      nomor: (nomorTeks !== '' && bersih !== '' && !isNaN(Number(bersih))) ? Number(bersih) : null,
+      item: item
+    };
+  });
+  diberiNomor.sort(function(a, b) {
+    if (a.nomor === null && b.nomor === null) return a.index - b.index;
+    if (a.nomor === null) return 1;
+    if (b.nomor === null) return -1;
+    return (a.nomor - b.nomor) || (a.index - b.index);
+  });
+  var nomorMin = null, nomorMaks = null;
+  var payload = diberiNomor.map(function(entri) {
+    var item = entri.item;
+    var pertanyaan = String(item.pertanyaan || item.soal || '').trim();
+    if (pertanyaan) {
+      var pola;
+      if (entri.nomor !== null) {
+        var angka = String(entri.nomor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        pola = new RegExp('^' + angka + '[.)\\-](?=\\s|$)', 'i');
+      } else {
+        pola = /^\d{1,4}[.)\\-](?=\s|$)/;
+      }
+      if (pola.test(pertanyaan)) pertanyaan = pertanyaan.replace(pola, '').trim();
+    }
+    if (entri.nomor !== null) {
+      if (nomorMin === null || entri.nomor < nomorMin) nomorMin = entri.nomor;
+      if (nomorMaks === null || entri.nomor > nomorMaks) nomorMaks = entri.nomor;
+    }
+    return {
+      tipe: String(item.tipe || item.jenis || 'PG').toUpperCase().replace(/[\s-]+/g, '_'),
+      pertanyaan: pertanyaan,
+      opsi: String(item.opsi || item.pilihan || '').trim(),
+      kunci_jawaban: String(item.kunci_jawaban || item.kunci || '').trim(),
+      poin: item.poin || item.skor || 10,
+      // Mapel dari pengaturan akun, bukan dari berkas (lihat REVISI 4).
+      mapel: mapel,
+      stimulus_gambar: String(item.stimulus_gambar || item.gambar || '').trim(),
+      stimulus_video: String(item.stimulus_video || item.video || '').trim(),
+      stimulus_deskripsi: String(item.stimulus_deskripsi || item.deskripsi_stimulus || '').trim(),
+      tingkat: tingkatDariNilai_(item.tingkat || item.kelas || item.kelas_sasaran || ''),
+      aktif: !/^(tidak|no|0|nonaktif|false)$/i.test(String(item.aktif || 'YA').trim())
+    };
+  });
+  return { payload: payload, nomorMin: nomorMin, nomorMaks: nomorMaks };
+}
+
+/** Pembaca nilai dropdown "Mapel tujuan" pada kartu Import Soal. */
+function nilaiMapelImport_() {
+  var el = document.getElementById('importSoalMapel');
+  if (el) return String(el.value || '').trim();
+  return mapelDiujikan_();
+}
+
+/**
+ * Mengisi dropdown "Mapel tujuan" dengan daftar mapel yang diampu akun ini
+ * (dari pengaturan admin, maks. 2 untuk guru). Pilihan lama dipertahankan
+ * bila masih ada; default = mapel aktif bila termasuk daftar.
+ */
+function isiPilihanMapelImport_() {
+  var el = document.getElementById('importSoalMapel');
+  if (!el) return;
+  var sebelum = String(el.value || '').trim();
+  var daftar = daftarMapelMilik_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || '');
+  var html = daftar.map(function(m) {
+    return '<option value="' + escapeAdmin(m) + '">' + escapeAdmin(m) + '</option>';
+  }).join('');
+  if (!daftar.length) html = '<option value="">Belum ada mapel — tetapkan di Pengaturan</option>';
+  el.innerHTML = html;
+  var cocok = daftar.filter(function(m) { return m.toLowerCase() === sebelum.toLowerCase(); })[0];
+  el.value = cocok || daftar[0] || '';
+}
+
 async function importSoalDariFile() {
   var input = document.getElementById('importSoalFile');
-  var file = input.files[0];
+  var file = input && input.files ? input.files[0] : null;
   if (!file) {
-    setImportMessage_('importSoalResult', 'Pilih berkas CSV terlebih dahulu.', 'err');
-    await hasilInfo_('Berkas Belum Dipilih', 'Pilih berkas CSV hasil template terlebih dahulu, lalu tekan Import Sekarang.');
+    setImportMessage_('importSoalResult', 'Pilih berkas terlebih dahulu.', 'err');
+    await hasilInfo_('Berkas Belum Dipilih', 'Pilih berkas Excel (.xlsx) hasil unduh template — atau CSV lama — lalu tekan Import Sekarang.');
     return;
   }
-  if (/\.(xlsx|xls)$/i.test(file.name)) {
-    setImportMessage_('importSoalResult', 'Berkas Excel terdeteksi. Simpan sebagai <b>CSV UTF-8</b> di Excel/Spreadsheet lalu import kembali agar isi terbaca sempurna.', 'err');
-    await hasilInfo_('Format Belum Sesuai',
-      'Berkas Excel belum dapat dibaca langsung. Buka berkas di Excel atau Google Spreadsheet, lalu pilih Simpan Sebagai / Download dengan format CSV UTF-8.', [
+  // Cadangan pengisian bila tab dibuka tanpa pemuatan bank soal (mis. sesi baru).
+  if (!document.getElementById('importSoalMapel') || !String(document.getElementById('importSoalMapel').value || '').trim()) {
+    isiPilihanMapelImport_();
+  }
+  var mapelTujuan = nilaiMapelImport_();
+  if (!mapelTujuan) {
+    setImportMessage_('importSoalResult', 'Pilih <b>mapel tujuan</b> pada dropdown di atas file terlebih dahulu.', 'err');
+    await hasilInfo_('Mapel Tujuan Belum Dipilih',
+      'Soal hasil import otomatis masuk ke bank soal akun ini sesuai mapel yang diampu. Bila dropdown masih kosong, tetapkan dulu mapel pada Pengaturan.', [
+        { label: 'Berkas dipilih', nilai: file.name }
+      ]);
+    return;
+  }
+  if (/\.(docx?|odt|rtf|pages)$/i.test(file.name)) {
+    setImportMessage_('importSoalResult', 'Berkas Word tidak dapat dibaca langsung. Simpan sebagai <b>Excel (.xlsx)</b> lalu import kembali.', 'err');
+    await hasilInfo_('Format Word',
+      'Buka berkas di Word/Google Docs, lalu pilih Simpan/Unduh Sebagai Excel (.xlsx) — atau salin tabel soalnya ke Excel mengikuti struktur template — dan import kembali.', [
         { label: 'Berkas dipilih', nilai: file.name }
       ]);
     return;
@@ -4182,25 +4432,12 @@ async function importSoalDariFile() {
   ADMIN.operationBusy.importSoal = true;
   setImportMessage_('importSoalResult', '<i class="fa-solid fa-circle-notch fa-spin"></i> Membaca dan mengirim data soal...', 'info');
   try {
-    var objects = barisKeObjek_(parseCsv_(await bacaFileTeks_(file)));
+    var rows = await barisDariBerkasSoal_(file);
+    var objects = barisKeObjek_(rows);
     if (!objects.length) throw new Error('Berkas tidak berisi data soal.');
-    var payload = objects.map(function(item) {
-      return {
-        tipe: String(item.tipe || item.jenis || 'PG').toUpperCase().replace(/[\s-]+/g, '_'),
-        pertanyaan: item.pertanyaan || item.soal || '',
-        opsi: item.opsi || item.pilihan || '',
-        kunci_jawaban: item.kunci_jawaban || item.kunci || '',
-        poin: item.poin || item.skor || 10,
-        mapel: item.mapel || '',
-        stimulus_gambar: item.stimulus_gambar || item.gambar || '',
-        stimulus_video: item.stimulus_video || item.video || '',
-        // Kolom opsional: kelas sasaran per baris. Baris tanpa kolom ini
-        // menjadi SEMUA, sehingga import tidak mengubah kelas soal lain.
-        tingkat: tingkatDariNilai_(item.tingkat || item.kelas || item.kelas_sasaran || ''),
-        aktif: !/^(tidak|no|0|nonaktif|false)$/i.test(String(item.aktif || 'YA').trim())
-      };
-    });
-    var result = await apiWajib_('importSoalBatch', { rows: payload });
+    var susunan = susunPayloadImportSoal_(objects, mapelTujuan);
+    if (!susunan.payload.length) throw new Error('Tidak ada baris soal yang terbaca pada berkas.');
+    var result = await apiWajib_('importSoalBatch', { rows: susunan.payload });
     var pesan = '<i class="fa-solid fa-circle-check"></i> ' + escapeAdmin(result.message || ('Import selesai. ' + (result.berhasil || 0) + ' soal ditambahkan.'));
     if (result.gagal && result.gagal.length) {
       pesan += '<br><b>Baris yang dilewati:</b><br>' + result.gagal.slice(0, 15).map(function(item) {
@@ -4211,12 +4448,18 @@ async function importSoalDariFile() {
     input.value = '';
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     var jumlahGagal = (result.gagal || []).length;
+    var labelNomor = susunan.nomorMin === null
+      ? 'urutan berkas'
+      : (susunan.nomorMaks > susunan.nomorMin ? susunan.nomorMin + '–' + susunan.nomorMaks : String(susunan.nomorMin));
     await (jumlahGagal ? hasilInfo_ : hasilSukses_)(
       jumlahGagal ? 'Import Selesai Sebagian' : 'Import Soal Berhasil',
-      jumlahGagal
-        ? 'Sebagian baris tidak dapat diproses. Rincian baris yang dilewati tampil di bawah tombol Import.'
-        : 'Seluruh baris pada berkas berhasil ditambahkan ke bank soal.',
-      [ { label: 'Baris dibaca', nilai: String(payload.length) },
+      (jumlahGagal
+        ? 'Sebagian baris tidak dapat diproses. Rincian baris yang dilewati tampil di bawah tombol Import. '
+        : 'Seluruh soal tersimpan otomatis ke bank soal akun ini. ') +
+      'Stimulus gambar/video dapat diunggah kemudian lewat tombol <b>Edit</b> pada Bank Soal.',
+      [ { label: 'Mapel tujuan', nilai: mapelTujuan },
+        { label: 'Nomor soal', nilai: labelNomor },
+        { label: 'Baris dibaca', nilai: String(susunan.payload.length) },
         { label: 'Berhasil', nilai: String(result.berhasil || 0) },
         { label: 'Dilewati', nilai: String(jumlahGagal) } ]);
   } catch (error) {
@@ -6271,6 +6514,7 @@ function formatDate(value) { if (!value) return '-'; var date = new Date(value);
 function escapeAdmin(value) { return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
+
+
 </script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4022fafae5bc9c6',t:'MTc5MDI1NzA3Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

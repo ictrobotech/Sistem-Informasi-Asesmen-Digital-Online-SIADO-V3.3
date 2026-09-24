@@ -428,6 +428,16 @@ function bindAdminInterface() {
   bindClick_('activateAllQuestions', function() { setAllQuestionStatus(true); });
   bindClick_('importSoalButton', importSoalDariFile);
   bindClick_('downloadTemplateSoal', unduhTemplateSoal);
+  // REVISI 5: jaring pengaman — bila dropdown "Mapel tujuan" masih kosong saat
+  // disentuh (mis. data awal gagal dimuat), isi seketika sebelum daftar terbuka.
+  (function() {
+    var pilihMapelImport = document.getElementById('importSoalMapel');
+    if (!pilihMapelImport) return;
+    var isiBilaKosong = function() { if (!pilihMapelImport.options.length) segarkanMapelImport_(); };
+    ['focus', 'mousedown', 'touchstart'].forEach(function(jenis) {
+      pilihMapelImport.addEventListener(jenis, isiBilaKosong, jenis === 'touchstart' ? { passive: true } : false);
+    });
+  })();
 
   // Export laporan
   bindClick_('exportExcel', function() { exportLaporanFile('excel'); });
@@ -1050,6 +1060,9 @@ function terapkanHakAkses_() {
     element.classList.toggle('role-locked', !ADMIN.isAdmin);
   });
   if (!ADMIN.isAdmin && (ADMIN.activeTab === 'pengguna')) switchAdminTab('soal');
+  // REVISI 5: daftar "Mapel tujuan" bergantung pada peran (guru dikunci ke
+  // mapel yang diampu), jadi dibangun ulang setiap kali peran diterapkan.
+  segarkanMapelImport_();
 }
 
 async function tryRestoreAdminSession() {
@@ -1244,6 +1257,7 @@ function applySettingsData(setting) {
   var titipan = setting.mapelDiampu || setting.mapelGuru || '';
   if (titipan) ADMIN.mapelDiampu = pecahMapelGuru_(titipan);
   isiPilihanMapelUjian_(setting.mapel || '');
+  segarkanMapelImport_();   // REVISI 5: ikut sinkron dengan mapel aktif/diampu
   muatInfoBatasKelasGuru_();
   document.getElementById('sDurasi').value =
     (setting.durasiMenit === '' || setting.durasiMenit === undefined || setting.durasiMenit === null)
@@ -1390,6 +1404,9 @@ async function loadAdminBootstrap() {
     terapkanTemaPanel_();
     ADMIN.notifications = result.notifikasi || [];
     applyNotificationBadge_(result.notifikasiBelumDibaca || 0);
+    // REVISI 5: isi dropdown "Mapel tujuan" (kartu Import Soal) sejak data
+    // awal termuat — tab Kelola Soal tampil tanpa memanggil loadQuestions().
+    segarkanMapelImport_();
     return true;
   } catch (error) {
     if (!error.adminResultHandled) showToast('Data awal admin gagal dimuat.', 'error');
@@ -2299,7 +2316,7 @@ async function loadQuestions() {
     // tanpa mengubah pilihan mapel yang sedang tampil di Pengaturan.
     isiPilihanMapelUjian_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || '');
     // REVISI 4: segarkan dropdown "Mapel tujuan" pada kartu Import Soal.
-    isiPilihanMapelImport_();
+    segarkanMapelImport_();
   } catch (error) {
     setTableMessage('questionTable', 'Gagal memuat bank soal.', 'fa-triangle-exclamation');
   } finally { ADMIN.refreshBusy.questions = false; }
@@ -2331,15 +2348,83 @@ function terapkanFilterSoal_() {
   renderQuestionTable(rows);
 }
 
+/* ==================================================================
+ * REVISI 5 (2026-09-24) — KOLOM NOMOR PADA TABEL BANK SOAL
+ *
+ * Kolom NOMOR (di antara ID dan TIPE) menampilkan nomor urut soal per
+ * mapel, dihitung otomatis dari urutan soal tersimpan (ID naik = urutan
+ * simpan). Import sudah mengurutkan baris menurut kolom `nomor` pada
+ * berkas sebelum dikirim (susunPayloadImportSoal_), sehingga nomor di
+ * Bank Soal mengikuti penomoran guru dan sama dengan urutan tampil
+ * "SOAL 1, 2, 3, ..." pada halaman peserta. Guru tidak perlu lagi menulis
+ * nomor di dalam teks pertanyaan.
+ * Nomor dihitung dari SELURUH bank soal (bukan hasil filter/pencarian),
+ * jadi nomor sebuah soal tidak berubah saat tabel difilter.
+ * ================================================================== */
+
+/** Pembanding ID soal: numerik bila keduanya angka, selain itu teks-natural. */
+function bandingIdSoal_(a, b) {
+  var teksA = String(a === undefined || a === null ? '' : a).trim();
+  var teksB = String(b === undefined || b === null ? '' : b).trim();
+  var angkaA = teksA !== '' && isFinite(Number(teksA));
+  var angkaB = teksB !== '' && isFinite(Number(teksB));
+  if (angkaA && angkaB) return Number(teksA) - Number(teksB);
+  if (angkaA) return -1;
+  if (angkaB) return 1;
+  return teksA.localeCompare(teksB, 'id', { numeric: true });
+}
+
+/** Kunci pengelompokan nomor: mapel soal (huruf besar/kecil diabaikan). */
+function kunciMapelNomor_(question) {
+  return String((question && question.mapel) || '').trim().toLowerCase();
+}
+
+/** Peta { id_soal: nomor } — nomor urut 1..n per mapel menurut ID naik. */
+function petaNomorSoal_(daftar) {
+  var grup = {};
+  (daftar || []).forEach(function(question) {
+    if (!question) return;
+    var kunci = kunciMapelNomor_(question);
+    (grup[kunci] = grup[kunci] || []).push(question);
+  });
+  var peta = {};
+  Object.keys(grup).forEach(function(kunci) {
+    grup[kunci].slice()
+      .sort(function(a, b) { return bandingIdSoal_(a.id_soal, b.id_soal); })
+      .forEach(function(question, index) { peta[String(question.id_soal)] = index + 1; });
+  });
+  return peta;
+}
+
+/** Urutan tampil: per mapel (A–Z, tanpa mapel di akhir), lalu nomor naik. */
+function urutkanSoalMenurutNomor_(rows, peta) {
+  return (rows || []).slice().sort(function(a, b) {
+    var mapelA = kunciMapelNomor_(a), mapelB = kunciMapelNomor_(b);
+    if (mapelA !== mapelB) {
+      if (!mapelA) return 1;
+      if (!mapelB) return -1;
+      return mapelA.localeCompare(mapelB, 'id');
+    }
+    return ((peta[String(a.id_soal)] || 0) - (peta[String(b.id_soal)] || 0)) ||
+      bandingIdSoal_(a.id_soal, b.id_soal);
+  });
+}
+
 function renderQuestionTable(rows) {
   if (!rows.length) {
     setTableMessage('questionTable', 'Belum ada soal. Tambahkan soal pertama Anda.', 'fa-inbox');
     return;
   }
-  var html = '<table class="admin-table"><thead><tr><th>ID</th><th>Tipe</th><th>Mapel</th><th>Pertanyaan</th><th>Kelas</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+  // REVISI 5: nomor dihitung dari seluruh bank soal, baris ditampilkan urut nomor.
+  var petaNomor = petaNomorSoal_((DATA_MENTAH.soal && DATA_MENTAH.soal.length) ? DATA_MENTAH.soal : rows);
+  rows = urutkanSoalMenurutNomor_(rows, petaNomor);
+  var html = '<table class="admin-table"><thead><tr><th>ID</th><th class="kolom-nomor-soal">Nomor</th><th>Tipe</th><th>Mapel</th><th>Pertanyaan</th><th>Kelas</th><th>Opsi / Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(question) {
     var tingkatSoal = tingkatDariNilai_(question.tingkat);
+    var nomorSoal = petaNomor[String(question.id_soal)];
     html += '<tr><td><strong>#' + escapeAdmin(question.id_soal) + '</strong></td>' +
+      '<td class="kolom-nomor-soal"><span class="nomor-soal" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') +
+        ' pada mapel ' + escapeAdmin(question.mapel || '-') + '">' + escapeAdmin(nomorSoal || '-') + '</span></td>' +
       '<td>' + typeBadge(question.tipe) + '</td>' +
       '<td><div class="cell-wrap">' + badge(question.mapel || '-', 'blue') + '</div></td>' +
       '<td><div class="cell-wrap">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</div></td>' +
@@ -3604,6 +3689,7 @@ async function muatInfoBatasKelasGuru_() {
     if (pecah.join('|').toLowerCase() !== kini) {
       ADMIN.mapelDiampu = pecah;
       try { isiPilihanMapelUjian_(mapelAktifTerpilih_() || (ADMIN.settings && ADMIN.settings.mapel) || ''); } catch (abaikan) {}
+      segarkanMapelImport_();   // REVISI 5: mapel kanonik guru -> dropdown Mapel tujuan
     }
   }
   ADMIN.infoMapelGuru_ = info;
@@ -4057,28 +4143,33 @@ async function deleteAllQuestions() {
  * menulis nomor di dalam teks pertanyaan. Kolom mapel dihapus: soal
  * hasil import otomatis tersimpan ke bank soal akun ini sesuai mapel
  * yang diampu (dipilih pada dropdown "Mapel tujuan" di kartu Import).
+ *
+ * REVISI 5 (2026-09-24): kolom `stimulus_gambar` dan `stimulus_video`
+ * DIHAPUS dari template — stimulus gambar/video diunggah manual lewat
+ * tombol Edit (Edit Soal Realtime) pada Bank Soal. Berkas lama yang masih
+ * memuat kolom tersebut tetap dapat diimport (header dibaca per nama).
  * ================================================================== */
-var SOAL_TEMPLATE_HEADERS_ = ['id', 'nomor', 'tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif', 'stimulus_gambar', 'stimulus_video'];
-var SOAL_TEMPLATE_LEBAR_ = [10, 8, 15, 55, 45, 32, 7, 9, 8, 24, 24];
+var SOAL_TEMPLATE_HEADERS_ = ['id', 'nomor', 'tipe', 'pertanyaan', 'opsi', 'kunci_jawaban', 'poin', 'tingkat', 'aktif'];
+var SOAL_TEMPLATE_LEBAR_ = [10, 8, 15, 55, 45, 32, 7, 9, 8];
 var SOAL_TEMPLATE_CONTOH_ = [
-  ['', 1, 'PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', 10, 'VII', 'YA', '', ''],
-  ['', 2, 'PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', 10, 'VIII', 'YA', '', ''],
-  ['', 3, 'PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', 10, 'VIII', 'YA', '', ''],
-  ['', 4, 'PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', 10, 'VIII', 'YA', '', ''],
-  ['', 5, 'MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya', 'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', 10, 'IX', 'YA', '', ''],
-  ['', 6, 'ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', 5, 'IX', 'YA', '', ''],
-  ['', 7, 'URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', 20, 'SEMUA', 'YA', '', '']
+  ['', 1, 'PG', 'Ibu kota Provinsi Sulawesi Tengah adalah', 'Palu|Poso|Donggala|Morowali', 'A', 10, 'VII', 'YA'],
+  ['', 2, 'PGK', 'Tentukan kategori setiap informasi berikut dengan memberi tanda centang pada kolom yang sesuai', 'Alamat lengkap penerima paket|Warna kardus pembungkus paket|Berat paket', 'Informasi Penting,Dapat Diabaikan,Informasi Penting', 10, 'VIII', 'YA'],
+  ['', 3, 'PGK', 'Tentukan benar atau salah pernyataan berikut', 'Air mendidih pada 100 derajat Celsius|Es mencair pada 50 derajat Celsius', 'BENAR,SALAH', 10, 'VIII', 'YA'],
+  ['', 4, 'PGK_MCMA', 'Pilih bilangan genap berikut', '2|3|4|5', 'A,C', 10, 'VIII', 'YA'],
+  ['', 5, 'MENJODOHKAN', 'Jodohkan provinsi dengan ibu kotanya', 'Sulawesi Tengah = Palu|Sulawesi Selatan = Makassar|Sulawesi Utara = Manado', '', 10, 'IX', 'YA'],
+  ['', 6, 'ISIAN', 'Hasil dari 12 x 3 adalah', '', '36', 5, 'IX', 'YA'],
+  ['', 7, 'URAIAN', 'Jelaskan proses terjadinya hujan', '', 'Menyebutkan evaporasi, kondensasi, presipitasi', 20, 'SEMUA', 'YA']
 ];
 var SOAL_TEMPLATE_PETUNJUK_ = [
   'Isi satu soal pada satu baris di sheet "SOAL". Baris pertama (header) tidak boleh diubah; baris contoh boleh dihapus dan ditimpa data Anda.',
   'id — dikosongkan. Nomor ID soal dibuat otomatis oleh sistem saat soal tersimpan di bank soal.',
-  'nomor — nomor soal ditulis DI KOLOM INI. Jangan menulis nomor di dalam kolom pertanyaan (contoh salah: "1. Ibu kota..."; yang benar: "Ibu kota...").',
+  'nomor — nomor soal ditulis DI KOLOM INI (1, 2, 3, ...). Soal disimpan sesuai urutan kolom ini dan nomornya tampil pada kolom NOMOR di tabel Bank Soal. Jangan menulis nomor di dalam kolom pertanyaan (contoh salah: "1. Ibu kota..."; yang benar: "Ibu kota...").',
   'tipe — pilih salah satu: PG, PGK, PGK_MCMA, MENJODOHKAN, ISIAN, URAIAN.',
   'pertanyaan — teks soal. Rumus matematika/IPA boleh ditulis LaTeX, mis. $x^2$ atau $\\frac{a}{b}$; sistem merender otomatis.',
   'opsi — PG & PGK MCMA: pisahkan setiap opsi dengan | (pipa). PGK: pisahkan setiap pernyataan dengan |. MENJODOHKAN: tulis pasangan "pernyataan = jawaban" dan pisahkan antar pasangan dengan |.',
   'kunci_jawaban — PG: satu huruf (A–D). PGK MCMA: beberapa huruf dipisah koma (mis. A,C). PGK kategori: nama kategori tiap pernyataan dipisah koma. MENJODOHKAN: kosongkan. ISIAN/URAIAN: kunci/rubrik singkat.',
   'poin — angka (kosong = 10). tingkat — SEMUA, VII, VIII, atau IX. aktif — YA atau TIDAK.',
-  'stimulus_gambar / stimulus_video — opsional. Boleh dikosongkan, lalu unggah berkas gambar/video lewat tombol Edit pada Bank Soal.',
+  'Stimulus gambar/video — tidak ada kolomnya di template ini. Setelah import, unggah berkas gambar/video lewat tombol Edit (Edit Soal Realtime) pada Bank Soal.',
   'Mata pelajaran — tidak ada kolom mapel. Soal otomatis tersimpan ke bank soal akun Anda sesuai mapel yang diampu (dipilih pada dropdown "Mapel tujuan" di kartu Import Soal).',
   'Simpan berkas tetap berformat .xlsx (jangan diubah ke format lain), lalu tekan "Import Sekarang" di panel admin.',
   'Baris yang tidak lengkap (tipe/pertanyaan/kunci) akan dilewati; rinciannya tampil pada hasil import.'
@@ -4164,7 +4255,7 @@ async function unduhTemplateSoal() {
     { label: 'Nomor soal', nilai: 'kolom khusus antar id dan tipe — jangan ditulis di pertanyaan' },
     { label: 'Tingkat', nilai: 'SEMUA / VII / VIII / IX (kosong = SEMUA)' },
     { label: 'Mapel', nilai: 'otomatis: mapel yang diampu akun ini (dipilih di kartu Import)' },
-    { label: 'Stimulus', nilai: 'kosongkan — unggah gambar/video lewat tombol Edit pada Bank Soal' },
+    { label: 'Stimulus', nilai: 'tidak ada kolom stimulus — unggah gambar/video lewat tombol Edit pada Bank Soal' },
     { label: 'Contoh baris', nilai: String(SOAL_TEMPLATE_CONTOH_.length) + ' contoh (semua tipe soal)' }
   ];
   try {
@@ -4396,6 +4487,24 @@ function isiPilihanMapelImport_() {
   el.innerHTML = html;
   var cocok = daftar.filter(function(m) { return m.toLowerCase() === sebelum.toLowerCase(); })[0];
   el.value = cocok || daftar[0] || '';
+}
+
+/**
+ * REVISI 5 (2026-09-24) — PERBAIKAN DROPDOWN "MAPEL TUJUAN" KOSONG.
+ * Penyebab: tab Kelola Soal tampil default setelah login (pane-soal
+ * berkelas "show" & ADMIN.activeTab = 'soal'), sehingga switchAdminTab()
+ * -> loadQuestions() — satu-satunya pengisi dropdown ini — tidak pernah
+ * terpanggil; bank soal hanya digambar oleh loadAdminBootstrap().
+ * Kini dropdown juga diisi dari bootstrap, penerapan hak akses,
+ * pengaturan, dan info mapel guru. Pembungkus ini tidak pernah melempar
+ * galat agar alur pemanggilnya tidak ikut gagal.
+ */
+function segarkanMapelImport_() {
+  try {
+    isiPilihanMapelImport_();
+  } catch (galat) {
+    console.warn('[SIADO] Dropdown "Mapel tujuan" gagal diisi:', galat);
+  }
 }
 
 async function importSoalDariFile() {

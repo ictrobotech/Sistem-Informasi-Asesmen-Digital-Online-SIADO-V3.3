@@ -1452,7 +1452,13 @@ function updateQuestionFormatHelp(prefix) {
       ? 'Terisi otomatis dari editor tabel di atas.'
       : 'Isi berdasarkan petunjuk format di atas.';
     if (type === 'MENJODOHKAN') perbaruiKunciJodoh_(prefix);
-    if (type === 'PGK') perbaruiKunciPgk_(prefix);
+    else if (type === 'PGK') perbaruiKunciPgk_(prefix);
+    else if (/^\s*\?(\s*\/\s*\?)*\s*$/.test(keyField.value)) {
+      // Tipe diisi manual (PG / PGK MCMA / ISIAN / URAIAN): hapus sisa "?"
+      // yang sempat terisi otomatis oleh editor PGK saat form dibuka,
+      // agar kolom selalu bersih sebelum guru mengetik.
+      keyField.value = '';
+    }
   }
   if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
 }
@@ -1624,10 +1630,16 @@ function resetPgkEditor(prefix, data) {
 }
 
 function perbaruiKunciPgk_(prefix) {
+  var tipeEl = document.getElementById(prefix + 'Tipe');
   var keyField = document.getElementById(prefix + 'Kunci');
   var state = PGK_STATE[prefix];
   if (!keyField || !state) return;
-  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(' / ');
+  // REVISI 2026-09-24: hanya tipe PGK yang boleh mengisi kolom ini otomatis.
+  // Simbol "?" lama dihapus: pernyataan yang belum berkunci TIDAK menampilkan
+  // apa pun (placeholder kolom memberi penjelas), sehingga kolom tidak pernah
+  // muncul terisi otomatis sebelum guru memilih kunci.
+  if (tipeEl && tipeEl.value !== 'PGK') return;
+  keyField.value = state.rows.map(function(r) { return r.kunci || ''; }).filter(Boolean).join(' / ');
 }
 
 /** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */
@@ -6261,3 +6273,4 @@ function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) 
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4022fafae5bc9c6',t:'MTc5MDI1NzA3Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

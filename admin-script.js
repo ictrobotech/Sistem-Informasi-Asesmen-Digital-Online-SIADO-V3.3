@@ -1451,7 +1451,13 @@ function updateQuestionFormatHelp(prefix) {
       ? 'Terisi otomatis dari editor tabel di atas.'
       : 'Isi berdasarkan petunjuk format di atas.';
     if (type === 'MENJODOHKAN') perbaruiKunciJodoh_(prefix);
-    if (type === 'PGK') perbaruiKunciPgk_(prefix);
+    else if (type === 'PGK') perbaruiKunciPgk_(prefix);
+    else if (/^\s*\?(\s*\/\s*\?)*\s*$/.test(keyField.value)) {
+      // Tipe diisi manual (PG / PGK MCMA / ISIAN / URAIAN): hapus sisa "?"
+      // yang sempat terisi otomatis oleh editor PGK saat form dibuka,
+      // agar kolom selalu bersih sebelum guru mengetik.
+      keyField.value = '';
+    }
   }
   if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
 }
@@ -1623,10 +1629,16 @@ function resetPgkEditor(prefix, data) {
 }
 
 function perbaruiKunciPgk_(prefix) {
+  var tipeEl = document.getElementById(prefix + 'Tipe');
   var keyField = document.getElementById(prefix + 'Kunci');
   var state = PGK_STATE[prefix];
   if (!keyField || !state) return;
-  keyField.value = state.rows.map(function(r) { return r.kunci || '?'; }).join(' / ');
+  // REVISI 2026-09-24: hanya tipe PGK yang boleh mengisi kolom ini otomatis.
+  // Simbol "?" lama dihapus: pernyataan yang belum berkunci TIDAK menampilkan
+  // apa pun (placeholder kolom memberi penjelas), sehingga kolom tidak pernah
+  // muncul terisi otomatis sebelum guru memilih kunci.
+  if (tipeEl && tipeEl.value !== 'PGK') return;
+  keyField.value = state.rows.map(function(r) { return r.kunci || ''; }).filter(Boolean).join(' / ');
 }
 
 /** Pratinjau persis seperti tampilan peserta (kunci ditandai √ hijau). */

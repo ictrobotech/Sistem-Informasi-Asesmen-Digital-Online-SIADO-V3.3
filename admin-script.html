@@ -2386,11 +2386,29 @@ function bandingIdSoal_(a, b) {
 }
 
 /** Kunci pengelompokan nomor: mapel soal (huruf besar/kecil diabaikan). */
+/**
+ * REVISI 2026-09-26: kunci grup penomoran = mapel + KELAS. Nomor soal mulai
+ * dari 1 pada setiap pasangan mapel+kelas (KKA VII: 1–20, KKA VIII: 1–20,
+ * KKA IX: 1–20) — bukan menerus di satu mapel yang sama.
+ */
 function kunciMapelNomor_(question) {
-  return String((question && question.mapel) || '').trim().toLowerCase();
+  var mapel = String((question && question.mapel) || '').trim().toLowerCase();
+  var tingkat = tingkatDariNilai_(question && question.tingkat);
+  return mapel + '|' + tingkat;
 }
 
-/** Peta { id_soal: nomor } — nomor urut 1..n per mapel menurut ID naik. */
+/** Nama mapel dari kunci grup penomoran. */
+function mapelDariKunciNomor_(kunci) {
+  return String(kunci || '').split('|')[0] || '';
+}
+
+/** Urutan tampil kelas dalam satu mapel: VII, VIII, IX, SEMUA paling akhir. */
+function peringkatKelasNomor_(kunci) {
+  var t = String(kunci || '').split('|')[1];
+  return { VII: 1, VIII: 2, IX: 3 }[t] || 4;
+}
+
+/** Peta { id_soal: nomor } — nomor urut 1..n per mapel+kelas menurut ID naik. */
 function petaNomorSoal_(daftar) {
   var grup = {};
   (daftar || []).forEach(function(question) {
@@ -2407,18 +2425,34 @@ function petaNomorSoal_(daftar) {
   return peta;
 }
 
-/** Urutan tampil: per mapel (A–Z, tanpa mapel di akhir), lalu nomor naik. */
+/** Urutan tampil: per mapel (A–Z), lalu kelas (VII→VIII→IX→SEMUA), lalu nomor naik. */
 function urutkanSoalMenurutNomor_(rows, peta) {
   return (rows || []).slice().sort(function(a, b) {
-    var mapelA = kunciMapelNomor_(a), mapelB = kunciMapelNomor_(b);
+    var kunciA = kunciMapelNomor_(a), kunciB = kunciMapelNomor_(b);
+    var mapelA = mapelDariKunciNomor_(kunciA), mapelB = mapelDariKunciNomor_(kunciB);
     if (mapelA !== mapelB) {
       if (!mapelA) return 1;
       if (!mapelB) return -1;
       return mapelA.localeCompare(mapelB, 'id');
     }
+    if (kunciA !== kunciB) return peringkatKelasNomor_(kunciA) - peringkatKelasNomor_(kunciB);
     return ((peta[String(a.id_soal)] || 0) - (peta[String(b.id_soal)] || 0)) ||
       bandingIdSoal_(a.id_soal, b.id_soal);
   });
+}
+
+/**
+ * REVISI 2026-09-26: nomor otomatis untuk Kartu Soal — mengikuti penomoran
+ * Bank Soal (mapel + kelas). Sumber data dipilih yang lengkap: bank soal
+ * (DATA_MENTAH/ADMIN.questions) lebih dulu; Kartu Soal sebagai cadangan.
+ * Mengembalikan string nomor, atau '' bila tidak dapat dihitung.
+ */
+function nomorOtomatisKartuSoal_(idSoal) {
+  var daftar = (DATA_MENTAH.soal && DATA_MENTAH.soal.length) ? DATA_MENTAH.soal :
+    ((ADMIN.questions && ADMIN.questions.length) ? ADMIN.questions : (KARTU_SOAL.data || []));
+  if (!daftar || !daftar.length) return '';
+  var nomor = petaNomorSoal_(daftar)[String(idSoal)];
+  return nomor ? String(nomor) : '';
 }
 
 /* ==================================================================
@@ -2541,7 +2575,7 @@ function renderQuestionTable(rows) {
     var aktif = !!question.aktif;
     html += '<tr>' +
       '<td class="bs-tengah bs-id"><strong>#' + id + '</strong></td>' +
-      '<td class="bs-tengah bs-nomor" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') + ' pada mapel ' + escapeAdmin(question.mapel || '-') + '">' + escapeAdmin(nomorSoal || '-') + '</td>' +
+      '<td class="bs-tengah bs-nomor" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') + ' pada mapel ' + escapeAdmin(question.mapel || '-') + ' kelas ' + escapeAdmin(tingkatDariNilai_(question.tingkat)) + '">' + escapeAdmin(nomorSoal || '-') + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(labelTipeBankSoal_(question.tipe)) + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(question.mapel || '-') + '</td>' +
       '<td class="bs-teks">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</td>' +
@@ -6494,6 +6528,13 @@ function bukaKartuSoal_(id) {
   var kolomTipe = document.getElementById('ksTipe');
   kolomTipe.value = String(row.tipe || 'PG').toUpperCase();
   KARTU_SOAL.tipeAwal = kolomTipe.value;
+  // REVISI 2026-09-26: nomor soal kosong terisi otomatis mengikuti penomoran
+  // Bank Soal (mapel + kelas); nomor yang sudah diisi guru tidak diganggu.
+  var kolomNomorKartu = document.getElementById('ksNomorSoal');
+  if (kolomNomorKartu && !String(kolomNomorKartu.value || '').trim()) {
+    var nomorOtomatis = nomorOtomatisKartuSoal_(row.id_soal);
+    if (nomorOtomatis) kolomNomorKartu.value = nomorOtomatis;
+  }
   document.getElementById('ksKunci').value = readableKey(row) || '(tanpa kunci baku)';
   document.getElementById('kartuSoalModal').classList.add('show');
 }
@@ -7290,5 +7331,4 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4115d921c06a198',t:'MTc5MDQxNjIzOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a41173f40a4afe08',t:'MTc5MDQxNzE1NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

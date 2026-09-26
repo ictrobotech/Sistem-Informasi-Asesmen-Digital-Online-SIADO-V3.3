@@ -2385,11 +2385,29 @@ function bandingIdSoal_(a, b) {
 }
 
 /** Kunci pengelompokan nomor: mapel soal (huruf besar/kecil diabaikan). */
+/**
+ * REVISI 2026-09-26: kunci grup penomoran = mapel + KELAS. Nomor soal mulai
+ * dari 1 pada setiap pasangan mapel+kelas (KKA VII: 1–20, KKA VIII: 1–20,
+ * KKA IX: 1–20) — bukan menerus di satu mapel yang sama.
+ */
 function kunciMapelNomor_(question) {
-  return String((question && question.mapel) || '').trim().toLowerCase();
+  var mapel = String((question && question.mapel) || '').trim().toLowerCase();
+  var tingkat = tingkatDariNilai_(question && question.tingkat);
+  return mapel + '|' + tingkat;
 }
 
-/** Peta { id_soal: nomor } — nomor urut 1..n per mapel menurut ID naik. */
+/** Nama mapel dari kunci grup penomoran. */
+function mapelDariKunciNomor_(kunci) {
+  return String(kunci || '').split('|')[0] || '';
+}
+
+/** Urutan tampil kelas dalam satu mapel: VII, VIII, IX, SEMUA paling akhir. */
+function peringkatKelasNomor_(kunci) {
+  var t = String(kunci || '').split('|')[1];
+  return { VII: 1, VIII: 2, IX: 3 }[t] || 4;
+}
+
+/** Peta { id_soal: nomor } — nomor urut 1..n per mapel+kelas menurut ID naik. */
 function petaNomorSoal_(daftar) {
   var grup = {};
   (daftar || []).forEach(function(question) {
@@ -2406,18 +2424,34 @@ function petaNomorSoal_(daftar) {
   return peta;
 }
 
-/** Urutan tampil: per mapel (A–Z, tanpa mapel di akhir), lalu nomor naik. */
+/** Urutan tampil: per mapel (A–Z), lalu kelas (VII→VIII→IX→SEMUA), lalu nomor naik. */
 function urutkanSoalMenurutNomor_(rows, peta) {
   return (rows || []).slice().sort(function(a, b) {
-    var mapelA = kunciMapelNomor_(a), mapelB = kunciMapelNomor_(b);
+    var kunciA = kunciMapelNomor_(a), kunciB = kunciMapelNomor_(b);
+    var mapelA = mapelDariKunciNomor_(kunciA), mapelB = mapelDariKunciNomor_(kunciB);
     if (mapelA !== mapelB) {
       if (!mapelA) return 1;
       if (!mapelB) return -1;
       return mapelA.localeCompare(mapelB, 'id');
     }
+    if (kunciA !== kunciB) return peringkatKelasNomor_(kunciA) - peringkatKelasNomor_(kunciB);
     return ((peta[String(a.id_soal)] || 0) - (peta[String(b.id_soal)] || 0)) ||
       bandingIdSoal_(a.id_soal, b.id_soal);
   });
+}
+
+/**
+ * REVISI 2026-09-26: nomor otomatis untuk Kartu Soal — mengikuti penomoran
+ * Bank Soal (mapel + kelas). Sumber data dipilih yang lengkap: bank soal
+ * (DATA_MENTAH/ADMIN.questions) lebih dulu; Kartu Soal sebagai cadangan.
+ * Mengembalikan string nomor, atau '' bila tidak dapat dihitung.
+ */
+function nomorOtomatisKartuSoal_(idSoal) {
+  var daftar = (DATA_MENTAH.soal && DATA_MENTAH.soal.length) ? DATA_MENTAH.soal :
+    ((ADMIN.questions && ADMIN.questions.length) ? ADMIN.questions : (KARTU_SOAL.data || []));
+  if (!daftar || !daftar.length) return '';
+  var nomor = petaNomorSoal_(daftar)[String(idSoal)];
+  return nomor ? String(nomor) : '';
 }
 
 /* ==================================================================
@@ -2540,7 +2574,7 @@ function renderQuestionTable(rows) {
     var aktif = !!question.aktif;
     html += '<tr>' +
       '<td class="bs-tengah bs-id"><strong>#' + id + '</strong></td>' +
-      '<td class="bs-tengah bs-nomor" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') + ' pada mapel ' + escapeAdmin(question.mapel || '-') + '">' + escapeAdmin(nomorSoal || '-') + '</td>' +
+      '<td class="bs-tengah bs-nomor" title="Nomor soal ' + escapeAdmin(nomorSoal || '-') + ' pada mapel ' + escapeAdmin(question.mapel || '-') + ' kelas ' + escapeAdmin(tingkatDariNilai_(question.tingkat)) + '">' + escapeAdmin(nomorSoal || '-') + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(labelTipeBankSoal_(question.tipe)) + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(question.mapel || '-') + '</td>' +
       '<td class="bs-teks">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</td>' +
@@ -6493,6 +6527,13 @@ function bukaKartuSoal_(id) {
   var kolomTipe = document.getElementById('ksTipe');
   kolomTipe.value = String(row.tipe || 'PG').toUpperCase();
   KARTU_SOAL.tipeAwal = kolomTipe.value;
+  // REVISI 2026-09-26: nomor soal kosong terisi otomatis mengikuti penomoran
+  // Bank Soal (mapel + kelas); nomor yang sudah diisi guru tidak diganggu.
+  var kolomNomorKartu = document.getElementById('ksNomorSoal');
+  if (kolomNomorKartu && !String(kolomNomorKartu.value || '').trim()) {
+    var nomorOtomatis = nomorOtomatisKartuSoal_(row.id_soal);
+    if (nomorOtomatis) kolomNomorKartu.value = nomorOtomatis;
+  }
   document.getElementById('ksKunci').value = readableKey(row) || '(tanpa kunci baku)';
   document.getElementById('kartuSoalModal').classList.add('show');
 }

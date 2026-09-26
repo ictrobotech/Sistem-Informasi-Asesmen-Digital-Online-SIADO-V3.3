@@ -6477,12 +6477,14 @@ function bukaKartuSoal_(id) {
   }
   document.getElementById('ksIdSoal').value = row.id_soal;
   document.getElementById('ksRingkasSoal').textContent = '#' + row.id_soal + ' — ' + truncate(SRich.stripHtml(row.pertanyaan), 120);
-  document.getElementById('ksCapaian').value = row.ks_capaian || '';
+  // REVISI 2026-09-26 (revisi 3): data lama yang berpoin/numbering dirapikan
+  // saat modal dibuka agar tampil tertata dan tersimpan rapi saat disimpan.
+  document.getElementById('ksCapaian').value = rapikanTeksBernomor_(row.ks_capaian || '');
   document.getElementById('ksKelas').value = row.ks_kelas || '';
   document.getElementById('ksNomorSoal').value = row.ks_nomor_soal || '';
   document.getElementById('ksMateri').value = row.ks_materi || '';
-  document.getElementById('ksKompetensi').value = row.ks_kompetensi || '';
-  document.getElementById('ksIndikator').value = row.ks_indikator || '';
+  document.getElementById('ksKompetensi').value = rapikanTeksBernomor_(row.ks_kompetensi || '');
+  document.getElementById('ksIndikator').value = rapikanTeksBernomor_(row.ks_indikator || '');
   document.getElementById('ksLevel').value = row.ks_level_kognitif || '';
   // Tipe soal dapat diubah dari kartu soal dan ikut memperbarui Kelola Soal.
   var kolomTipe = document.getElementById('ksTipe');
@@ -6494,6 +6496,62 @@ function bukaKartuSoal_(id) {
 
 function tutupKartuSoal_() {
   document.getElementById('kartuSoalModal').classList.remove('show');
+}
+
+/* ==================================================================
+ * REVISI 2026-09-26 (revisi 3) — RAPIKAN TEMPELAN BERPOIN/NUMBERING
+ * Textarea tidak mendukung indentasi menggantung, sehingga tempelan
+ * berisi poin/numbering (•, 1., a., dst.) dari Word/PDF tampil berhamburan:
+ * baris lanjutan menyamai tepi kiri dan struktur butir hilang.
+ * Fungsi ini menormalkannya menjadi daftar bernomor "1. ..." — satu butir
+ * satu baris, baris lanjutan suatu butir digabung ke butirnya — sehingga
+ * setiap butir jelas mulai di baris baru saat dibaca maupun disimpan.
+ * Teks tanpa poin/numbering (kurang dari 2 penanda) dibiarkan apa adanya.
+ * ================================================================== */
+var RAPIKAN_MARKER_AWAL_ = /^(?:[-•▪◦‣●○·*]\s+|\(\d{1,2}\)\s*|\d{1,2}[.)]\s*|\(\s*[a-zA-Z]\)\s*|[a-zA-Z][.)]\s+)/;
+
+function rapikanTeksBernomor_(teks) {
+  var s = String(teks === undefined || teks === null ? '' : teks)
+    .replace(/\r\n?/g, '\n').replace(/\u00A0/g, ' ');
+  var cacah = 0, barisDeteksi = s.split('\n');
+  for (var i = 0; i < barisDeteksi.length; i++) {
+    if (RAPIKAN_MARKER_AWAL_.test(barisDeteksi[i].replace(/^\s+/, ''))) cacah++;
+  }
+  if (cacah < 2) return s;                       // bukan daftar: biarkan apa adanya
+  var items = [];
+  s.split('\n').forEach(function(line) {
+    var t = line.replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    if (RAPIKAN_MARKER_AWAL_.test(t)) {
+      items.push(t.replace(RAPIKAN_MARKER_AWAL_, '').trim());
+    } else if (items.length) {
+      items[items.length - 1] += ' ' + t;        // baris lanjutan -> gabung ke butir
+    } else {
+      items.push(t);                             // kalimat pembuka tanpa poin
+    }
+  });
+  if (!items.length) return s;
+  return items.map(function(item, i) { return (i + 1) + '. ' + item; }).join('\n');
+}
+
+/** Ikat perapian tempelan pada satu kolom deskripsi Kartu Soal. */
+function ikatRapikanTempelanKartuSoal_(id) {
+  var el = document.getElementById(id);
+  if (!el || el.dataset.rapikanTempelan === '1') return;
+  el.dataset.rapikanTempelan = '1';
+  el.addEventListener('paste', function(e) {
+    var teks = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+    if (!teks) return;
+    var rapi = rapikanTeksBernomor_(teks);
+    if (rapi === teks) return;                   // bukan daftar: tempel normal
+    e.preventDefault();
+    var awal = el.selectionStart || 0, akhir = el.selectionEnd || 0;
+    el.value = el.value.slice(0, awal) + rapi + el.value.slice(akhir);
+    if (el.maxLength > 0 && el.value.length > el.maxLength) el.value = el.value.slice(0, el.maxLength);
+    var posisi = Math.min(awal + rapi.length, el.value.length);
+    try { el.setSelectionRange(posisi, posisi); } catch (galat) {}
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 /** Bersihkan isi editor hanya setelah server berhasil menyimpan. */

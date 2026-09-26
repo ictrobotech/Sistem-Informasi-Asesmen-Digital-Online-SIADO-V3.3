@@ -7542,6 +7542,8 @@ async function importKartuSoalDariFile() {
   pesan('<i class="fa-solid fa-circle-notch fa-spin"></i> Membaca berkas kartu soal...', 'info');
   var tombol = document.getElementById('importKartuSoal');
   if (tombol) tombol.disabled = true;
+  var tombolBatal = document.getElementById('batalImportKartu');
+  if (tombolBatal) tombolBatal.hidden = true;
   try {
     var rows = await barisDariBerkasKartu_(file);
     var rencana = susunRencanaImportKartu_(rows);
@@ -7589,9 +7591,24 @@ async function importKartuSoalDariFile() {
     await hasilGagal_('Import Kartu Gagal', error.message || 'Import kartu gagal.');
   } finally {
     ADMIN.operationBusy.importKartu = false;
+    if (tombolBatal) tombolBatal.hidden = !input || !input.files || !input.files.length;
     var tombolAkhir = document.getElementById('importKartuSoal');
     if (tombolAkhir) tombolAkhir.disabled = !input || !input.files || !input.files.length;
   }
+}
+
+/** Bersihkan berkas template yang sudah dipilih SEBELUM Import ditekan:
+ * pilihan dihapus, kotak hasil ditutup, tombol Import kembali terkunci. */
+function batalBerkasKartu_() {
+  if (ADMIN.operationBusy.importKartu) return;
+  var input = document.getElementById('importKartuFile');
+  var kotak = document.getElementById('importKartuResult');
+  if (input) input.value = '';
+  if (kotak) { kotak.style.display = 'none'; kotak.innerHTML = ''; }
+  var tombolImport = document.getElementById('importKartuSoal');
+  if (tombolImport) tombolImport.disabled = true;
+  var tombolBatal = document.getElementById('batalImportKartu');
+  if (tombolBatal) tombolBatal.hidden = true;
 }
 
 /** Pemilih berkas kartu: tampilkan nama & aktifkan tombol import. */
@@ -7604,9 +7621,12 @@ function siapkanImportKartuUi_() {
   bindClick_('pilihFileKartu', function() { input.click(); });
   bindClick_('importKartuSoal', importKartuSoalDariFile);
   bindClick_('unduhTemplateKartu', unduhTemplateKartuSoal);
+  bindClick_('batalImportKartu', batalBerkasKartu_);
+  var tombolBatal = document.getElementById('batalImportKartu');
   input.addEventListener('change', function() {
     var file = input.files && input.files[0];
     tombolImport.disabled = !file;
+    if (tombolBatal) tombolBatal.hidden = !file;
     if (kotak && !file) { kotak.style.display = 'none'; kotak.innerHTML = ''; }
     if (file && kotak) {
       kotak.style.display = 'block';

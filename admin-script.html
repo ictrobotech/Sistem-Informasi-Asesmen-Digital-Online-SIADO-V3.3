@@ -7543,6 +7543,8 @@ async function importKartuSoalDariFile() {
   pesan('<i class="fa-solid fa-circle-notch fa-spin"></i> Membaca berkas kartu soal...', 'info');
   var tombol = document.getElementById('importKartuSoal');
   if (tombol) tombol.disabled = true;
+  var tombolBatal = document.getElementById('batalImportKartu');
+  if (tombolBatal) tombolBatal.hidden = true;
   try {
     var rows = await barisDariBerkasKartu_(file);
     var rencana = susunRencanaImportKartu_(rows);
@@ -7590,9 +7592,24 @@ async function importKartuSoalDariFile() {
     await hasilGagal_('Import Kartu Gagal', error.message || 'Import kartu gagal.');
   } finally {
     ADMIN.operationBusy.importKartu = false;
+    if (tombolBatal) tombolBatal.hidden = !input || !input.files || !input.files.length;
     var tombolAkhir = document.getElementById('importKartuSoal');
     if (tombolAkhir) tombolAkhir.disabled = !input || !input.files || !input.files.length;
   }
+}
+
+/** Bersihkan berkas template yang sudah dipilih SEBELUM Import ditekan:
+ * pilihan dihapus, kotak hasil ditutup, tombol Import kembali terkunci. */
+function batalBerkasKartu_() {
+  if (ADMIN.operationBusy.importKartu) return;
+  var input = document.getElementById('importKartuFile');
+  var kotak = document.getElementById('importKartuResult');
+  if (input) input.value = '';
+  if (kotak) { kotak.style.display = 'none'; kotak.innerHTML = ''; }
+  var tombolImport = document.getElementById('importKartuSoal');
+  if (tombolImport) tombolImport.disabled = true;
+  var tombolBatal = document.getElementById('batalImportKartu');
+  if (tombolBatal) tombolBatal.hidden = true;
 }
 
 /** Pemilih berkas kartu: tampilkan nama & aktifkan tombol import. */
@@ -7605,9 +7622,12 @@ function siapkanImportKartuUi_() {
   bindClick_('pilihFileKartu', function() { input.click(); });
   bindClick_('importKartuSoal', importKartuSoalDariFile);
   bindClick_('unduhTemplateKartu', unduhTemplateKartuSoal);
+  bindClick_('batalImportKartu', batalBerkasKartu_);
+  var tombolBatal = document.getElementById('batalImportKartu');
   input.addEventListener('change', function() {
     var file = input.files && input.files[0];
     tombolImport.disabled = !file;
+    if (tombolBatal) tombolBatal.hidden = !file;
     if (kotak && !file) { kotak.style.display = 'none'; kotak.innerHTML = ''; }
     if (file && kotak) {
       kotak.style.display = 'block';
@@ -7722,5 +7742,4 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a41218dafc120b5f',t:'MTc5MDQyMzkwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4122a104be58359',t:'MTc5MDQyNDYxNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

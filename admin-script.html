@@ -6441,18 +6441,13 @@ function setKonteksKartuSoal_(info) {
   }
   var lengkap = (KARTU_SOAL.data || []).filter(kartuSoalLengkap_).length;
   var total = (KARTU_SOAL.data || []).length;
-  // REVISI 2026-09-26: ringkasan Tujuan Pembelajaran di konteks panel.
-  var berTujuan = (KARTU_SOAL.data || []).filter(kartuBerTujuan_).length;
-  var tanpaTujuan = total - berTujuan;
-  var ringkasTujuan = tanpaTujuan > 0
-    ? '<span style="color:#a66000;font-weight:700">' + tanpaTujuan + ' butir belum bertujuan pembelajaran</span> (filter Kelengkapan → "Tanpa Tujuan Pembelajaran")'
-    : '<span style="color:#15803d;font-weight:700">Semua butir sudah bertujuan pembelajaran</span>';
+  // REVISI 2026-09-26: konteks panel hanya menampilkan satu baris kelengkapan —
+  // HIJAU bila seluruh butir sudah lengkap, KUNING/ORANGE bila masih ada yang
+  // belum. (Judul "Kartu Soal · Mata pelajaran" dan baris tujuan dihapus.)
+  var warnaKelengkapan = (total > 0 && lengkap >= total) ? '#15803d' : '#a66000';
   wadah.innerHTML =
-    '<strong>' + escapeAdmin(info.labelJenisUjian || 'Kartu Soal') + '</strong> · Mata pelajaran: ' +
-    escapeAdmin(info.mapel || 'belum diisi') +
-    (info.namaGuru ? ' · Guru: ' + escapeAdmin(info.namaGuru) : '') +
-    '<br>' + lengkap + ' dari ' + total + ' butir soal sudah memiliki kartu soal lengkap.' +
-    '<br>Tujuan pembelajaran: ' + berTujuan + '/' + total + ' terisi — ' + ringkasTujuan + '.';
+    '<span style="color:' + warnaKelengkapan + ';font-weight:700">' + lengkap + ' dari ' + total +
+    ' butir soal sudah memiliki kartu soal lengkap.</span>';
 }
 
 /** Kartu soal dianggap lengkap bila seluruh kolom utama sudah terisi. */
@@ -6512,8 +6507,7 @@ function renderKartuSoalTable_(rows) {
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksMateri) + '">' + escapeAdmin(teksMateri) + '</div></td>' +
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksIndikator) + '">' + escapeAdmin(teksIndikator) + '</div></td>' +
       '<td>' + (row.ks_level_kognitif ? badge(row.ks_level_kognitif, 'blue') : badge('-', 'gray')) + '</td>' +
-      '<td>' + (kartuBerTujuan_(row) ? badge('Tujuan OK', 'green') : badge('Tanpa Tujuan', 'amber')) +
-      '<br>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
+      '<td>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
       '<td><div class="row-actions"><button class="mini-button edit" type="button" data-kartu-soal="' +
       escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-pen"></i> Isi Kartu</button></div></td></tr>';
   });
@@ -7361,4 +7355,5 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a411b143ccf0fe8e',t:'MTc5MDQxOTY2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a411c2cb9cf8ce8d',t:'MTc5MDQyMDM4NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

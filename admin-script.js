@@ -6440,18 +6440,13 @@ function setKonteksKartuSoal_(info) {
   }
   var lengkap = (KARTU_SOAL.data || []).filter(kartuSoalLengkap_).length;
   var total = (KARTU_SOAL.data || []).length;
-  // REVISI 2026-09-26: ringkasan Tujuan Pembelajaran di konteks panel.
-  var berTujuan = (KARTU_SOAL.data || []).filter(kartuBerTujuan_).length;
-  var tanpaTujuan = total - berTujuan;
-  var ringkasTujuan = tanpaTujuan > 0
-    ? '<span style="color:#a66000;font-weight:700">' + tanpaTujuan + ' butir belum bertujuan pembelajaran</span> (filter Kelengkapan → "Tanpa Tujuan Pembelajaran")'
-    : '<span style="color:#15803d;font-weight:700">Semua butir sudah bertujuan pembelajaran</span>';
+  // REVISI 2026-09-26: konteks panel hanya menampilkan satu baris kelengkapan —
+  // HIJAU bila seluruh butir sudah lengkap, KUNING/ORANGE bila masih ada yang
+  // belum. (Judul "Kartu Soal · Mata pelajaran" dan baris tujuan dihapus.)
+  var warnaKelengkapan = (total > 0 && lengkap >= total) ? '#15803d' : '#a66000';
   wadah.innerHTML =
-    '<strong>' + escapeAdmin(info.labelJenisUjian || 'Kartu Soal') + '</strong> · Mata pelajaran: ' +
-    escapeAdmin(info.mapel || 'belum diisi') +
-    (info.namaGuru ? ' · Guru: ' + escapeAdmin(info.namaGuru) : '') +
-    '<br>' + lengkap + ' dari ' + total + ' butir soal sudah memiliki kartu soal lengkap.' +
-    '<br>Tujuan pembelajaran: ' + berTujuan + '/' + total + ' terisi — ' + ringkasTujuan + '.';
+    '<span style="color:' + warnaKelengkapan + ';font-weight:700">' + lengkap + ' dari ' + total +
+    ' butir soal sudah memiliki kartu soal lengkap.</span>';
 }
 
 /** Kartu soal dianggap lengkap bila seluruh kolom utama sudah terisi. */
@@ -6511,8 +6506,7 @@ function renderKartuSoalTable_(rows) {
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksMateri) + '">' + escapeAdmin(teksMateri) + '</div></td>' +
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksIndikator) + '">' + escapeAdmin(teksIndikator) + '</div></td>' +
       '<td>' + (row.ks_level_kognitif ? badge(row.ks_level_kognitif, 'blue') : badge('-', 'gray')) + '</td>' +
-      '<td>' + (kartuBerTujuan_(row) ? badge('Tujuan OK', 'green') : badge('Tanpa Tujuan', 'amber')) +
-      '<br>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
+      '<td>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
       '<td><div class="row-actions"><button class="mini-button edit" type="button" data-kartu-soal="' +
       escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-pen"></i> Isi Kartu</button></div></td></tr>';
   });

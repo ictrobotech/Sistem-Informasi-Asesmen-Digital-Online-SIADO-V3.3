@@ -418,6 +418,9 @@ function bindAdminInterface() {
   bindClick_('closeKartuSoal', tutupKartuSoal_);
   bindClick_('batalKartuSoal', tutupKartuSoal_);
   bindSubmit_('kartuSoalForm', simpanKartuSoal_);
+  // REVISI 2026-09-26 (revisi 3b): ketiga kolom deskripsi Kartu Soal memakai
+  // editor daftar terstruktur — penanda di kiri, baris lanjutan menjorok rapi.
+  ['ksCapaian', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
   document.getElementById('clearViolationHistory').addEventListener('click', clearViolationHistory);
   document.getElementById('clearEssayHistory').addEventListener('click', clearEssayHistory);
   document.getElementById('clearRecapHistory').addEventListener('click', clearRecapHistory);
@@ -6554,10 +6557,168 @@ function ikatRapikanTempelanKartuSoal_(id) {
   });
 }
 
+/* ==================================================================
+ * REVISI 2026-09-26 (revisi 3b) — EDITOR DAFTAR KARTU SOAL
+ * Textarea tidak bisa menampilkan indentasi menggantung (baris lanjutan
+ * menjorok di kanan penanda), sehingga tempelan berpoin selalu tampak
+ * berhamburan. Ketiga kolom deskripsi Kartu Soal (capaian, kompetensi,
+ * indikator) kini memakai editor terstruktur contenteditable: butir
+ * tampil sebagai daftar bernomor sungguhan (<ol>) — penanda di kiri,
+ * baris lanjutan rapi menjorok, seperti daftar di dokumen.
+ * Nilai tetap tersimpan/dibaca sebagai teks polos bernomor "1. ..."
+ * (format database tidak berubah), melalui properti .value pada input
+ * tersembunyi yang menggantikan id textarea lama.
+ * ================================================================== */
+
+/** Membagi teks menjadi struktur daftar: mode 'daftar' bila ≥2 baris bernomor. */
+function uraiStrukturDaftar_(teks) {
+  var rapi = rapikanTeksBernomor_(teks);
+  var baris = rapi.split('\n').map(function(b) { return b.trim(); }).filter(Boolean);
+  var bernomor = baris.filter(function(b) { return /^\d{1,2}\.\s/.test(b); });
+  if (baris.length >= 2 && bernomor.length === baris.length) {
+    return { mode: 'daftar', items: bernomor.map(function(b) { return b.replace(/^\d{1,2}\.\s/, ''); }) };
+  }
+  return { mode: 'teks', items: null, teks: rapi };
+}
+
+/** Merender nilai teks ke editor: <ol> untuk daftar, teks pre-wrap untuk biasa. */
+function renderEditorDaftar_(div, teks) {
+  var s = uraiStrukturDaftar_(teks);
+  div.textContent = '';
+  if (s.mode === 'daftar') {
+    var ol = document.createElement('ol');
+    s.items.forEach(function(item) {
+      var li = document.createElement('li');
+      li.textContent = item;
+      ol.appendChild(li);
+    });
+    div.appendChild(ol);
+  } else {
+    div.textContent = s.teks;
+  }
+}
+
+/** Membaca isi editor kembali menjadi teks polos bernomor. */
+function serialisasiEditorDaftar_(div) {
+  var ol = div.querySelector('ol');
+  if (ol) {
+    var items = [];
+    div.querySelectorAll('ol > li').forEach(function(li) {
+      var t = li.textContent.replace(/\s+/g, ' ').trim();
+      if (t) items.push(t);
+    });
+    /* teks di luar daftar (sisa ketikan) tidak boleh hilang */
+    div.childNodes.forEach(function(n) {
+      if (n.nodeType === 1 && n.tagName === 'OL') return;
+      var t = (n.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t) items.push(t);
+    });
+    return items.map(function(t, i) { return (i + 1) + '. ' + t; }).join('\n');
+  }
+  return String(div.innerText || '').replace(/\r/g, '').replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
+function taruhKursorDiAkhir_(div) {
+  try {
+    var sel = window.getSelection();
+    var r = document.createRange();
+    r.selectNodeContents(div);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  } catch (galat) {}
+}
+
+/**
+ * Mengganti textarea `id` dengan editor daftar. Id pindah ke input tersembunyi
+ * agar seluruh kode lama (nilaiInput_/el.value = ...) bekerja tanpa diubah;
+ * properti .value input langsung merender/membaca editor.
+ */
+function pasangEditorDaftar_(id) {
+  var textarea = document.getElementById(id);
+  if (!textarea || textarea.tagName !== 'TEXTAREA') return;   // sudah terpasang
+  var maks = textarea.maxLength > 0 ? textarea.maxLength : 0;
+  var placeholder = textarea.getAttribute('placeholder') || '';
+
+  var hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.id = id;
+  hidden.dataset.editorDaftar = '1';
+
+  var div = document.createElement('div');
+  div.id = id + '_Editor';
+  div.className = textarea.className + ' ks-editor-daftar';
+  div.contentEditable = 'true';
+  div.setAttribute('role', 'textbox');
+  div.setAttribute('aria-multiline', 'true');
+  div.setAttribute('aria-label', placeholder || id);
+  if (placeholder) div.dataset.placeholder = placeholder;
+
+  textarea.parentNode.insertBefore(hidden, textarea);
+  textarea.parentNode.insertBefore(div, textarea);
+  textarea.parentNode.removeChild(textarea);
+
+  var _nilai = '';
+  Object.defineProperty(hidden, 'value', {
+    configurable: true,
+    get: function() { return _nilai; },
+    set: function(v) {
+      var s = String(v === undefined || v === null ? '' : v);
+      if (maks > 0 && s.length > maks) s = s.slice(0, maks);
+      _nilai = s;
+      renderEditorDaftar_(div, s);
+    }
+  });
+
+  div.addEventListener('input', function() {
+    var s = serialisasiEditorDaftar_(div);
+    if (maks > 0 && s.length > maks) {
+      s = s.slice(0, maks);
+      renderEditorDaftar_(div, s);
+      taruhKursorDiAkhir_(div);
+    }
+    _nilai = s;
+  });
+
+  div.addEventListener('paste', function(e) {
+    var teks = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+    if (!teks) return;
+    e.preventDefault();
+    var rapi = rapikanTeksBernomor_(teks);
+    var tersisip = false;
+    try { tersisip = document.execCommand('insertText', false, rapi); } catch (galat) { tersisip = false; }
+    if (!tersisip) {
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount && div.contains(sel.anchorNode)) {
+        var r = sel.getRangeAt(0);
+        r.deleteContents();
+        r.insertNode(document.createTextNode(rapi));
+        r.collapse(false);
+      } else {
+        div.appendChild(document.createTextNode(rapi));
+      }
+    }
+    var nilai = serialisasiEditorDaftar_(div);
+    if (maks > 0 && nilai.length > maks) nilai = nilai.slice(0, maks);
+    _nilai = nilai;
+    renderEditorDaftar_(div, nilai);
+    taruhKursorDiAkhir_(div);
+  });
+
+  return div;
+}
+
 /** Bersihkan isi editor hanya setelah server berhasil menyimpan. */
 function bersihkanKartuSoalForm_() {
   var form = document.getElementById('kartuSoalForm');
   if (form && form.reset) form.reset();
+  // Input tersembunyi milik editor daftar tidak direset form.reset(),
+  // jadi ketiga kolom deskripsi dibersihkan eksplisit (otomatis merender).
+  ['ksCapaian', 'ksKompetensi', 'ksIndikator'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   var id = document.getElementById('ksIdSoal');
   if (id) id.value = '';
   var ringkas = document.getElementById('ksRingkasSoal');

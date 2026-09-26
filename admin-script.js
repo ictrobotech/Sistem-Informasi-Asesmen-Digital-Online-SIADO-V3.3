@@ -6841,17 +6841,46 @@ function hurufKunciPilihan_(kunci, opsi) {
   return hasil.sort();
 }
 
+/**
+ * REVISI 2026-09-26 (revisi 3d): bentuk baku pembanding kategori — menghapus
+ * karakter tak terlihat (zero-width, soft hyphen), menyamakan spasi unicode
+ * (NBSP dari tempelan Word/PDF), kurung & tanda kutip fullwidth, lalu memadatkan
+ * spasi ganda. Nilai yang TAMPAK sama tetapi berbeda karakter tersembunyi
+ * tetap dapat dicocokkan.
+ */
+function teksKategoriBaku_(nilai) {
+  return String(nilai === undefined || nilai === null ? '' : nilai)
+    .replace(/[\u200B\u200C\u200D\u2060\uFEFF\u00AD]/g, '')
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    .replace(/\uFF08/g, '(').replace(/\uFF09/g, ')')
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2018\u2019\u201A]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Pencocokan nama kategori toleran huruf besar/kecil dan spasi ganda. */
 function cocokKategori_(nilai, daftarKategori) {
-  var v = String(nilai === undefined || nilai === null ? '' : nilai).replace(/\s+/g, ' ').trim();
+  if (!daftarKategori || !daftarKategori.length) {
+    var vLangsung = teksKategoriBaku_(nilai);
+    return vLangsung || null;
+  }
+  var v = teksKategoriBaku_(nilai);
   if (!v) return null;
-  if (!daftarKategori || !daftarKategori.length) return v;
-  for (var i = 0; i < daftarKategori.length; i++) {
-    if (daftarKategori[i] === v) return daftarKategori[i];
+  var i;
+  for (i = 0; i < daftarKategori.length; i++) {
+    if (teksKategoriBaku_(daftarKategori[i]) === v) return daftarKategori[i];
   }
   var low = v.toLowerCase();
-  for (var j = 0; j < daftarKategori.length; j++) {
-    if (daftarKategori[j].toLowerCase() === low) return daftarKategori[j];
+  for (i = 0; i < daftarKategori.length; i++) {
+    if (teksKategoriBaku_(daftarKategori[i]).toLowerCase() === low) return daftarKategori[i];
+  }
+  /* Pamungkas: bandingkan tanpa spasi sama sekali (menangkap beda spasi apa pun). */
+  var padat = low.replace(/ /g, '');
+  for (i = 0; i < daftarKategori.length; i++) {
+    if (teksKategoriBaku_(daftarKategori[i]).toLowerCase().replace(/ /g, '') === padat) {
+      return daftarKategori[i];
+    }
   }
   return null;
 }

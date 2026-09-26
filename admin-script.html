@@ -7269,6 +7269,29 @@ var KARTU_TEMPLATE_HEADERS_ = ['id_soal', 'nomor_bank', 'tipe', 'mapel', 'kelas'
   'pertanyaan_ringkas', 'nomor_kartu', 'capaian_pembelajaran', 'tujuan_pembelajaran',
   'materi_elemen', 'kompetensi', 'indikator_soal', 'level_kognitif'];
 
+/** Keterangan pengganti isi kartu pada template: guru MENIMPA teks ini dengan isi sebenarnya.
+ * Sengaja TIDAK memuat kode C1..C6 agar tidak salah terbaca sebagai level kognitif. */
+var KARTU_PLACEHOLDER_ = {
+  nomor_kartu: '(isi nomor kartu di sini — kosongkan bila ingin otomatis)',
+  capaian_pembelajaran: '(isi capaian pembelajaran di sini)',
+  tujuan_pembelajaran: '(isi tujuan pembelajaran di sini)',
+  materi_elemen: '(isi materi/elemen di sini)',
+  kompetensi: '(isi kompetensi di sini)',
+  indikator_soal: '(isi indikator soal di sini)',
+  level_kognitif: '(isi level kognitif di sini)'
+};
+
+/** Benar bila nilai sel masih teks keterangan template (atau kosong) — dianggap belum diisi guru. */
+function adalahPlaceholderKartu_(nilai) {
+  var s = String(nilai === undefined || nilai === null ? '' : nilai).replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!s) return true;
+  if (s.charAt(0) !== '(') return false;
+  if (/^\(isi /.test(s) || /^\(kosongkan /.test(s)) return true;
+  return Object.keys(KARTU_PLACEHOLDER_).some(function(k) {
+    return KARTU_PLACEHOLDER_[k].replace(/\s+/g, ' ').trim().toLowerCase() === s;
+  });
+}
+
 /** Gabungan data kartu + bank soal untuk satu id (kartu lebih dulu). */
 function sumberKartuGabungan_() {
   var peta = {};
@@ -7354,8 +7377,13 @@ function susunRencanaImportKartu_(rows) {
       materi: ambil(obj, 'materi_elemen') || ambil(obj, 'materi'),
       kompetensi: ambil(obj, 'kompetensi'),
       indikator: ambil(obj, 'indikator_soal') || ambil(obj, 'indikator'),
-      level: normalisasiLevelKognitifTeks_(ambil(obj, 'level_kognitif') || ambil(obj, 'level'))
+      level: ambil(obj, 'level_kognitif') || ambil(obj, 'level')
     };
+    /* Keterangan template yang belum ditimpa guru = dianggap kosong. */
+    Object.keys(nilai).forEach(function(k) {
+      if (adalahPlaceholderKartu_(nilai[k])) nilai[k] = '';
+    });
+    nilai.level = normalisasiLevelKognitifTeks_(nilai.level);
     var adaPerubahan = nilai.nomor || nilai.capaian || nilai.tujuan || nilai.materi ||
       nilai.kompetensi || nilai.indikator || nilai.level;
     if (!adaPerubahan) { hasil.dilewati.push('Baris ' + (i + 1) + ' (#' + id + '): tidak ada isi kartu baru — dilewati.'); continue; }
@@ -7404,7 +7432,20 @@ function susunRencanaImportKartu_(rows) {
   return hasil;
 }
 
-/** Membangun berkas template Excel kartu soal (terisi data bank soal). */
+/** Satu baris template: identitas asli soal + KETERANGAN pada semua kolom kartu
+ * (guru menimpa keterangan itu dengan isi kartu soal yang sebenarnya). */
+function barisTemplateKartu_(soal, peta) {
+  return [soal.id_soal, peta[String(soal.id_soal)] || '', String(soal.tipe || '').toUpperCase(),
+    soal.mapel || '', tingkatDariNilai_(soal.tingkat),
+    truncate(SRich.stripHtml(soal.pertanyaan), 150),
+    KARTU_PLACEHOLDER_.nomor_kartu, KARTU_PLACEHOLDER_.capaian_pembelajaran,
+    KARTU_PLACEHOLDER_.tujuan_pembelajaran, KARTU_PLACEHOLDER_.materi_elemen,
+    KARTU_PLACEHOLDER_.kompetensi, KARTU_PLACEHOLDER_.indikator_soal,
+    KARTU_PLACEHOLDER_.level_kognitif];
+}
+
+/** Membangun berkas template Excel kartu soal (identitas butir + keterangan kolom kartu). */
+
 async function buatTemplateExcelKartu_() {
   var ExcelJS = window.ExcelJS;
   if (!ExcelJS || !ExcelJS.Workbook) return null;
@@ -7428,21 +7469,11 @@ async function buatTemplateExcelKartu_() {
   var peta = petaNomorSoal_(daftar);
   var urut = urutkanSoalMenurutNomor_(daftar, peta);
   urut.forEach(function(soal) {
-    sheet.addRow({
-      id_soal: soal.id_soal,
-      nomor_bank: peta[String(soal.id_soal)] || '',
-      tipe: String(soal.tipe || '').toUpperCase(),
-      mapel: soal.mapel || '',
-      kelas: tingkatDariNilai_(soal.tingkat),
-      pertanyaan_ringkas: truncate(SRich.stripHtml(soal.pertanyaan), 150),
-      nomor_kartu: soal.ks_nomor_soal || '',
-      capaian_pembelajaran: soal.ks_capaian || '',
-      tujuan_pembelajaran: soal.ks_tujuan || '',
-      materi_elemen: soal.ks_materi || '',
-      kompetensi: soal.ks_kompetensi || '',
-      indikator_soal: soal.ks_indikator || '',
-      level_kognitif: soal.ks_level_kognitif || ''
-    });
+    var baris = sheet.addRow(barisTemplateKartu_(soal, peta));
+    /* Kolom kartu (7..13) berisi keterangan — tampil miring abu-abu sebagai tanda "belum diisi". */
+    for (var ci = 7; ci <= 13; ci++) {
+      baris.getCell(ci).font = { italic: true, color: { argb: 'FF8A8A8A' } };
+    }
   });
 
   var petunjuk = workbook.addWorksheet('PETUNJUK');
@@ -7450,14 +7481,15 @@ async function buatTemplateExcelKartu_() {
   [
     'TEMPLATE IMPORT KARTU SOAL — SIADO',
     '',
-    '1. Sheet "KARTU SOAL" SUDAH TERISI data bank soal Anda: kolom id_soal sampai pertanyaan_ringkas adalah identitas butir (JANGAN diubah/dihapus), kolom nomor_kartu sampai level_kognitif adalah isi kartu yang boleh dilengkapi/diperbaiki.',
-    '2. Isi kolom: nomor_kartu (angka, kosong = otomatis urut mapel+kelas), capaian_pembelajaran, tujuan_pembelajaran, materi_elemen (wajib bila mengisi deskripsi), kompetensi, indikator_soal, level_kognitif.',
-    '3. level_kognitif boleh ditulis: C1..C6 (mis. "C4 - Menganalisis") atau Taksonomi SOLO: Prastruktural / Unistruktural / Multistruktural / Relasional / Abstrak Diperluas.',
-    '4. Jangan menambah/menghapus baris identitas, mengganti header, atau mengubah nama sheet "KARTU SOAL".',
-    '5. Simpan tetap sebagai .xlsx, kembali ke panel → Kartu Soal → Pilih Berkas → Import Kartu.',
-    '6. Baris yang id-nya tidak dikenal atau tanpa isi baru akan DILEWATI dan dilaporkan pada hasil import.',
+    '1. Sheet "KARTU SOAL" berisi identitas butir soal Anda: kolom id_soal sampai pertanyaan_ringkas (berlatar abu-abu) JANGAN diubah atau dihapus.',
+    '2. Kolom nomor_kartu sampai level_kognitif hanya berisi KETERANGAN berwarna abu-abu miring dalam kurung. GANTI keterangan itu dengan isi kartu soal yang sebenarnya.',
+    '3. Baris yang keterangannya MASIH TERSISA (belum ditimpa apa pun) dianggap kosong dan DILEWATI saat import — tidak ada kartu lama yang tertimpa.',
+    '4. Menghapus keterangan tanpa mengisi apa pun berarti kolom itu mempertahankan nilai kartu lama; nomor kartu kosong/terhapus = otomatis urut per mapel+kelas.',
+    '5. level_kognitif boleh ditulis C1..C6 (mis. "C4 - Menganalisis") atau Taksonomi SOLO: Prastruktural / Unistruktural / Multistruktural / Relasional / Abstrak Diperluas.',
+    '6. materi_elemen wajib diisi bila mengisi kolom deskripsi. Jangan menambah/menghapus baris identitas, mengganti header, atau mengubah nama sheet "KARTU SOAL".',
+    '7. Simpan tetap sebagai .xlsx, kembali ke panel → Kartu Soal → Pilih Berkas → Import Kartu.',
     '',
-    'Catatan: butir yang sebelumnya sudah berisi kartu akan DIPERBARUI sesuai isi berkas (kolom yang dikosongkan di berkas mempertahankan nilai lama).'
+    'Catatan: hanya baris yang keterangannya Anda timpa yang disimpan. Ringkasan import melaporkan jumlah tersimpan, dilewati, dan gagal.'
   ].forEach(function(t) { petunjuk.addRow([t]); });
   petunjuk.getRow(1).font = { bold: true, size: 12 };
 
@@ -7475,16 +7507,15 @@ async function unduhTemplateKartuSoal() {
     if (!blob) throw new Error('Pustaka ExcelJS belum termuat.');
     unduhBlob_(blob, 'template-import-kartu-soal.xlsx');
     await hasilSukses_('Template Kartu Soal Diunduh (Excel)',
-      'Template <b>template-import-kartu-soal.xlsx</b> berisi <b>' + daftar.length + '</b> butir soal Anda ' +
-      'beserta nilai kartu yang sudah ada. Lengkapi kolom kartu di Excel (lihat sheet PETUNJUK), simpan, lalu Import Kartu.',
+      'Template <b>template-import-kartu-soal.xlsx</b> berisi <b>' + daftar.length + '</b> butir soal Anda. ' +
+      'Kolom kartu isinya baru <b>keterangan</b> (abu-abu miring) — timpa dengan isi kartu yang sebenarnya ' +
+      '(lihat sheet PETUNJUK), simpan, lalu Import Kartu. Baris yang keterangannya tidak ditimpa otomatis dilewati.',
       [{ label: 'Nama berkas', nilai: 'template-import-kartu-soal.xlsx' },
        { label: 'Butir tercakup', nilai: String(daftar.length) }]);
   } catch (error) {
-    var rows = [KARTU_TEMPLATE_HEADERS_].concat(daftar.map(function(s) {
-      return [s.id_soal, '', String(s.tipe || '').toUpperCase(), s.mapel || '', tingkatDariNilai_(s.tingkat),
-        truncate(SRich.stripHtml(s.pertanyaan), 150), s.ks_nomor_soal || '', s.ks_capaian || '', s.ks_tujuan || '',
-        s.ks_materi || '', s.ks_kompetensi || '', s.ks_indikator || '', s.ks_level_kognitif || ''];
-    }));
+    var petaCsv = petaNomorSoal_(daftar);
+    var rows = [KARTU_TEMPLATE_HEADERS_].concat(
+      urutkanSoalMenurutNomor_(daftar, petaCsv).map(function(s) { return barisTemplateKartu_(s, petaCsv); }));
     unduhCsv_(rows, 'template-import-kartu-soal.csv');
     await hasilInfo_('Template Diunduh (CSV cadangan)',
       'Pustaka Excel belum termuat sehingga template diunduh sebagai CSV. Isi seperti biasa, lalu Import Kartu (CSV juga didukung).',
@@ -7691,4 +7722,5 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a412086d5c140b5f',t:'MTc5MDQyMzIzNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a41218dafc120b5f',t:'MTc5MDQyMzkwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

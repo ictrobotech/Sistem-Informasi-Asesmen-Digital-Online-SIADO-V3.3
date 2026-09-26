@@ -6449,9 +6449,12 @@ function setKonteksKartuSoal_(info) {
     ' butir soal sudah memiliki kartu soal lengkap.</span>';
 }
 
-/** Kartu soal dianggap lengkap bila seluruh kolom utama sudah terisi. */
+/** Kartu soal dianggap lengkap bila seluruh kolom utama —termasuk Tujuan
+ * Pembelajaran— sudah terisi. REVISI 2026-09-26: ks_tujuan wajib agar
+ * butir dengan kolom yang masih kosong (mis. tujuan) tidak lagi berbadge
+ * "Lengkap" padahal belum terisi semuanya. */
 function kartuSoalLengkap_(row) {
-  return !!(row.ks_capaian && row.ks_kelas && row.ks_materi &&
+  return !!(kartuBerTujuan_(row) && row.ks_capaian && row.ks_kelas && row.ks_materi &&
     row.ks_kompetensi && row.ks_indikator && row.ks_level_kognitif);
 }
 

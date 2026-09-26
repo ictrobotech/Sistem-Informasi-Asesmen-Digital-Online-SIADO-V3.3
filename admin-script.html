@@ -419,6 +419,8 @@ function bindAdminInterface() {
   bindClick_('closeKartuSoal', tutupKartuSoal_);
   bindClick_('batalKartuSoal', tutupKartuSoal_);
   bindSubmit_('kartuSoalForm', simpanKartuSoal_);
+  // REVISI 2026-09-26: import kartu soal via template Excel.
+  siapkanImportKartuUi_();
   // REVISI 2026-09-26 (revisi 3b): ketiga kolom deskripsi Kartu Soal memakai
   // editor daftar terstruktur — penanda di kiri, baris lanjutan menjorok rapi.
   ['ksCapaian', 'ksTujuan', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
@@ -7254,6 +7256,336 @@ async function simpanKartuSoal_(event) {
   }
 }
 
+
+/* ==================================================================
+ * IMPORT KARTU SOAL VIA TEMPLATE EXCEL (REVISI 2026-09-26)
+ * Guru mengunduh template yang SUDAH TERISI data bank soal (id, tipe,
+ * mapel, kelas, pertanyaan, dan nilai kartu yang ada), melengkapinya
+ * di Excel, lalu mengimpor kembali — setiap baris dipetakan ke butir
+ * soal lewat id_soal dan disimpan lewat action simpanKartuSoal yang
+ * sama dengan modal, termasuk normalisasi kunci & level kognitif.
+ * ================================================================== */
+var KARTU_TEMPLATE_HEADERS_ = ['id_soal', 'nomor_bank', 'tipe', 'mapel', 'kelas',
+  'pertanyaan_ringkas', 'nomor_kartu', 'capaian_pembelajaran', 'tujuan_pembelajaran',
+  'materi_elemen', 'kompetensi', 'indikator_soal', 'level_kognitif'];
+
+/** Gabungan data kartu + bank soal untuk satu id (kartu lebih dulu). */
+function sumberKartuGabungan_() {
+  var peta = {};
+  (ADMIN.questions || []).concat(DATA_MENTAH.soal || []).forEach(function(q) {
+    if (q && q.id_soal !== undefined) peta[String(q.id_soal)] = Object.assign({}, peta[String(q.id_soal)] || {}, q);
+  });
+  (KARTU_SOAL.data || []).forEach(function(q) {
+    if (q && q.id_soal !== undefined) peta[String(q.id_soal)] = Object.assign({}, peta[String(q.id_soal)] || {}, q);
+  });
+  return Object.keys(peta).map(function(k) { return peta[k]; });
+}
+
+/** Kunci kolom toleran: huruf kecil, spasi/garis jadi garis bawah. */
+function kunciKolomKartu_(nama) {
+  return String(nama || '').trim().toLowerCase().replace(/[\s\-./]+/g, '_').replace(/_+/g, '_');
+}
+
+/** Menormalkan teks level kognitif dari Excel menjadi nilai resmi. */
+function normalisasiLevelKognitifTeks_(teks) {
+  var s = String(teks === undefined || teks === null ? '' : teks).trim();
+  if (!s) return '';
+  var kode = /C[1-6]/i.exec(s);
+  if (kode) return kode[0].toUpperCase();
+  var low = s.toLowerCase();
+  var solo = { 'prastruktural': 'Prastruktural', 'unistruktural': 'Unistruktural',
+    'multistruktural': 'Multistruktural', 'relasional': 'Relasional',
+    'abstrak diperluas': 'Abstrak Diperluas' };
+  return solo[low] || '';
+}
+
+/** Membaca baris Excel/CSV menjadi array array (baris pertama = header). */
+async function barisDariBerkasKartu_(file) {
+  var nama = String(file.name || '');
+  if (/\.csv$/i.test(nama)) return parseCsv_(await bacaFileTeks_(file));
+  if (!window.XLSX || !window.XLSX.read || !window.XLSX.utils) {
+    throw new Error('Pustaka pembaca Excel belum termuat. Muat ulang halaman panel, lalu coba lagi.');
+  }
+  var buffer = await bacaFileBinar_(file);
+  var buku = window.XLSX.read(buffer, { type: 'array' });
+  var namaSheet = buku.SheetNames.filter(function(n) { return /kartu/i.test(n); })[0] || buku.SheetNames[0];
+  if (!namaSheet || !buku.Sheets[namaSheet]) throw new Error('Berkas Excel tidak berisi sheet apa pun.');
+  return window.XLSX.utils.sheet_to_json(buku.Sheets[namaSheet], { header: 1, defval: '' });
+}
+
+/**
+ * Menyusun rencana import: { entri: [...], dilewati: [...] }.
+ * Setiap entri berisi { baris, id, muatan } — muatan siap dikirim ke
+ * action simpanKartuSoal. Baris tanpa perubahan / id tak dikenal dilewati.
+ */
+function susunRencanaImportKartu_(rows) {
+  var hasil = { entri: [], dilewati: [] };
+  if (!rows || rows.length < 2) {
+    hasil.dilewati.push('Berkas tidak berisi baris data.');
+    return hasil;
+  }
+  var header = (rows[0] || []).map(kunciKolomKartu_);
+  var indeksId = header.indexOf('id_soal');
+  if (indeksId === -1) indeksId = header.indexOf('id');
+  if (indeksId === -1) {
+    hasil.dilewati.push('Kolom id_soal tidak ditemukan pada baris pertama berkas.');
+    return hasil;
+  }
+  function ambil(obj, nama) { return String(obj[nama] === undefined || obj[nama] === null ? '' : obj[nama]).trim(); }
+
+  var daftarSoal = sumberKartuGabungan_();
+  var petaSoal = {};
+  daftarSoal.forEach(function(q) { petaSoal[String(q.id_soal)] = q; });
+
+  for (var i = 1; i < rows.length; i++) {
+    var baris = rows[i] || [];
+    if (!baris.length || baris.every(function(c) { return String(c).trim() === ''; })) continue;
+    var obj = {};
+    header.forEach(function(k, idx) { if (k) obj[k] = baris[idx]; });
+    var id = ambil(obj, 'id_soal') || ambil(obj, 'id');
+    if (!id) { hasil.dilewati.push('Baris ' + (i + 1) + ': id_soal kosong — dilewati.'); continue; }
+    var soal = petaSoal[id];
+    if (!soal) { hasil.dilewati.push('Baris ' + (i + 1) + ': id #' + id + ' tidak ada pada bank soal — dilewati.'); continue; }
+
+    var nilai = {
+      nomor: ambil(obj, 'nomor_kartu') || ambil(obj, 'nomor'),
+      capaian: ambil(obj, 'capaian_pembelajaran') || ambil(obj, 'capaian'),
+      tujuan: ambil(obj, 'tujuan_pembelajaran') || ambil(obj, 'tujuan'),
+      materi: ambil(obj, 'materi_elemen') || ambil(obj, 'materi'),
+      kompetensi: ambil(obj, 'kompetensi'),
+      indikator: ambil(obj, 'indikator_soal') || ambil(obj, 'indikator'),
+      level: normalisasiLevelKognitifTeks_(ambil(obj, 'level_kognitif') || ambil(obj, 'level'))
+    };
+    var adaPerubahan = nilai.nomor || nilai.capaian || nilai.tujuan || nilai.materi ||
+      nilai.kompetensi || nilai.indikator || nilai.level;
+    if (!adaPerubahan) { hasil.dilewati.push('Baris ' + (i + 1) + ' (#' + id + '): tidak ada isi kartu baru — dilewati.'); continue; }
+    if ((nilai.capaian || nilai.tujuan || nilai.materi || nilai.kompetensi || nilai.indikator) &&
+        !soal.ks_materi && !nilai.materi) {
+      hasil.dilewati.push('Baris ' + (i + 1) + ' (#' + id + '): materi/elemen wajib diisi bila mengisi kolom deskripsi — dilewati.');
+      continue;
+    }
+
+    var tipe = String(soal.tipe || 'PG').toUpperCase();
+    var opsiAsal = Array.isArray(soal.opsi) ? soal.opsi : null;
+    if (!opsiAsal && typeof soal.opsi === 'string') {
+      var urai = tryJson(soal.opsi, null);
+      if (Array.isArray(urai)) opsiAsal = urai;
+    }
+    var normalKunci = normalisasiKunciSoal_(tipe, soal.kunci_jawaban, opsiAsal, soal.pertanyaan);
+    var muatan = {
+      id_soal: String(id),
+      pertanyaan: String(soal.pertanyaan || ''),
+      tipe: tipe,
+      ks_capaian: nilai.capaian || String(soal.ks_capaian || ''),
+      ks_tujuan: nilai.tujuan || String(soal.ks_tujuan || ''),
+      ks_kelas: String(soal.ks_kelas || ''),
+      ks_nomor_soal: nilai.nomor || String(soal.ks_nomor_soal || ''),
+      ks_materi: nilai.materi || String(soal.ks_materi || ''),
+      ks_kompetensi: nilai.kompetensi || String(soal.ks_kompetensi || ''),
+      ks_indikator: nilai.indikator || String(soal.ks_indikator || ''),
+      ks_level_kognitif: nilai.level || String(soal.ks_level_kognitif || '')
+    };
+    if (!muatan.ks_nomor_soal) muatan.ks_nomor_soal = nomorOtomatisKartuSoal_(id);
+    if (Array.isArray(opsiAsal)) muatan.opsi = opsiAsal;
+    ['poin', 'kunci_jawaban', 'mapel', 'tingkat', 'aktif',
+      'stimulus_deskripsi', 'stimulus_gambar', 'stimulus_alt',
+      'stimulus_video', 'stimulus_video_alt'].forEach(function(kolom) {
+      if (soal[kolom] !== undefined && soal[kolom] !== null) muatan[kolom] = soal[kolom];
+    });
+    if (normalKunci.error) {
+      hasil.dilewati.push('Baris ' + (i + 1) + ' (#' + id + '): ' + normalKunci.error);
+      continue;
+    }
+    if (normalKunci.kunci !== '' || Object.prototype.hasOwnProperty.call(soal, 'kunci_jawaban')) {
+      muatan.kunci_jawaban = normalKunci.kunci;
+    }
+    hasil.entri.push({ baris: i + 1, id: id, muatan: muatan });
+  }
+  return hasil;
+}
+
+/** Membangun berkas template Excel kartu soal (terisi data bank soal). */
+async function buatTemplateExcelKartu_() {
+  var ExcelJS = window.ExcelJS;
+  if (!ExcelJS || !ExcelJS.Workbook) return null;
+  var workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIADO — Kartu Soal';
+  workbook.properties.title = 'Template Import Kartu Soal SIADO';
+
+  var sheet = workbook.addWorksheet('KARTU SOAL', { views: [{ state: 'frozen', ySplit: 1 }] });
+  sheet.columns = KARTU_TEMPLATE_HEADERS_.map(function(h) {
+    return { header: h, key: h, width: ({ id_soal: 9, nomor_bank: 11, tipe: 11, mapel: 15, kelas: 8,
+      pertanyaan_ringkas: 46, nomor_kartu: 12, capaian_pembelajaran: 44, tujuan_pembelajaran: 44,
+      materi_elemen: 26, kompetensi: 38, indikator_soal: 44, level_kognitif: 14 })[h] || 18 };
+  });
+  sheet.getRow(1).eachCell(function(cell) {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  });
+
+  var daftar = sumberKartuGabungan_();
+  var peta = petaNomorSoal_(daftar);
+  var urut = urutkanSoalMenurutNomor_(daftar, peta);
+  urut.forEach(function(soal) {
+    sheet.addRow({
+      id_soal: soal.id_soal,
+      nomor_bank: peta[String(soal.id_soal)] || '',
+      tipe: String(soal.tipe || '').toUpperCase(),
+      mapel: soal.mapel || '',
+      kelas: tingkatDariNilai_(soal.tingkat),
+      pertanyaan_ringkas: truncate(SRich.stripHtml(soal.pertanyaan), 150),
+      nomor_kartu: soal.ks_nomor_soal || '',
+      capaian_pembelajaran: soal.ks_capaian || '',
+      tujuan_pembelajaran: soal.ks_tujuan || '',
+      materi_elemen: soal.ks_materi || '',
+      kompetensi: soal.ks_kompetensi || '',
+      indikator_soal: soal.ks_indikator || '',
+      level_kognitif: soal.ks_level_kognitif || ''
+    });
+  });
+
+  var petunjuk = workbook.addWorksheet('PETUNJUK');
+  petunjuk.columns = [{ width: 110 }];
+  [
+    'TEMPLATE IMPORT KARTU SOAL — SIADO',
+    '',
+    '1. Sheet "KARTU SOAL" SUDAH TERISI data bank soal Anda: kolom id_soal sampai pertanyaan_ringkas adalah identitas butir (JANGAN diubah/dihapus), kolom nomor_kartu sampai level_kognitif adalah isi kartu yang boleh dilengkapi/diperbaiki.',
+    '2. Isi kolom: nomor_kartu (angka, kosong = otomatis urut mapel+kelas), capaian_pembelajaran, tujuan_pembelajaran, materi_elemen (wajib bila mengisi deskripsi), kompetensi, indikator_soal, level_kognitif.',
+    '3. level_kognitif boleh ditulis: C1..C6 (mis. "C4 - Menganalisis") atau Taksonomi SOLO: Prastruktural / Unistruktural / Multistruktural / Relasional / Abstrak Diperluas.',
+    '4. Jangan menambah/menghapus baris identitas, mengganti header, atau mengubah nama sheet "KARTU SOAL".',
+    '5. Simpan tetap sebagai .xlsx, kembali ke panel → Kartu Soal → Pilih Berkas → Import Kartu.',
+    '6. Baris yang id-nya tidak dikenal atau tanpa isi baru akan DILEWATI dan dilaporkan pada hasil import.',
+    '',
+    'Catatan: butir yang sebelumnya sudah berisi kartu akan DIPERBARUI sesuai isi berkas (kolom yang dikosongkan di berkas mempertahankan nilai lama).'
+  ].forEach(function(t) { petunjuk.addRow([t]); });
+  petunjuk.getRow(1).font = { bold: true, size: 12 };
+
+  return workbook.xlsx.writeBuffer().then(function(buf) {
+    return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  });
+}
+
+/** Unduh template kartu soal (Excel; cadangan CSV bila ExcelJS tidak ada). */
+async function unduhTemplateKartuSoal() {
+  if (ADMIN.operationBusy.importKartu) return;
+  var daftar = sumberKartuGabungan_();
+  try {
+    var blob = await buatTemplateExcelKartu_();
+    if (!blob) throw new Error('Pustaka ExcelJS belum termuat.');
+    unduhBlob_(blob, 'template-import-kartu-soal.xlsx');
+    await hasilSukses_('Template Kartu Soal Diunduh (Excel)',
+      'Template <b>template-import-kartu-soal.xlsx</b> berisi <b>' + daftar.length + '</b> butir soal Anda ' +
+      'beserta nilai kartu yang sudah ada. Lengkapi kolom kartu di Excel (lihat sheet PETUNJUK), simpan, lalu Import Kartu.',
+      [{ label: 'Nama berkas', nilai: 'template-import-kartu-soal.xlsx' },
+       { label: 'Butir tercakup', nilai: String(daftar.length) }]);
+  } catch (error) {
+    var rows = [KARTU_TEMPLATE_HEADERS_].concat(daftar.map(function(s) {
+      return [s.id_soal, '', String(s.tipe || '').toUpperCase(), s.mapel || '', tingkatDariNilai_(s.tingkat),
+        truncate(SRich.stripHtml(s.pertanyaan), 150), s.ks_nomor_soal || '', s.ks_capaian || '', s.ks_tujuan || '',
+        s.ks_materi || '', s.ks_kompetensi || '', s.ks_indikator || '', s.ks_level_kognitif || ''];
+    }));
+    unduhCsv_(rows, 'template-import-kartu-soal.csv');
+    await hasilInfo_('Template Diunduh (CSV cadangan)',
+      'Pustaka Excel belum termuat sehingga template diunduh sebagai CSV. Isi seperti biasa, lalu Import Kartu (CSV juga didukung).',
+      [{ label: 'Nama berkas', nilai: 'template-import-kartu-soal.csv' }]);
+  }
+}
+
+/** Import kartu soal dari berkas template. */
+async function importKartuSoalDariFile() {
+  var input = document.getElementById('importKartuFile');
+  var kotak = document.getElementById('importKartuResult');
+  var file = input && input.files ? input.files[0] : null;
+  function pesan(html, kelas) {
+    if (!kotak) return;
+    kotak.style.display = 'block';
+    kotak.innerHTML = html;
+    kotak.style.borderLeftColor = kelas === 'err' ? '#c62828' : (kelas === 'ok' ? '#15803d' : '#5da3f5');
+  }
+  if (!file) {
+    await hasilInfo_('Berkas Belum Dipilih', 'Tekan <b>Pilih Berkas</b> lalu pilih template kartu soal (.xlsx/.csv) yang sudah diisi.');
+    return;
+  }
+  if (ADMIN.operationBusy.importKartu) return;
+  ADMIN.operationBusy.importKartu = true;
+  pesan('<i class="fa-solid fa-circle-notch fa-spin"></i> Membaca berkas kartu soal...', 'info');
+  var tombol = document.getElementById('importKartuSoal');
+  if (tombol) tombol.disabled = true;
+  try {
+    var rows = await barisDariBerkasKartu_(file);
+    var rencana = susunRencanaImportKartu_(rows);
+    if (!rencana.entri.length) {
+      throw new Error(rencana.dilewati.length
+        ? 'Tidak ada baris yang dapat diproses. ' + rencana.dilewati.slice(0, 3).join(' ')
+        : 'Berkas tidak berisi baris data.');
+    }
+    var sukses = 0, gagal = [];
+    for (var i = 0; i < rencana.entri.length; i++) {
+      var entri = rencana.entri[i];
+      if (i % 5 === 0) {
+        pesan('<i class="fa-solid fa-circle-notch fa-spin"></i> Menyimpan kartu... ' + (i + 1) + '/' + rencana.entri.length, 'info');
+      }
+      try {
+        var hasil = await apiWajib_('simpanKartuSoal', entri.muatan);
+        if (hasil && hasil.success === false) throw new Error(hasil.message || 'Ditolak server.');
+        sukses++;
+      } catch (galat) {
+        if (isAdminSessionInvalidMessage_(galat.message || '')) throw galat;
+        gagal.push('Baris ' + entri.baris + ' (#' + entri.id + '): ' + (galat.message || 'gagal.'));
+      }
+    }
+    var html = '<i class="fa-solid fa-circle-check"></i> Import kartu selesai: <b>' + sukses + '</b> tersimpan' +
+      (gagal.length ? ', <b>' + gagal.length + '</b> gagal.' : '.') +
+      (rencana.dilewati.length ? '<br>Dilewati: ' + rencana.dilewati.length + ' baris.' : '') +
+      (gagal.length ? '<br>' + gagal.slice(0, 10).map(escapeAdmin).join('<br>') : '') +
+      (rencana.dilewati.length ? '<br><span style="font-size:11px">' + rencana.dilewati.slice(0, 10).map(escapeAdmin).join('<br>') + '</span>' : '');
+    pesan(html, gagal.length ? 'info' : 'ok');
+    input.value = '';
+    var tombolImport = document.getElementById('importKartuSoal');
+    if (tombolImport) tombolImport.disabled = true;
+    await segarkanSenyap_([loadKartuSoal, loadQuestions]);
+    await (gagal.length ? hasilInfo_ : hasilSukses_)(
+      gagal.length ? 'Import Kartu Selesai Sebagian' : 'Import Kartu Soal Berhasil',
+      (gagal.length ? 'Sebagian baris gagal disimpan — rinciannya ada di kotak hasil di panel. ' : 'Semua kartu pada berkas tersimpan. ') +
+      'Gunakan filter Kelengkapan untuk memeriksa butir yang masih belum lengkap.',
+      [{ label: 'Berkas', nilai: file.name },
+       { label: 'Baris diproses', nilai: String(rencana.entri.length) },
+       { label: 'Berhasil', nilai: String(sukses) },
+       { label: 'Gagal', nilai: String(gagal.length) },
+       { label: 'Dilewati', nilai: String(rencana.dilewati.length) }]);
+  } catch (error) {
+    pesan('<i class="fa-solid fa-circle-exclamation"></i> ' + escapeAdmin(error.message || 'Import kartu gagal.'), 'err');
+    await hasilGagal_('Import Kartu Gagal', error.message || 'Import kartu gagal.');
+  } finally {
+    ADMIN.operationBusy.importKartu = false;
+    var tombolAkhir = document.getElementById('importKartuSoal');
+    if (tombolAkhir) tombolAkhir.disabled = !input || !input.files || !input.files.length;
+  }
+}
+
+/** Pemilih berkas kartu: tampilkan nama & aktifkan tombol import. */
+function siapkanImportKartuUi_() {
+  var input = document.getElementById('importKartuFile');
+  var tombolPilih = document.getElementById('pilihFileKartu');
+  var tombolImport = document.getElementById('importKartuSoal');
+  var kotak = document.getElementById('importKartuResult');
+  if (!input || !tombolPilih || !tombolImport) return;
+  bindClick_('pilihFileKartu', function() { input.click(); });
+  bindClick_('importKartuSoal', importKartuSoalDariFile);
+  bindClick_('unduhTemplateKartu', unduhTemplateKartuSoal);
+  input.addEventListener('change', function() {
+    var file = input.files && input.files[0];
+    tombolImport.disabled = !file;
+    if (kotak && !file) { kotak.style.display = 'none'; kotak.innerHTML = ''; }
+    if (file && kotak) {
+      kotak.style.display = 'block';
+      kotak.innerHTML = 'Berkas siap: <b>' + escapeAdmin(file.name) + '</b> — tekan <b>Import Kartu</b> untuk memproses.';
+      kotak.style.borderLeftColor = '#5da3f5';
+    }
+  });
+}
+
 /* ==================================================================
  * LAPISAN FILTER & PENCARIAN
  * Semua data mentah disimpan di DATA_MENTAH agar pencarian berjalan
@@ -7355,8 +7687,8 @@ function escapeAdmin(value) { return String(value === undefined || value === nul
 function readFileAsDataUrl(file) { return new Promise(function(resolve, reject) { var reader = new FileReader(); reader.onload = function() { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function debounce(fn, wait) { var timeout; return function() { var args = arguments; clearTimeout(timeout); timeout = setTimeout(function() { fn.apply(null, args); }, wait); }; }
 
+
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a411cd3e2fc8fda4',t:'MTc5MDQyMDgxMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a412086d5c140b5f',t:'MTc5MDQyMzIzNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>

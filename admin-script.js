@@ -6596,6 +6596,16 @@ function renderEditorDaftar_(div, teks) {
   } else {
     div.textContent = s.teks;
   }
+  aturPerataanEditor_(div);
+}
+
+/**
+ * REVISI 2026-09-26 (revisi 3c): isi TANPA numbering diratakan kiri-kanan
+ * (justify — baris terakhir tetap rata kiri); isi ber-numbering tampil sebagai
+ * daftar dengan rata kiri agar penanda dan indentasinya konsisten.
+ */
+function aturPerataanEditor_(div) {
+  div.style.textAlign = div.querySelector('ol') ? 'left' : 'justify';
 }
 
 /** Membaca isi editor kembali menjadi teks polos bernomor. */
@@ -6679,6 +6689,7 @@ function pasangEditorDaftar_(id) {
       taruhKursorDiAkhir_(div);
     }
     _nilai = s;
+    aturPerataanEditor_(div);
   });
 
   div.addEventListener('paste', function(e) {

@@ -6440,17 +6440,30 @@ function setKonteksKartuSoal_(info) {
   }
   var lengkap = (KARTU_SOAL.data || []).filter(kartuSoalLengkap_).length;
   var total = (KARTU_SOAL.data || []).length;
+  // REVISI 2026-09-26: ringkasan Tujuan Pembelajaran di konteks panel.
+  var berTujuan = (KARTU_SOAL.data || []).filter(kartuBerTujuan_).length;
+  var tanpaTujuan = total - berTujuan;
+  var ringkasTujuan = tanpaTujuan > 0
+    ? '<span style="color:#a66000;font-weight:700">' + tanpaTujuan + ' butir belum bertujuan pembelajaran</span> (filter Kelengkapan → "Tanpa Tujuan Pembelajaran")'
+    : '<span style="color:#15803d;font-weight:700">Semua butir sudah bertujuan pembelajaran</span>';
   wadah.innerHTML =
     '<strong>' + escapeAdmin(info.labelJenisUjian || 'Kartu Soal') + '</strong> · Mata pelajaran: ' +
     escapeAdmin(info.mapel || 'belum diisi') +
     (info.namaGuru ? ' · Guru: ' + escapeAdmin(info.namaGuru) : '') +
-    '<br>' + lengkap + ' dari ' + total + ' butir soal sudah memiliki kartu soal lengkap.';
+    '<br>' + lengkap + ' dari ' + total + ' butir soal sudah memiliki kartu soal lengkap.' +
+    '<br>Tujuan pembelajaran: ' + berTujuan + '/' + total + ' terisi — ' + ringkasTujuan + '.';
 }
 
 /** Kartu soal dianggap lengkap bila seluruh kolom utama sudah terisi. */
 function kartuSoalLengkap_(row) {
   return !!(row.ks_capaian && row.ks_kelas && row.ks_materi &&
     row.ks_kompetensi && row.ks_indikator && row.ks_level_kognitif);
+}
+
+/** REVISI 2026-09-26: benar bila Tujuan Pembelajaran sudah terisi (bukan kosong/'-'). */
+function kartuBerTujuan_(row) {
+  var t = String(row.ks_tujuan === undefined || row.ks_tujuan === null ? '' : row.ks_tujuan).trim();
+  return !!t && t !== '-';
 }
 
 /** Menyaring butir kartu soal berdasarkan kata kunci dan kelengkapan. */
@@ -6460,6 +6473,9 @@ function terapkanFilterKartuSoal_() {
   var rows = KARTU_SOAL.data.slice();
   if (lengkap === 'lengkap') rows = rows.filter(kartuSoalLengkap_);
   if (lengkap === 'belum') rows = rows.filter(function(r) { return !kartuSoalLengkap_(r); });
+  // REVISI 2026-09-26: fokus kelengkapan Tujuan Pembelajaran.
+  if (lengkap === 'tujuan-ada') rows = rows.filter(kartuBerTujuan_);
+  if (lengkap === 'tujuan-kosong') rows = rows.filter(function(r) { return !kartuBerTujuan_(r); });
   rows = saringKata_(rows, kueri, function(r) {
     return [r.id_soal, r.pertanyaan, r.tipe, r.ks_materi, r.ks_indikator,
       r.ks_kompetensi, r.ks_capaian, r.ks_tujuan, r.ks_kelas, r.ks_level_kognitif].join(' ');
@@ -6495,7 +6511,8 @@ function renderKartuSoalTable_(rows) {
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksMateri) + '">' + escapeAdmin(teksMateri) + '</div></td>' +
       '<td><div class="cell-wrap kartu-soal-deskripsi ' + kelasRataTeksKartuSoal_(teksIndikator) + '">' + escapeAdmin(teksIndikator) + '</div></td>' +
       '<td>' + (row.ks_level_kognitif ? badge(row.ks_level_kognitif, 'blue') : badge('-', 'gray')) + '</td>' +
-      '<td>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
+      '<td>' + (kartuBerTujuan_(row) ? badge('Tujuan OK', 'green') : badge('Tanpa Tujuan', 'amber')) +
+      '<br>' + (kartuSoalLengkap_(row) ? badge('Lengkap', 'green') : badge('Belum Lengkap', 'amber')) + '</td>' +
       '<td><div class="row-actions"><button class="mini-button edit" type="button" data-kartu-soal="' +
       escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-pen"></i> Isi Kartu</button></div></td></tr>';
   });

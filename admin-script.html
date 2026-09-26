@@ -421,7 +421,7 @@ function bindAdminInterface() {
   bindSubmit_('kartuSoalForm', simpanKartuSoal_);
   // REVISI 2026-09-26 (revisi 3b): ketiga kolom deskripsi Kartu Soal memakai
   // editor daftar terstruktur — penanda di kiri, baris lanjutan menjorok rapi.
-  ['ksCapaian', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
+  ['ksCapaian', 'ksTujuan', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
   document.getElementById('clearViolationHistory').addEventListener('click', clearViolationHistory);
   document.getElementById('clearEssayHistory').addEventListener('click', clearEssayHistory);
   document.getElementById('clearRecapHistory').addEventListener('click', clearRecapHistory);
@@ -6463,7 +6463,7 @@ function terapkanFilterKartuSoal_() {
   if (lengkap === 'belum') rows = rows.filter(function(r) { return !kartuSoalLengkap_(r); });
   rows = saringKata_(rows, kueri, function(r) {
     return [r.id_soal, r.pertanyaan, r.tipe, r.ks_materi, r.ks_indikator,
-      r.ks_kompetensi, r.ks_capaian, r.ks_kelas, r.ks_level_kognitif].join(' ');
+      r.ks_kompetensi, r.ks_capaian, r.ks_tujuan, r.ks_kelas, r.ks_level_kognitif].join(' ');
   });
   if (!rows.length && adaFilterAktif_(kueri, lengkap)) {
     tampilTidakDitemukan_('kartuSoalTable', kueri, KARTU_SOAL.data.length + ' butir soal tersedia.');
@@ -6518,6 +6518,8 @@ function bukaKartuSoal_(id) {
   // REVISI 2026-09-26 (revisi 3): data lama yang berpoin/numbering dirapikan
   // saat modal dibuka agar tampil tertata dan tersimpan rapi saat disimpan.
   document.getElementById('ksCapaian').value = rapikanTeksBernomor_(row.ks_capaian || '');
+  // REVISI 2026-09-26: kolom tujuan pembelajaran (aturan perapian sama).
+  document.getElementById('ksTujuan').value = rapikanTeksBernomor_(row.ks_tujuan || '');
   document.getElementById('ksKelas').value = row.ks_kelas || '';
   // REVISI 2026-09-26: tampilkan mapel soal (dari data Kelola Soal) agar guru
   // tahu mapel butir ini. Kartu Soal hanya tampilan — mapel tidak diubah di sini.
@@ -7135,6 +7137,7 @@ async function simpanKartuSoal_(event) {
     pertanyaan: pertanyaanAsal,
     tipe: tipeDipilih,
     ks_capaian: nilaiInput_('ksCapaian').trim(),
+    ks_tujuan: nilaiInput_('ksTujuan').trim(),
     ks_kelas: nilaiInput_('ksKelas').trim(),
     ks_nomor_soal: nilaiInput_('ksNomorSoal').trim(),
     ks_materi: nilaiInput_('ksMateri').trim(),
@@ -7341,4 +7344,5 @@ function debounce(fn, wait) { var timeout; return function() { var args = argume
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fcf48acfdf9',t:'MTc5MDI1OTY5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4031411796e6cc1',t:'MTc5MDI2NjQyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a411802c6d5049c8',t:'MTc5MDQxNzY1NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4118f837d2049c8',t:'MTc5MDQxODI4NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>

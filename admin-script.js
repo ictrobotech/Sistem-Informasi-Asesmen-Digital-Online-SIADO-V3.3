@@ -420,7 +420,7 @@ function bindAdminInterface() {
   bindSubmit_('kartuSoalForm', simpanKartuSoal_);
   // REVISI 2026-09-26 (revisi 3b): ketiga kolom deskripsi Kartu Soal memakai
   // editor daftar terstruktur — penanda di kiri, baris lanjutan menjorok rapi.
-  ['ksCapaian', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
+  ['ksCapaian', 'ksTujuan', 'ksKompetensi', 'ksIndikator'].forEach(pasangEditorDaftar_);
   document.getElementById('clearViolationHistory').addEventListener('click', clearViolationHistory);
   document.getElementById('clearEssayHistory').addEventListener('click', clearEssayHistory);
   document.getElementById('clearRecapHistory').addEventListener('click', clearRecapHistory);
@@ -6462,7 +6462,7 @@ function terapkanFilterKartuSoal_() {
   if (lengkap === 'belum') rows = rows.filter(function(r) { return !kartuSoalLengkap_(r); });
   rows = saringKata_(rows, kueri, function(r) {
     return [r.id_soal, r.pertanyaan, r.tipe, r.ks_materi, r.ks_indikator,
-      r.ks_kompetensi, r.ks_capaian, r.ks_kelas, r.ks_level_kognitif].join(' ');
+      r.ks_kompetensi, r.ks_capaian, r.ks_tujuan, r.ks_kelas, r.ks_level_kognitif].join(' ');
   });
   if (!rows.length && adaFilterAktif_(kueri, lengkap)) {
     tampilTidakDitemukan_('kartuSoalTable', kueri, KARTU_SOAL.data.length + ' butir soal tersedia.');
@@ -6517,6 +6517,8 @@ function bukaKartuSoal_(id) {
   // REVISI 2026-09-26 (revisi 3): data lama yang berpoin/numbering dirapikan
   // saat modal dibuka agar tampil tertata dan tersimpan rapi saat disimpan.
   document.getElementById('ksCapaian').value = rapikanTeksBernomor_(row.ks_capaian || '');
+  // REVISI 2026-09-26: kolom tujuan pembelajaran (aturan perapian sama).
+  document.getElementById('ksTujuan').value = rapikanTeksBernomor_(row.ks_tujuan || '');
   document.getElementById('ksKelas').value = row.ks_kelas || '';
   // REVISI 2026-09-26: tampilkan mapel soal (dari data Kelola Soal) agar guru
   // tahu mapel butir ini. Kartu Soal hanya tampilan — mapel tidak diubah di sini.
@@ -7134,6 +7136,7 @@ async function simpanKartuSoal_(event) {
     pertanyaan: pertanyaanAsal,
     tipe: tipeDipilih,
     ks_capaian: nilaiInput_('ksCapaian').trim(),
+    ks_tujuan: nilaiInput_('ksTujuan').trim(),
     ks_kelas: nilaiInput_('ksKelas').trim(),
     ks_nomor_soal: nilaiInput_('ksNomorSoal').trim(),
     ks_materi: nilaiInput_('ksMateri').trim(),

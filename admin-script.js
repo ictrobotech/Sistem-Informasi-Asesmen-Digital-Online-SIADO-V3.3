@@ -1873,7 +1873,7 @@ function labelTipeSoalResmi_(tipe) {
   return {
     PG: 'Pilihan Ganda',
     PGK: 'PGK Kategori',
-    PGK_MCMA: 'Pilihan Ganda Kompleks (Jawaban Ganda)',
+    PGK_MCMA: 'PGK MCMA',
     MENJODOHKAN: 'Menjodohkan',
     ISIAN: 'Isian Singkat',
     URAIAN: 'Uraian'

@@ -2154,6 +2154,13 @@ async function buildQuestionPayload(prefix) {
   if (tipe === 'PGK') {
     kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
   }
+  // REVISI 2026-09-26: kunci PG / PGK MCMA dinormalkan ke format baku
+  // (mis. "a, c" atau "AC" -> "A,C"; "2" -> "B") agar validator server
+  // tidak menolak, termasuk saat kunci lama belum disunting guru.
+  if (tipe === 'PG' || tipe === 'PGK_MCMA') {
+    var hurufKunciForm = hurufKunciPilihan_(kunci, optionsFromField(prefix));
+    if (hurufKunciForm.length) kunci = tipe === 'PG' ? hurufKunciForm[0] : hurufKunciForm.join(',');
+  }
   var hasil = {
     id_soal: prefix === 'e' ? document.getElementById('eId').value : undefined,
     tipe: tipe,
@@ -6500,6 +6507,274 @@ function bersihkanKartuSoalForm_() {
   KARTU_SOAL.tipeAwal = '';
 }
 
+/* ==================================================================
+ * NORMALISASI KUNCI JAWABAN (REVISI 2026-09-26)
+ *
+ * Soal buatan revisi lama menyimpan kunci jawaban dalam format yang
+ * beragam (JSON object {"1":"Informasi Penting"}, JSON array, pemisah
+ * " / ", "AC" tanpa koma, nomor opsi "1,3", dst). Validator server
+ * (RPC api) hanya menerima format baku keluaran editor terbaru:
+ *   PG          : satu huruf opsi, contoh: A
+ *   PGK_MCMA    : huruf opsi dipisah koma, contoh: A,C
+ *   PGK         : nama kategori tiap pernyataan dipisah koma (urut baris)
+ *   MENJODOHKAN : baris "1. pernyataan = pasangan" (atau kosong)
+ *   ISIAN/URAIAN: teks bebas
+ * Fungsi di bawah mengubah semua format lama menjadi format baku
+ * sebelum dikirim, sehingga simpan Kartu Soal / Kelola Soal tidak
+ * lagi ditolak dengan pesan "Kunci PGK ... tidak cocok" atau
+ * "Kunci PGK MCMA minimal satu opsi".
+ * ================================================================== */
+var SIADO_HURUF_OPSI_ = 'ABCDEFGH';
+
+/** Nilai mentah kunci: JSON object/array diurai, teks dipangkas. */
+function nilaiKunciMentah_(nilai) {
+  if (nilai === undefined || nilai === null) return '';
+  if (typeof nilai === 'object') return nilai;
+  var teks = String(nilai).trim();
+  if (!teks || teks === '-' || teks === '(tanpa kunci baku)') return '';
+  return tryJson(teks, teks);
+}
+
+/** Benar bila nilai pada kunci berbentuk objek dianggap "terpilih". */
+function kunciObjekTerpilih_(nilai) {
+  if (nilai === true || nilai === 1) return true;
+  if (nilai === false || nilai === 0 || nilai === null || nilai === undefined) return false;
+  var teks = String(nilai).trim().toLowerCase();
+  return teks !== '' && teks !== 'false' && teks !== '0' && teks !== 'tidak' && teks !== 'no';
+}
+
+/**
+ * Mengurai kunci PG / PGK MCMA dari semua format lama menjadi daftar
+ * huruf opsi unik berurutan A..H. Mengembalikan [] bila tidak ada
+ * huruf sah yang dapat diambil.
+ * Didukung: "A", "a", "A.", "(A)", "A,C", "A; C", "A|C", "AC", "A C",
+ * "1,3" (nomor opsi), ["A","C"], 1, {"A":true}, {"idOpsi":1}, "Jawaban: A".
+ */
+function hurufKunciPilihan_(kunci, opsi) {
+  var jumlahOpsi = (Array.isArray(opsi) && opsi.length) ? Math.min(8, opsi.length) : 8;
+  var hasil = [];
+  var dorongHuruf = function(huruf) {
+    if (/^[A-H]$/.test(huruf) && hasil.indexOf(huruf) === -1 &&
+        SIADO_HURUF_OPSI_.indexOf(huruf) < jumlahOpsi &&
+        hasil.length < jumlahOpsi) hasil.push(huruf);
+  };
+  var prosesToken = function(token) {
+    var t = String(token === undefined || token === null ? '' : token).trim()
+      .replace(/^\(+|\)+$/g, '')
+      .replace(/^([A-Ha-h])[.)\-:]$/, '$1')
+      .replace(/^(kunci|jawaban|no\.?|nomor)\s*[:.]?$/i, '');
+    if (!t) return;
+    if (/^\d{1,2}$/.test(t)) {
+      var indeks = parseInt(t, 10);
+      if (indeks >= 1 && indeks <= jumlahOpsi) dorongHuruf(SIADO_HURUF_OPSI_.charAt(indeks - 1));
+      return;
+    }
+    var atas = t.toUpperCase().replace(/[^A-Z]/g, '');
+    if (/^[A-H]{2,}$/.test(atas)) {           /* contoh: "AC" -> A,C */
+      atas.split('').forEach(dorongHuruf);
+      return;
+    }
+    if (/^[A-H]$/.test(atas)) { dorongHuruf(atas); return; }
+    /* Teks berisi kata: ambil huruf A-H yang berdiri sendiri, mis. "Jawaban: A". */
+    var sisa = t.toUpperCase().replace(/KUNCI|JAWABAN/g, ' ');
+    var cocok = sisa.match(/(?:^|[^A-H])([A-H])(?=[^A-H]|$)/g);
+    if (cocok) cocok.forEach(function(x) { dorongHuruf(x.replace(/[^A-H]/g, '')); });
+  };
+  var nilai = nilaiKunciMentah_(kunci);
+  if (Array.isArray(nilai)) {
+    nilai.forEach(function(item) {
+      if (item && typeof item === 'object') return;
+      prosesToken(item);
+    });
+  } else if (nilai && typeof nilai === 'object') {
+    /* Format objek: {A:true,C:true} / {"1":"x"} / {idOpsi:true}. */
+    var petaOpsi = {};
+    if (Array.isArray(opsi)) opsi.forEach(function(op, i) {
+      if (op && op.id !== undefined && op.id !== null) petaOpsi[String(op.id)] = i;
+    });
+    Object.keys(nilai).forEach(function(k) {
+      if (!kunciObjekTerpilih_(nilai[k])) return;
+      if (/^[A-Ha-h]$/.test(k)) { dorongHuruf(k.toUpperCase()); return; }
+      if (/^\d{1,2}$/.test(k)) {
+        var indeks = parseInt(k, 10);
+        if (indeks >= 1 && indeks <= jumlahOpsi) dorongHuruf(SIADO_HURUF_OPSI_.charAt(indeks - 1));
+        return;
+      }
+      if (petaOpsi[k] !== undefined) dorongHuruf(SIADO_HURUF_OPSI_.charAt(petaOpsi[k]));
+    });
+  } else if (typeof nilai === 'string' && nilai) {
+    nilai.split(/[,;|\/]/).forEach(prosesToken);
+  } else if (nilai !== '') {
+    /* Mis. angka murni hasil JSON.parse("2"). */
+    prosesToken(nilai);
+  }
+  return hasil.sort();
+}
+
+/** Pencocokan nama kategori toleran huruf besar/kecil dan spasi ganda. */
+function cocokKategori_(nilai, daftarKategori) {
+  var v = String(nilai === undefined || nilai === null ? '' : nilai).replace(/\s+/g, ' ').trim();
+  if (!v) return null;
+  if (!daftarKategori || !daftarKategori.length) return v;
+  for (var i = 0; i < daftarKategori.length; i++) {
+    if (daftarKategori[i] === v) return daftarKategori[i];
+  }
+  var low = v.toLowerCase();
+  for (var j = 0; j < daftarKategori.length; j++) {
+    if (daftarKategori[j].toLowerCase() === low) return daftarKategori[j];
+  }
+  return null;
+}
+
+/**
+ * Menormalkan kunci PGK Kategori menjadi "Kategori1,Kategori2,..." sesuai
+ * urutan pernyataan. Mendukung format lama: JSON array, JSON object
+ * {"1":"Kategori"} / {idOpsi:"Kategori"}, pemisah " / ", dan CSV.
+ * daftarKategori berasal dari penanda pada pertanyaan; bila kosong, nilai
+ * kunci dikembalikan apa adanya (tanpa pembatasan daftar kategori).
+ */
+function normalisasiKunciPgk_(kunci, opsi, daftarKategori) {
+  var daftar = Array.isArray(opsi) ? opsi : [];
+  var jumlah = daftar.length;
+  var nilai = nilaiKunciMentah_(kunci);
+  var perBaris = null;
+
+  if (Array.isArray(nilai)) {
+    perBaris = nilai.map(function(v) { return v === undefined || v === null ? '' : String(v); });
+  } else if (nilai && typeof nilai === 'object') {
+    perBaris = [];
+    /* Kunci objek bisa berbasis nomor 1 ({"1": ...}), nomor 0 ({"0": ...}),
+       atau id opsi. Deteksi dasar penomoran lebih dulu agar {"1": ...} pada
+       soal 3 pernyataan tidak salah geser baris. */
+    var dasar = 1;
+    if (Object.prototype.hasOwnProperty.call(nilai, '0')) dasar = 0;
+    for (var i = 0; i < jumlah; i++) {
+      var op = daftar[i] || {};
+      var calon = [
+        (op.id !== undefined && op.id !== null) ? String(op.id) : null,
+        String(i + dasar)
+      ];
+      var isi = '';
+      for (var c = 0; c < calon.length; c++) {
+        var k = calon[c];
+        if (k !== null && Object.prototype.hasOwnProperty.call(nilai, k) &&
+            nilai[k] !== null && nilai[k] !== undefined &&
+            String(nilai[k]).trim() !== '') {
+          isi = String(nilai[k]).trim();
+          break;
+        }
+      }
+      perBaris.push(isi);
+    }
+  } else if (typeof nilai === 'string' && nilai) {
+    perBaris = (nilai.indexOf(',') === -1 && nilai.indexOf(' / ') !== -1)
+      ? nilai.split(' / ')
+      : nilai.split(',');
+  }
+
+  /* Tanpa data opsi: kirim kembali bila kunci sudah tampak baku; selain itu
+     minta pengguna memuat ulang data agar pernyataan ikut tersedia. */
+  if (!jumlah) {
+    if (Array.isArray(perBaris)) {
+      var bersih = perBaris.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+      var cocokSemua = bersih.length && bersih.every(function(v) {
+        return cocokKategori_(v, daftarKategori) !== null;
+      });
+      if (cocokSemua) return { kunci: bersih.join(','), error: '' };
+    }
+    return { kunci: '', error: 'Data pernyataan soal PGK belum termuat. Tekan Refresh pada panel, buka kembali Kartu Soal, lalu simpan lagi. Jika tetap muncul, buka Kelola Soal → Edit soal ini lalu simpan ulang soalnya.' };
+  }
+
+  if (perBaris === null) perBaris = [];
+  var hasil = [];
+  for (var b = 0; b < jumlah; b++) {
+    var mentah = String(perBaris[b] === undefined || perBaris[b] === null ? '' : perBaris[b]).trim();
+    if (!mentah) {
+      return { kunci: '', error: 'Kunci kategori pernyataan nomor ' + (b + 1) +
+        ' belum ada pada data soal lama. Buka menu Kelola Soal → Edit soal ini, pilih kunci kategori untuk setiap pernyataan, simpan, lalu ulangi simpan Kartu Soal.' };
+    }
+    var cocok = cocokKategori_(mentah, daftarKategori);
+    if (cocok === null) {
+      return { kunci: '', error: 'Kunci PGK pernyataan nomor ' + (b + 1) + ' ("' + mentah +
+        '") tidak cocok' + (daftarKategori && daftarKategori.length
+          ? ' dengan daftar kategori soal ini: ' + daftarKategori.join(', ') : '') +
+        '. Perbaiki kunci kategori melalui menu Kelola Soal → Edit soal ini, lalu ulangi simpan Kartu Soal.' };
+    }
+    hasil.push(cocok);
+  }
+  return { kunci: hasil.join(','), error: '' };
+}
+
+/**
+ * Menormalkan kunci MENJODOHKAN. Format lama berupa JSON {idOpsi: pasangan}
+ * atau [pasangan] diubah menjadi baris "1. pernyataan = pasangan" seperti
+ * keluaran editor terbaru; kunci teks dikirim apa adanya.
+ */
+function normalisasiKunciMenjodohkan_(kunci, opsi) {
+  var nilai = nilaiKunciMentah_(kunci);
+  if (Array.isArray(nilai) || (nilai && typeof nilai === 'object')) {
+    var daftar = Array.isArray(opsi) ? opsi : [];
+    if (!daftar.length) {
+      var sisa = Object.keys(nilai).map(function(k) { return k + ' = ' + String(nilai[k]); });
+      return { kunci: sisa.join('\n'), error: '' };
+    }
+    var baris = daftar.map(function(op, i) {
+      op = op || {};
+      var pasangan = '';
+      if (Array.isArray(nilai)) {
+        if (nilai[i] !== undefined && nilai[i] !== null) pasangan = String(nilai[i]).trim();
+      } else {
+        [(op.id !== undefined && op.id !== null) ? String(op.id) : null, String(i), String(i + 1)]
+          .forEach(function(k) {
+            if (pasangan || k === null || !Object.prototype.hasOwnProperty.call(nilai, k)) return;
+            var v = nilai[k];
+            if (v !== null && v !== undefined && String(v).trim() !== '') pasangan = String(v).trim();
+          });
+      }
+      if (!pasangan && op.pasangan) pasangan = SRich.stripHtml(op.pasangan).trim();
+      return (i + 1) + '. ' + SRich.stripHtml(op.text || '').trim() + ' = ' + pasangan;
+    });
+    return { kunci: baris.join('\n'), error: '' };
+  }
+  return { kunci: String(kunci === undefined || kunci === null ? '' : kunci), error: '' };
+}
+
+/**
+ * Menormalkan kunci jawaban sesuai tipe soal tujuan. Mengembalikan
+ * { kunci: string, error: string }. error tidak kosong berarti data lama
+ * tidak dapat dikonversi otomatis dan perlu diperbaiki lewat Kelola Soal.
+ */
+function normalisasiKunciSoal_(tipe, kunci, opsi, pertanyaan) {
+  var t = String(tipe || '').toUpperCase();
+  var daftarOpsi = Array.isArray(opsi) ? opsi : [];
+  if (t === 'PG' || t === 'PGK_MCMA') {
+    var huruf = hurufKunciPilihan_(kunci, daftarOpsi);
+    if (!huruf.length) {
+      return { kunci: '', error: 'Kunci jawaban ' + (t === 'PG' ? 'PG' : 'PGK MCMA') +
+        ' soal ini kosong atau berformat yang tidak dikenali. Buka menu Kelola Soal → Edit soal ini, isi kunci ' +
+        (t === 'PG' ? 'dengan satu huruf opsi (contoh: A).' : 'dengan huruf opsi dipisah koma (contoh: A,C).') +
+        ' Simpan soalnya, lalu ulangi simpan Kartu Soal.' };
+    }
+    if (t === 'PG' && huruf.length > 1) {
+      return { kunci: '', error: 'Soal ini memiliki beberapa kunci (' + huruf.join(',') +
+        ') sehingga tidak bisa diubah otomatis ke tipe PG yang hanya boleh satu kunci. Tentukan satu kunci melalui menu Kelola Soal → Edit soal ini, simpan, lalu ulangi simpan Kartu Soal.' };
+    }
+    return { kunci: t === 'PG' ? huruf[0] : huruf.join(','), error: '' };
+  }
+  if (t === 'PGK') {
+    /* Kategori resmi diambil dari penanda pada pertanyaan; bila penanda
+       tidak ada (soal sangat lama), nilai kunci dikirim tanpa pembatasan
+       dan validator server yang memutuskan. */
+    var pakaiKategori = /data-siado-pgk-kategori="/i.test(String(pertanyaan || ''));
+    var infoKat = SRich.pgkCategories({ pertanyaan: pertanyaan || '', kunci_jawaban: kunci });
+    var daftarKat = pakaiKategori && infoKat && Array.isArray(infoKat.kategori) ? infoKat.kategori : [];
+    return normalisasiKunciPgk_(kunci, daftarOpsi, daftarKat);
+  }
+  if (t === 'MENJODOHKAN') return normalisasiKunciMenjodohkan_(kunci, daftarOpsi);
+  var teks = (kunci === undefined || kunci === null || typeof kunci === 'object') ? '' : String(kunci);
+  return { kunci: teks, error: '' };
+}
+
 async function simpanKartuSoal_(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (ADMIN.operationBusy.kartuSoal) return;
@@ -6591,6 +6866,24 @@ async function simpanKartuSoal_(event) {
     }
   }
 
+  // REVISI 2026-09-26: kunci jawaban warisan revisi lama (JSON {"1": "..."},
+  // JSON array, " / ", "AC", "1,3", dll.) dinormalkan lebih dulu ke format
+  // baku sesuai tipe tujuan agar validator server tidak menolak simpanan.
+  // Bila kunci tidak dapat dikonversi otomatis (mis. kunci MCMA memang
+  // kosong), tampilkan petunjuk perbaikan tanpa mengirim ke server.
+  var normalKunci = normalisasiKunciSoal_(tipeDipilih, muatan.kunci_jawaban, opsiAsal, pertanyaanAsal);
+  if (normalKunci.error) {
+    await hasilInfo_(tipeBerubah ? 'Kunci Belum Sesuai Tipe Baru' : 'Kunci Soal Perlu Diperbaiki',
+      normalKunci.error);
+    return;
+  }
+  // Kunci kosong pada soal yang memang belum punya kolom kunci tidak perlu
+  // ikut dikirim agar payload tetap sama seperti sebelumnya.
+  if (normalKunci.kunci !== '' ||
+      Object.prototype.hasOwnProperty.call(soalAsal || {}, 'kunci_jawaban')) {
+    muatan.kunci_jawaban = normalKunci.kunci;
+  }
+
   // API server mewajibkan tipe soal pada setiap permintaan simpan. Konfirmasi
   // tambahan hanya ditampilkan bila pengguna benar-benar mengubah tipenya.
   if (tipeBerubah) {
@@ -6623,6 +6916,8 @@ async function simpanKartuSoal_(event) {
       pesanSimpan = 'Soal PG wajib memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu coba simpan Kartu Soal kembali.';
     } else if (/tipe soal tidak valid/i.test(pesanSimpan)) {
       pesanSimpan = 'Tipe soal tidak valid. Pilih ulang salah satu tipe pada Kartu Soal. Jika tetap gagal, muat ulang panel agar daftar tipe terbaru diterapkan.';
+    } else if (/kunci pgk|kunci pg|minimal satu opsi|tidak cocok/i.test(pesanSimpan)) {
+      pesanSimpan = 'Server menolak kunci jawaban soal ini karena masih berformat lama. Buka menu Kelola Soal → Edit soal ini, periksa kolom kunci jawaban — PGK: nama kategori tiap pernyataan dipisah koma; PGK MCMA: huruf opsi dipisah koma (mis. A,C); PG: satu huruf — lalu simpan dan ulangi simpan Kartu Soal.';
     }
     await hasilGagal_('Kartu Soal Gagal Disimpan', pesanSimpan);
   } finally {

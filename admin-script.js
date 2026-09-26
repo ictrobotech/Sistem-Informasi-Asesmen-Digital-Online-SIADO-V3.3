@@ -6518,6 +6518,16 @@ function bukaKartuSoal_(id) {
   // saat modal dibuka agar tampil tertata dan tersimpan rapi saat disimpan.
   document.getElementById('ksCapaian').value = rapikanTeksBernomor_(row.ks_capaian || '');
   document.getElementById('ksKelas').value = row.ks_kelas || '';
+  // REVISI 2026-09-26: tampilkan mapel soal (dari data Kelola Soal) agar guru
+  // tahu mapel butir ini. Kartu Soal hanya tampilan — mapel tidak diubah di sini.
+  var mapelKartu = row.mapel;
+  if (!mapelKartu) {
+    var bankKartu = (ADMIN.questions || []).concat(DATA_MENTAH.soal || []).filter(function(q) {
+      return String(q.id_soal) === String(row.id_soal);
+    })[0];
+    mapelKartu = (bankKartu && bankKartu.mapel) || (KARTU_SOAL.konteks && KARTU_SOAL.konteks.mapel) || '';
+  }
+  document.getElementById('ksMapel').value = mapelKartu || '-';
   document.getElementById('ksNomorSoal').value = row.ks_nomor_soal || '';
   document.getElementById('ksMateri').value = row.ks_materi || '';
   document.getElementById('ksKompetensi').value = rapikanTeksBernomor_(row.ks_kompetensi || '');

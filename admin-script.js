@@ -5597,11 +5597,29 @@ async function deleteTeacher(username) {
 /* ==================================================================
  * DATA PESERTA DAN ROMBEL
  * ================================================================== */
+/**
+ * Payload Data Peserta harus menyertakan mapel aktif untuk akun guru.
+ *
+ * Pada mode guru, backend memakai mapel aktif untuk menentukan batas kelas
+ * yang boleh dilihat akun tersebut. Sebelumnya panel hanya mengirim `rombel`.
+ * Akibatnya admin tetap melihat seluruh peserta, sedangkan guru bisa menerima
+ * `rombel: []` dan `data: []` walaupun data peserta masih ada.
+ */
+function payloadDataPeserta_() {
+  var filter = document.getElementById('filterPesertaRombel');
+  var payload = { rombel: filter ? filter.value : '' };
+  if (!ADMIN.isAdmin) {
+    var mapel = mapelDiujikan_();
+    if (mapel) payload.mapel = mapel;
+  }
+  return payload;
+}
+
 async function loadParticipants() {
   if (!ADMIN.token || ADMIN.refreshBusy.peserta) return;
   ADMIN.refreshBusy.peserta = true;
   try {
-    var result = await adminApi('getDataPeserta', { rombel: document.getElementById('filterPesertaRombel').value });
+    var result = await adminApi('getDataPeserta', payloadDataPeserta_());
     if (!guardAdminResult(result)) return;
     ADMIN.participants = result.data || [];
     ADMIN.rombel = result.rombel || [];

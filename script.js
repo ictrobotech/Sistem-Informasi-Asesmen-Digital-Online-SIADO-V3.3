@@ -138,6 +138,11 @@ document.addEventListener('DOMContentLoaded', function() {
   bindSecurityEvents();
   loadPublicConfig();
   startBrandingSync_();
+  // Safari/PWA sering memulihkan halaman dari bfcache tanpa menjalankan ulang
+  // DOMContentLoaded; sinkronkan daftar ujian saat kembali ke layar login.
+  window.addEventListener('pageshow', function() {
+    if (!UJIAN.aktif && !UJIAN.peserta) loadPublicConfig(true);
+  });
   tryRestoreSession();
 });
 
@@ -232,9 +237,14 @@ function bindInterface() {
   document.getElementById('disqualifiedLogout').addEventListener('click', function() { kembaliKeLogin(); });
 }
 
-async function loadPublicConfig() {
+var KONFIGURASI_PUBLIK_PROMISE_ = null;
+async function loadPublicConfig(forceRefresh) {
+  // Jangan biarkan daftar ujian lama (terutama saat admin mengganti mapel aktif)
+  // bertahan setelah tab kembali dari background atau halaman dimuat ulang.
+  if (KONFIGURASI_PUBLIK_PROMISE_ && !forceRefresh) return KONFIGURASI_PUBLIK_PROMISE_;
+  KONFIGURASI_PUBLIK_PROMISE_ = (async function() {
   try {
-    var result = await apiPeserta('getKonfigurasiPublik', {});
+    var result = await apiPeserta('getKonfigurasiPublik', { _ts: forceRefresh ? Date.now() : undefined });
     if (!result.success) return;
     UJIAN.publicConfig = result;
     UJIAN.batasMerah = Math.max(1, Number(result.batasTimerMerahMenit || 5)) * 60;
@@ -245,15 +255,18 @@ async function loadPublicConfig() {
     UJIAN.kkm = Number(result.kkm || 75);
     UJIAN.daftarRombel = result.daftarRombel || [];
     if (UJIAN.daftarRombel.length) isiPilihanRombel_(UJIAN.daftarRombel, '');
+    var selectedUjian = (document.getElementById('ujianPeserta') || {}).value || '';
     UJIAN.daftarUjian = result.daftarUjian || [];
     await tempelBatasKelasUjian_(UJIAN.daftarUjian);
-    isiPilihanUjian_(UJIAN.daftarUjian, '');
+    isiPilihanUjian_(UJIAN.daftarUjian, selectedUjian);
     applyBrandingData_(result.branding);
     applyLoginBackground_(result.loginBackground);
     terapkanTema_(result.tema);
   } catch (error) {
     console.warn('Konfigurasi publik gagal dibaca:', error);
   }
+  })();
+  return KONFIGURASI_PUBLIK_PROMISE_;
 }
 
 function applyBrandingData_(branding) {
@@ -345,9 +358,12 @@ async function loginPeserta() {
     }
   }
 
-  toggleLoading(true, 'Memverifikasi akun...');
+  toggleLoading(true, 'Memuat daftar ujian terbaru...');
   document.getElementById('loginButton').disabled = true;
   try {
+    // Ambil snapshot terbaru tepat sebelum autentikasi. Ini mencegah pilihan
+    // mapel yang sudah ditutup/diganti oleh admin menjadi token pemilik lama.
+    await loadPublicConfig(true);
     var result = await apiPeserta('loginTerpadu', {
       nama: '', kelas: kelas, username: username, password: password,
       // Menentukan ujian milik guru mana yang akan dikerjakan.

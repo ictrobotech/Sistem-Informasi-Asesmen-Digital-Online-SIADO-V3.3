@@ -1054,6 +1054,14 @@ function openAdminPanel_() {
 
 function terapkanHakAkses_() {
   ADMIN.isAdmin = String(ADMIN.role || 'ADMIN').toUpperCase() === 'ADMIN';
+  // Perbarui visibilitas kontrol token setelah sesi guru/admin selesai dimuat.
+  // bindTokenGuruUI_ dapat berjalan sebelum role sesi diketahui.
+  ['tokenGuruMapelField','tokenGuruRombelField','tokenGuruNilaiField','tokenGuruActions'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = ADMIN.isAdmin ? 'none' : '';
+  });
+  var tokenToggle = document.getElementById('toggleStatusTokenGuru');
+  if (tokenToggle) tokenToggle.style.display = ADMIN.isAdmin ? 'none' : '';
   document.getElementById('sidebarUserName').textContent = ADMIN.nama || ADMIN.username;
   var roleChip = document.getElementById('sidebarUserRole');
   roleChip.textContent = ADMIN.isAdmin ? 'PROKTOR / ADMIN' : 'GURU MAPEL';

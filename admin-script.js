@@ -5379,7 +5379,17 @@ async function ubahStatusTokenGuruUI_() {
   try {
     var r = await adminApi('ubahStatusRombelGuru', { mapel:p.mapel, rombel:p.rombel, aktif:aktif });
     if (!r || !r.success) throw new Error((r && r.message) || 'Status gagal diubah.');
-    document.getElementById('toggleStatusTokenGuru').dataset.aktif = String(aktif);
+    var tombolStatus = document.getElementById('toggleStatusTokenGuru');
+    if (tombolStatus) {
+      tombolStatus.dataset.aktif = String(aktif);
+      tombolStatus.classList.toggle('admin-primary', aktif);
+      tombolStatus.classList.toggle('admin-secondary', !aktif);
+      tombolStatus.style.background = aktif ? 'linear-gradient(135deg,#16a34a,#15803d)' : '';
+      tombolStatus.style.borderColor = aktif ? '#15803d' : '';
+      tombolStatus.innerHTML = aktif
+        ? '<i class="fa-solid fa-toggle-on"></i> Rombel Aktif'
+        : '<i class="fa-solid fa-toggle-off"></i> Rombel Nonaktif';
+    }
     if(out) out.textContent = r.message || 'Status rombel berhasil diubah.';
     await muatTokenGuruUI_();
   } catch(e) { if(out) out.textContent=e.message || 'Status gagal diubah.'; }

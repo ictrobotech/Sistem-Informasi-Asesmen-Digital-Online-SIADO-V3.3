@@ -5347,8 +5347,9 @@ function bindTokenGuruUI_() {
   if (dice) dice.addEventListener('click', function() { var e=document.getElementById('tokenGuruNilai'); if(e) e.value=buatTokenAcak_(); });
   if (save) save.addEventListener('click', simpanTokenGuruUI_);
   if (toggle) {
-    // Status awal belum diketahui sebelum data token dimuat: tampilkan abu-abu.
-    setStatusTokenGuruTampilan_(false);
+    // Guru membuka kartu hanya pada mapel/rombel yang ditetapkan admin;
+    // default aksesnya aktif. Admin tetap menunggu status aktual dari tabel.
+    setStatusTokenGuruTampilan_(ADMIN.isAdmin ? false : true);
     toggle.addEventListener('click', ubahStatusTokenGuruUI_);
   }
   if (refresh) refresh.addEventListener('click', muatTokenGuruUI_);

@@ -456,6 +456,7 @@ function bindAdminInterface() {
   // Akun guru mapel
   bindSubmit_('teacherForm', createTeacher);
   bindClick_('refreshGuru', buatRefresh_('Akun guru', loadTeachers, function() { return (ADMIN.teachers || []).length; }));
+  bindTokenGuruUI_();
   bindPasswordToggle('toggleTeacherPassword', 'gPassword', 'password guru');
 
   // Data peserta dan rombel
@@ -5337,6 +5338,61 @@ async function clearAllNotifications() {
 /* ==================================================================
  * AKUN GURU MAPEL (KHUSUS ADMIN)
  * ================================================================== */
+function bindTokenGuruUI_() {
+  var save = document.getElementById('saveTokenGuru');
+  var toggle = document.getElementById('toggleStatusTokenGuru');
+  var dice = document.getElementById('generateTokenGuru');
+  var refresh = document.getElementById('refreshTokenGuru');
+  if (dice) dice.addEventListener('click', function() { var e=document.getElementById('tokenGuruNilai'); if(e) e.value=buatTokenAcak_(); });
+  if (save) save.addEventListener('click', simpanTokenGuruUI_);
+  if (toggle) toggle.addEventListener('click', ubahStatusTokenGuruUI_);
+  if (refresh) refresh.addEventListener('click', muatTokenGuruUI_);
+}
+
+function tokenGuruPayloadUI_() {
+  return {
+    mapel: String((document.getElementById('tokenGuruMapel') || {}).value || '').trim(),
+    rombel: String((document.getElementById('tokenGuruRombel') || {}).value || '').trim(),
+    token: String((document.getElementById('tokenGuruNilai') || {}).value || '').trim()
+  };
+}
+
+async function simpanTokenGuruUI_() {
+  var p = tokenGuruPayloadUI_();
+  var out = document.getElementById('tokenGuruResult');
+  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
+  try {
+    var r = await adminApi('simpanTokenGuru', p);
+    if (!r || !r.success) throw new Error((r && r.message) || 'Token gagal disimpan.');
+    if(out) out.textContent = 'Token berhasil disimpan: ' + (r.token || '');
+    var t=document.getElementById('tokenGuruNilai'); if(t) t.value='';
+    await muatTokenGuruUI_();
+  } catch(e) { if(out) out.textContent=e.message || 'Token gagal disimpan.'; }
+}
+
+async function ubahStatusTokenGuruUI_() {
+  var p = tokenGuruPayloadUI_();
+  var out = document.getElementById('tokenGuruResult');
+  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
+  var aktif = String((document.getElementById('toggleStatusTokenGuru') || {}).dataset.aktif || 'true') !== 'true';
+  try {
+    var r = await adminApi('ubahStatusRombelGuru', { mapel:p.mapel, rombel:p.rombel, aktif:aktif });
+    if (!r || !r.success) throw new Error((r && r.message) || 'Status gagal diubah.');
+    document.getElementById('toggleStatusTokenGuru').dataset.aktif = String(aktif);
+    if(out) out.textContent = r.message || 'Status rombel berhasil diubah.';
+    await muatTokenGuruUI_();
+  } catch(e) { if(out) out.textContent=e.message || 'Status gagal diubah.'; }
+}
+
+async function muatTokenGuruUI_() {
+  var box=document.getElementById('tokenGuruAdminTable'); if(!box || !ADMIN.isAdmin) return;
+  try {
+    var r=await adminApi('getTokenGuruAdmin', {}); if(!r || !r.success) return;
+    box.style.display='block'; var rows=r.data||[];
+    box.innerHTML='<table class="admin-table"><thead><tr><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Status</th></tr></thead><tbody>'+rows.map(function(x){return '<tr><td>'+escapeAdmin(x.pemilikGuru||'-')+'</td><td>'+escapeAdmin(x.mapel||'-')+'</td><td>'+escapeAdmin(x.rombel||'-')+'</td><td>'+((x.aktifGuru&&x.statusAdmin)?'Aktif':'Nonaktif')+'</td></tr>';}).join('')+'</tbody></table>';
+  } catch(e) { console.warn('Token guru gagal dimuat',e); }
+}
+
 async function loadTeachers() {
   if (!ADMIN.token || !ADMIN.isAdmin || ADMIN.refreshBusy.guru) return;
   ADMIN.refreshBusy.guru = true;

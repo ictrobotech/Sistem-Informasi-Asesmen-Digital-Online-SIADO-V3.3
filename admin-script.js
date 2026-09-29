@@ -5346,7 +5346,17 @@ function bindTokenGuruUI_() {
   var refresh = document.getElementById('refreshTokenGuru');
   if (dice) dice.addEventListener('click', function() { var e=document.getElementById('tokenGuruNilai'); if(e) e.value=buatTokenAcak_(); });
   if (save) save.addEventListener('click', simpanTokenGuruUI_);
-  if (toggle) toggle.addEventListener('click', ubahStatusTokenGuruUI_);
+  if (toggle) {
+    // Default mengikuti status akses yang baru dibuat (aktif). Status global
+    // admin tetap divalidasi oleh backend saat tombol ditekan.
+    toggle.dataset.aktif = 'true';
+    toggle.classList.remove('admin-secondary');
+    toggle.classList.add('admin-primary');
+    toggle.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
+    toggle.style.borderColor = '#15803d';
+    toggle.innerHTML = '<i class="fa-solid fa-toggle-on"></i> Rombel Aktif';
+    toggle.addEventListener('click', ubahStatusTokenGuruUI_);
+  }
   if (refresh) refresh.addEventListener('click', muatTokenGuruUI_);
 }
 

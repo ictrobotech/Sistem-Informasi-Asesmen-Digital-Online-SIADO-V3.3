@@ -1061,7 +1061,11 @@ function terapkanHakAkses_() {
     if (el) el.style.display = ADMIN.isAdmin ? 'none' : '';
   });
   var tokenToggle = document.getElementById('toggleStatusTokenGuru');
-  if (tokenToggle) tokenToggle.style.display = ADMIN.isAdmin ? 'none' : '';
+  if (tokenToggle) tokenToggle.style.display = 'none';
+  var menuTokenLabel = document.getElementById('menuTokenGuruLabel');
+  if (menuTokenLabel) menuTokenLabel.textContent = ADMIN.isAdmin ? 'Akun Guru / Token Mapel' : 'Token Ujian';
+  var tokenTitle = document.getElementById('tokenGuruTitle');
+  if (tokenTitle) tokenTitle.innerHTML = '<i class="fa-solid fa-key"></i> ' + (ADMIN.isAdmin ? 'Status Token Mapel dan Rombel' : 'Masukan Token Ujian Peserta');
   document.getElementById('sidebarUserName').textContent = ADMIN.nama || ADMIN.username;
   var roleChip = document.getElementById('sidebarUserRole');
   roleChip.textContent = ADMIN.isAdmin ? 'PROKTOR / ADMIN' : 'GURU MAPEL';

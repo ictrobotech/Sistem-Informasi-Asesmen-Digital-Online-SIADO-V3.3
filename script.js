@@ -238,7 +238,7 @@ function bindInterface() {
 }
 
 var KONFIGURASI_PUBLIK_PROMISE_ = null;
-async function loadPublicConfig(forceRefresh) {
+async function loadPublicConfig(forceRefresh, selectedOverride) {
   // Jangan biarkan daftar ujian lama (terutama saat admin mengganti mapel aktif)
   // bertahan setelah tab kembali dari background atau halaman dimuat ulang.
   if (KONFIGURASI_PUBLIK_PROMISE_ && !forceRefresh) return KONFIGURASI_PUBLIK_PROMISE_;
@@ -255,7 +255,9 @@ async function loadPublicConfig(forceRefresh) {
     UJIAN.kkm = Number(result.kkm || 75);
     UJIAN.daftarRombel = result.daftarRombel || [];
     if (UJIAN.daftarRombel.length) isiPilihanRombel_(UJIAN.daftarRombel, '');
-    var selectedUjian = (document.getElementById('ujianPeserta') || {}).value || '';
+    var selectedUjian = typeof selectedOverride === 'string'
+      ? selectedOverride
+      : ((document.getElementById('ujianPeserta') || {}).value || '');
     UJIAN.daftarUjian = result.daftarUjian || [];
     await tempelBatasKelasUjian_(UJIAN.daftarUjian);
     isiPilihanUjian_(UJIAN.daftarUjian, selectedUjian);
@@ -361,9 +363,15 @@ async function loginPeserta() {
   toggleLoading(true, 'Memuat daftar ujian terbaru...');
   document.getElementById('loginButton').disabled = true;
   try {
-    // Ambil snapshot terbaru tepat sebelum autentikasi. Ini mencegah pilihan
-    // mapel yang sudah ditutup/diganti oleh admin menjadi token pemilik lama.
-    await loadPublicConfig(true);
+    // Simpan pilihan sebelum refresh. Dropdown tidak boleh mengubah pilihan
+    // menjadi kosong hanya karena daftar konfigurasi sedang disinkronkan.
+    var ujianDipilihSebelumRefresh = (document.getElementById('ujianPeserta') || {}).value || '';
+    await loadPublicConfig(true, ujianDipilihSebelumRefresh);
+    var ujianSetelahRefresh = (document.getElementById('ujianPeserta') || {}).value || '';
+    if (ujianDipilihSebelumRefresh && !ujianSetelahRefresh) {
+      setLoginMessage('Ujian yang dipilih baru saja berubah atau belum tersinkron. Muat ulang daftar ujian lalu pilih kembali.', 'error');
+      return;
+    }
     var result = await apiPeserta('loginTerpadu', {
       nama: '', kelas: kelas, username: username, password: password,
       // Menentukan ujian milik guru mana yang akan dikerjakan.

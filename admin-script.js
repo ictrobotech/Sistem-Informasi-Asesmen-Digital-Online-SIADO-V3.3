@@ -1211,10 +1211,8 @@ function startAdminAutoRefresh() {
 }
 
 function switchAdminTab(tab) {
-  if (tab === 'pengguna' && !ADMIN.isAdmin) {
-    showToast('Menu akun guru hanya dapat diakses proktor/admin.', 'error');
-    return;
-  }
+  // Menu ini sekarang juga memuat Token Mapel/Rombel untuk guru.
+  // Kartu administrasi akun tetap dikunci melalui data-admin="true".
   if (tab === 'kartusoal' && !kartuSoalAktif_()) {
     hasilInfo_('Kartu Soal Belum Aktif',
       'Menu Kartu Soal hanya tersedia untuk asesmen STS dan SAS.', [
@@ -1241,7 +1239,10 @@ function switchAdminTab(tab) {
   if (tab === 'uraian') loadEssays();
   if (tab === 'rekap') loadRecap();
   if (tab === 'peserta') loadParticipants();
-  if (tab === 'pengguna') { loadTeachers(); siapkanFormKelasGuru_(); }
+  if (tab === 'pengguna') {
+    if (ADMIN.isAdmin) { loadTeachers(); siapkanFormKelasGuru_(); }
+    muatTokenGuruUI_();
+  }
   if (tab === 'notifikasi') loadNotifications();
   if (tab === 'pengaturan') { loadSettings(); muatDaftarPesertaDurasi_(); }
 }

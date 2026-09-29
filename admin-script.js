@@ -5393,6 +5393,7 @@ function tokenGuruPayloadUI_() {
 async function simpanTokenGuruUI_() {
   var p = tokenGuruPayloadUI_();
   var out = document.getElementById('tokenGuruResult');
+  if (out) out.style.display = 'block';
   if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
   try {
     var r = await adminApi('simpanTokenGuru', p);
@@ -5406,6 +5407,7 @@ async function simpanTokenGuruUI_() {
 async function ubahStatusTokenGuruUI_() {
   var p = tokenGuruPayloadUI_();
   var out = document.getElementById('tokenGuruResult');
+  if (out) out.style.display = 'block';
   if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
   var aktif = String((document.getElementById('toggleStatusTokenGuru') || {}).dataset.aktif || 'true') !== 'true';
   try {

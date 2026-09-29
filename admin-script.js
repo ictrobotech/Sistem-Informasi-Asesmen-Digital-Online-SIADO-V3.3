@@ -5347,17 +5347,25 @@ function bindTokenGuruUI_() {
   if (dice) dice.addEventListener('click', function() { var e=document.getElementById('tokenGuruNilai'); if(e) e.value=buatTokenAcak_(); });
   if (save) save.addEventListener('click', simpanTokenGuruUI_);
   if (toggle) {
-    // Default mengikuti status akses yang baru dibuat (aktif). Status global
-    // admin tetap divalidasi oleh backend saat tombol ditekan.
-    toggle.dataset.aktif = 'true';
-    toggle.classList.remove('admin-secondary');
-    toggle.classList.add('admin-primary');
-    toggle.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
-    toggle.style.borderColor = '#15803d';
-    toggle.innerHTML = '<i class="fa-solid fa-toggle-on"></i> Rombel Aktif';
+    // Status awal belum diketahui sebelum data token dimuat: tampilkan abu-abu.
+    setStatusTokenGuruTampilan_(false);
     toggle.addEventListener('click', ubahStatusTokenGuruUI_);
   }
   if (refresh) refresh.addEventListener('click', muatTokenGuruUI_);
+}
+
+function setStatusTokenGuruTampilan_(aktif) {
+  var tombol = document.getElementById('toggleStatusTokenGuru');
+  if (!tombol) return;
+  aktif = !!aktif;
+  tombol.dataset.aktif = String(aktif);
+  tombol.classList.toggle('admin-primary', aktif);
+  tombol.classList.toggle('admin-secondary', !aktif);
+  tombol.style.background = aktif ? 'linear-gradient(135deg,#16a34a,#15803d)' : '';
+  tombol.style.borderColor = aktif ? '#15803d' : '';
+  tombol.innerHTML = aktif
+    ? '<i class="fa-solid fa-toggle-on"></i> Rombel Aktif'
+    : '<i class="fa-solid fa-toggle-off"></i> Rombel Nonaktif';
 }
 
 function tokenGuruPayloadUI_() {
@@ -5389,17 +5397,7 @@ async function ubahStatusTokenGuruUI_() {
   try {
     var r = await adminApi('ubahStatusRombelGuru', { mapel:p.mapel, rombel:p.rombel, aktif:aktif });
     if (!r || !r.success) throw new Error((r && r.message) || 'Status gagal diubah.');
-    var tombolStatus = document.getElementById('toggleStatusTokenGuru');
-    if (tombolStatus) {
-      tombolStatus.dataset.aktif = String(aktif);
-      tombolStatus.classList.toggle('admin-primary', aktif);
-      tombolStatus.classList.toggle('admin-secondary', !aktif);
-      tombolStatus.style.background = aktif ? 'linear-gradient(135deg,#16a34a,#15803d)' : '';
-      tombolStatus.style.borderColor = aktif ? '#15803d' : '';
-      tombolStatus.innerHTML = aktif
-        ? '<i class="fa-solid fa-toggle-on"></i> Rombel Aktif'
-        : '<i class="fa-solid fa-toggle-off"></i> Rombel Nonaktif';
-    }
+    setStatusTokenGuruTampilan_(aktif);
     if(out) out.textContent = r.message || 'Status rombel berhasil diubah.';
     await muatTokenGuruUI_();
   } catch(e) { if(out) out.textContent=e.message || 'Status gagal diubah.'; }
@@ -5410,6 +5408,14 @@ async function muatTokenGuruUI_() {
   try {
     var r=await adminApi('getTokenGuruAdmin', {}); if(!r || !r.success) return;
     box.style.display='block'; var rows=r.data||[];
+    if (rows.length === 1) {
+      var satu = rows[0];
+      var m = document.getElementById('tokenGuruMapel');
+      var rb = document.getElementById('tokenGuruRombel');
+      if (m && !m.value) m.value = satu.mapel || '';
+      if (rb && !rb.value) rb.value = satu.rombel || '';
+      setStatusTokenGuruTampilan_(!!(satu.aktifGuru && satu.statusAdmin));
+    }
     box.innerHTML='<table class="admin-table"><thead><tr><th>Guru</th><th>Mapel</th><th>Rombel</th><th>Status</th></tr></thead><tbody>'+rows.map(function(x){return '<tr><td>'+escapeAdmin(x.pemilikGuru||'-')+'</td><td>'+escapeAdmin(x.mapel||'-')+'</td><td>'+escapeAdmin(x.rombel||'-')+'</td><td>'+((x.aktifGuru&&x.statusAdmin)?'Aktif':'Nonaktif')+'</td></tr>';}).join('')+'</tbody></table>';
   } catch(e) { console.warn('Token guru gagal dimuat',e); }
 }

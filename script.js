@@ -254,6 +254,9 @@ async function loadPublicConfig(forceRefresh, selectedOverride) {
     UJIAN.guruMapel = String(result.guruMapel || '');
     UJIAN.kkm = Number(result.kkm || 75);
     UJIAN.daftarRombel = result.daftarRombel || [];
+    // Simpan daftar asli sekolah. Dropdown boleh menampilkan subset sesuai
+    // mapel, tetapi daftar sumber tidak boleh tertimpa oleh subset tersebut.
+    UJIAN.semuaRombel = UJIAN.daftarRombel.slice();
     if (UJIAN.daftarRombel.length) isiPilihanRombel_(UJIAN.daftarRombel, '');
     var selectedUjian = typeof selectedOverride === 'string'
       ? selectedOverride
@@ -619,7 +622,6 @@ function setTeks_(id, teks) {
 /** Mengisi dropdown rombel dari data peserta yang terdaftar. */
 function isiPilihanRombel_(list, selected) {
   var daftar = Array.isArray(list) ? list : [];
-  UJIAN.daftarRombel = daftar.slice();
   var select = document.getElementById('kelasPeserta');
   if (!select) return;
   var options = ['<option value="">Pilih rombel Anda</option>'];
@@ -757,7 +759,9 @@ function perbaruiRombelMenurutUjian_() {
   var pilihRombel = document.getElementById('kelasPeserta');
   if (!pilihUjian || !pilihRombel) return;
 
-  var semua = Array.isArray(UJIAN.daftarRombel) ? UJIAN.daftarRombel.slice() : [];
+  var semua = Array.isArray(UJIAN.semuaRombel)
+    ? UJIAN.semuaRombel.slice()
+    : (Array.isArray(UJIAN.daftarRombel) ? UJIAN.daftarRombel.slice() : []);
   var pemilik = String(pilihUjian.value || '');
   var ujian = (UJIAN.daftarUjian || []).filter(function(item) {
     return String(item && item.pemilik || '') === pemilik;

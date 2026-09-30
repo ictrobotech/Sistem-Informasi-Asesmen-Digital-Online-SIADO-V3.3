@@ -618,10 +618,12 @@ function setTeks_(id, teks) {
 
 /** Mengisi dropdown rombel dari data peserta yang terdaftar. */
 function isiPilihanRombel_(list, selected) {
+  var daftar = Array.isArray(list) ? list : [];
+  UJIAN.daftarRombel = daftar.slice();
   var select = document.getElementById('kelasPeserta');
   if (!select) return;
   var options = ['<option value="">Pilih rombel Anda</option>'];
-  (list || []).forEach(function(item) {
+  daftar.forEach(function(item) {
     var value = String(item || '');
     if (!value) return;
     options.push('<option value="' + escapeHtml(value) + '"' +
@@ -744,6 +746,49 @@ function ujianBolehUntukRombel_(item, rombel) {
   return daftar.indexOf(String(rombel).trim().toLowerCase()) !== -1;
 }
 
+/**
+ * Setelah mapel/ujian dipilih, batasi dropdown rombel ke kelas yang
+ * ditetapkan admin untuk pemilik dan mapel ujian tersebut.
+ * Contoh: Informatika Andriyanto hanya menampilkan IX HJ Hayun dan
+ * IX Karanjalemba, bukan seluruh rombel sekolah.
+ */
+function perbaruiRombelMenurutUjian_() {
+  var pilihUjian = document.getElementById('ujianPeserta');
+  var pilihRombel = document.getElementById('kelasPeserta');
+  if (!pilihUjian || !pilihRombel) return;
+
+  var semua = Array.isArray(UJIAN.daftarRombel) ? UJIAN.daftarRombel.slice() : [];
+  var pemilik = String(pilihUjian.value || '');
+  var ujian = (UJIAN.daftarUjian || []).filter(function(item) {
+    return String(item && item.pemilik || '') === pemilik;
+  })[0];
+
+  var boleh = semua;
+  if (ujian && ujian.rombelDiizinkan !== undefined && ujian.rombelDiizinkan !== null && ujian.rombelDiizinkan !== '') {
+    var daftarIzin = Array.isArray(ujian.rombelDiizinkan)
+      ? ujian.rombelDiizinkan
+      : String(ujian.rombelDiizinkan).split(/[|,]/);
+    var petaIzin = {};
+    daftarIzin.forEach(function(item) {
+      var kunci = String(item || '').trim().toLowerCase();
+      if (kunci) petaIzin[kunci] = true;
+    });
+    // Jika admin sudah memberi batas, hanya rombel di dalam daftar yang tampil.
+    // Daftar kosong tetap berarti tidak dibatasi, sesuai aturan backend.
+    if (Object.keys(petaIzin).length) {
+      boleh = semua.filter(function(item) {
+        return !!petaIzin[String(item || '').trim().toLowerCase()];
+      });
+    }
+  }
+
+  var sebelumnya = String(pilihRombel.value || '');
+  var masihBoleh = boleh.some(function(item) {
+    return String(item).trim().toLowerCase() === sebelumnya.trim().toLowerCase();
+  });
+  isiPilihanRombel_(boleh, masihBoleh ? sebelumnya : '');
+}
+
 function isiPilihanUjian_(list, selected) {
   var select = document.getElementById('ujianPeserta');
   if (!select) return;
@@ -768,6 +813,10 @@ function isiPilihanUjian_(list, selected) {
   else if (selected && tampil.some(function(x) { return String(x.pemilik) === String(selected); })) select.value = String(selected);
   else select.value = '';
 
+  // Mapel/ujian sudah dipilih; sekarang batasi pilihan rombel sesuai
+  // penetapan admin untuk pemilik dan mapel tersebut.
+  perbaruiRombelMenurutUjian_();
+
   var hint = document.getElementById('ujianHint');
   if (hint && !tampil.length) {
     hint.textContent = daftar.length
@@ -784,6 +833,15 @@ function isiPilihanUjian_(list, selected) {
       el.addEventListener('change', perbaruiHintUjian_);
     }
   });
+  // Saring ulang pilihan rombel setiap mapel/ujian diganti.
+  var pilihUjian = document.getElementById('ujianPeserta');
+  if (pilihUjian && !pilihUjian.dataset.saringRombelBound) {
+    pilihUjian.dataset.saringRombelBound = '1';
+    pilihUjian.addEventListener('change', function() {
+      perbaruiRombelMenurutUjian_();
+      perbaruiHintUjian_();
+    });
+  }
   // Saring ulang pilihan ujian setiap rombel diganti.
   var pilihRombel = document.getElementById('kelasPeserta');
   if (pilihRombel && !pilihRombel.dataset.saringBound) {
@@ -880,10 +938,37 @@ async function mulaiAtauPulihkanUjian(silentRecovery) {
   }
 }
 
+function mapelSoalSamaDenganUjian_(soal, mapelUjian) {
+  if (!mapelUjian) return true;
+  return String(soal && soal.mapel || '').trim().toLowerCase() ===
+    String(mapelUjian).trim().toLowerCase();
+}
+
+/**
+ * Pengaman sisi peserta: payload server tidak boleh mencampur dua mapel dalam
+ * satu sesi. Filter ini bukan pengganti validasi RPC, tetapi mencegah soal
+ * KKA tampil pada sesi Informatika bila backend lama masih mengirim seluruh
+ * bank soal guru.
+ */
+function soalSesuaiMapelUjian_(daftar, mapelUjian) {
+  if (!Array.isArray(daftar) || !mapelUjian) return Array.isArray(daftar) ? daftar : [];
+  return daftar.filter(function(soal) {
+    return mapelSoalSamaDenganUjian_(soal, mapelUjian);
+  });
+}
+
 function terapkanPayloadUjian(result, initial) {
   var replaceQuestions = !!initial || result.soalDiperbarui !== false;
   var currentId = currentQuestion() ? String(currentQuestion().id_soal) : '';
-  if (replaceQuestions) UJIAN.soal = result.soal || [];
+  // `result.mapel` adalah mapel ujian yang divalidasi server; saat sinkronisasi
+  // gunakan mapel sesi sebagai fallback agar filter tetap konsisten.
+  // Mapel yang dipilih peserta menjadi sumber utama. `result.mapel` hanya
+  // fallback untuk sesi lama yang belum menyimpan mapel di lokal.
+  var mapelUjian = String((UJIAN.peserta && UJIAN.peserta.mapel) ||
+    result.mapel || '').trim();
+  if (replaceQuestions) {
+    UJIAN.soal = soalSesuaiMapelUjian_(result.soal || [], mapelUjian);
+  }
   UJIAN.versiSoal = result.versiSoal || UJIAN.versiSoal;
   if (result.timerRevision !== undefined && Number(result.timerRevision) !== Number(UJIAN.timerRevision)) {
     // Perubahan durasi oleh pengawas langsung diikuti (bukan di-min-kan).

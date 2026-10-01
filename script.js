@@ -875,8 +875,15 @@ async function refreshHalamanUjian() {
       return;
     }
     terapkanPayloadUjian(result, true);
-    setSaveStatus('saved');
-    tampilkanToastPeserta_('Halaman ujian berhasil dimuat ulang. Jawaban Anda tetap tersimpan.');
+    /* REVISI FIX 2026-10-01: refresh di tengah ujian tidak boleh mengeluarkan
+     * peserta (jawabannya sudah tersimpan di server); cukup peringatkan bila
+     * seluruh soal hilang setelah dimuat ulang. */
+    if (!(UJIAN.soal || []).length) {
+      tampilkanToastPeserta_('PERHATIAN: seluruh soal ujian ini baru saja dinonaktifkan atau ditarik oleh guru. Hubungi pengawas sebelum melanjutkan.', true);
+    } else {
+      setSaveStatus('saved');
+      tampilkanToastPeserta_('Halaman ujian berhasil dimuat ulang. Jawaban Anda tetap tersimpan.');
+    }
   } catch (error) {
     tampilkanToastPeserta_('Gagal memuat ulang. Periksa koneksi lalu coba lagi.', true);
   } finally {
@@ -920,6 +927,9 @@ async function mulaiAtauPulihkanUjian(silentRecovery) {
       return;
     }
     terapkanPayloadUjian(result, true);
+    // REVISI FIX 2026-10-01: jangan masuk halaman petunjuk / ruang ujian
+    // bila tidak ada satu pun soal yang bisa ditampilkan untuk peserta ini.
+    if (tolakUjianTanpaSoal_(result)) return;
     // Petunjuk hanya ditampilkan saat ujian benar-benar baru dimulai.
     // Peserta yang memulihkan sesi berjalan langsung kembali ke soal
     // agar sisa waktunya tidak terbuang.
@@ -944,8 +954,14 @@ async function mulaiAtauPulihkanUjian(silentRecovery) {
 
 function mapelSoalSamaDenganUjian_(soal, mapelUjian) {
   if (!mapelUjian) return true;
-  return String(soal && soal.mapel || '').trim().toLowerCase() ===
-    String(mapelUjian).trim().toLowerCase();
+  /* REVISI FIX 2026-10-01 (layar soal kosong): soal TANPA mapel (NULL/'')
+   * dianggap milik ujian aktif akun ini — konsisten dengan filter panel guru
+   * (soalSeMapelUjian_ di admin-script.js). Sebelumnya soal tanpa mapel
+   * dibuang di sisi peserta sehingga ruang ujian tampil kosong padahal
+   * bank soal guru terisi dan server mengirim soalnya. */
+  var m = String(soal && soal.mapel || '').trim();
+  if (!m) return true;
+  return m.toLowerCase() === String(mapelUjian).trim().toLowerCase();
 }
 
 /**
@@ -959,6 +975,47 @@ function soalSesuaiMapelUjian_(daftar, mapelUjian) {
   return daftar.filter(function(soal) {
     return mapelSoalSamaDenganUjian_(soal, mapelUjian);
   });
+}
+
+/**
+ * REVISI FIX 2026-10-01 (layar soal kosong): peserta TIDAK boleh masuk ruang
+ * ujian tanpa satu pun soal. Sebelumnya, bila server mengirim 0 soal (soal
+ * nonaktif, atau "kelas sasaran"/tingkat soal tidak mencakup rombel peserta)
+ * atau seluruh soal terbuang filter mapel di sisi peserta (soal tersimpan
+ * pada mapel lain milik guru, mis. KKA padahal ujian Informatika), peserta
+ * tetap dibawa ke layar ujian kosong tanpa penjelasan apa pun.
+ *
+ * Guard ini mengembalikan peserta ke layar login dengan pesan yang menyebut
+ * penyebab pastinya — termasuk mapel tempat soal guru sebenarnya tersimpan —
+ * sehingga proktor/guru langsung tahu apa yang harus diperbaiki di panel.
+ */
+function tolakUjianTanpaSoal_(result) {
+  if ((UJIAN.soal || []).length) return false;
+  var raw = Array.isArray(result && result.soal) ? result.soal : [];
+  var mapelUjian = String((UJIAN.peserta && UJIAN.peserta.mapel) ||
+    (result && result.mapel) || '').trim() || 'ujian ini';
+  var pesan;
+  if (raw.length) {
+    // Server mengirim soal, tetapi SEMUA terbuang filter mapel sisi peserta.
+    var peta = {};
+    raw.forEach(function(s) {
+      var m = String(s && s.mapel || '').trim() || '(tanpa mapel)';
+      peta[m] = (peta[m] || 0) + 1;
+    });
+    var rincian = Object.keys(peta).map(function(m) {
+      return '"' + m + '" (' + peta[m] + ' soal)';
+    }).join(', ');
+    pesan = 'Ujian "' + mapelUjian + '" tidak dapat dimulai: ' + raw.length +
+      ' soal milik guru tersimpan pada mapel lain — ' + rincian +
+      '. Perbaikan di panel guru: samakan "Mapel aktif" pada Pengaturan dengan ujian yang dibuka, ' +
+      'lalu pindahkan soal lewat Edit Soal (kolom "Mapel soal"), dan buka kembali ujiannya.';
+  } else {
+    pesan = 'Ujian "' + mapelUjian + '" belum mengirim soal apa pun untuk rombel Anda. ' +
+      'Penyebab umum: seluruh soal masih nonaktif, atau "Kelas sasaran" (tingkat VII/VIII/IX) ' +
+      'soal tidak mencakup rombel Anda. Hubungi guru mata pelajaran atau proktor.';
+  }
+  kembaliKeLogin(pesan);
+  return true;
 }
 
 function terapkanPayloadUjian(result, initial) {
@@ -1042,8 +1099,13 @@ function terapkanPayloadUjian(result, initial) {
     renderQuestion();
     // Revisi 6: guru mengubah soal/opsi jawaban -> peserta menerima versi baru
     // pada sinkronisasi berikutnya (<=10 dtk) dan langsung diberi tahu.
+    // REVISI FIX 2026-10-01: bedakan pembaruan biasa dari penarikan SELURUH
+    // soal (sinkronisasi membuat UJIAN.soal kosong di tengah ujian).
     if (!initial && UJIAN.aktif && !UJIAN.jeda) {
-      tampilkanToastPeserta_('Soal diperbarui oleh guru. Perubahan langsung tampil.', false);
+      var soalKosong = !(UJIAN.soal || []).length;
+      tampilkanToastPeserta_(soalKosong
+        ? 'PERHATIAN: seluruh soal baru saja dinonaktifkan/ditarik oleh guru. Hubungi pengawas sebelum melanjutkan.'
+        : 'Soal diperbarui oleh guru. Perubahan langsung tampil.', soalKosong);
     }
   }
   updateTimerUI();
@@ -1197,7 +1259,10 @@ function renderNavigation() {
 function renderQuestion() {
   var question = currentQuestion();
   if (!question) {
-    document.getElementById('questionCard').innerHTML = '<div class="question-loading">Tidak ada soal yang dapat ditampilkan.</div>';
+    document.getElementById('questionCard').innerHTML = '<div class="question-loading">' +
+      '<i class="fa-solid fa-triangle-exclamation"></i> Tidak ada soal yang dapat ditampilkan. ' +
+      'Soal untuk rombel/mapel Anda sedang tidak tersedia (dinonaktifkan atau ditarik oleh guru). ' +
+      'Hubungi pengawas atau guru mata pelajaran.</div>';
     return;
   }
   var id = String(question.id_soal);
@@ -3194,6 +3259,9 @@ async function mulaiDariPetunjuk_() {
     }
     UJIAN.payloadTertunda = null;
     terapkanPayloadUjian(result, true);
+    // REVISI FIX 2026-10-01: soal bisa ditarik/dinonaktifkan guru antara
+    // halaman petunjuk dan momen peserta menekan "Mulai Ujian".
+    if (tolakUjianTanpaSoal_(result)) return;
     switchScreen('examScreen');
     UJIAN.aktif = true;
     UJIAN.jeda = false;

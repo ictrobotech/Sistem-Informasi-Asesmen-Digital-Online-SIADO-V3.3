@@ -7766,6 +7766,41 @@ function daftarMapelTokenGuru_() {
 }
 
 /** Daftar rombel untuk satu mapel: batas kelas admin, atau seluruh rombel. */
+/**
+ * Angka jenjang dari nama rombel ("VII KIHAJAR DEWANTARA" -> 7).
+ * Menerima angka Romawi (I–XII) maupun angka Arab (7/8/9). Nama tanpa
+ * jenjang yang dikenali mengembalikan 99 supaya diletakkan paling bawah.
+ */
+function jenjangRombel_(nama) {
+  var awal = String(nama || '').trim().split(/[\s.]+/)[0] || '';
+  if (/^\d{1,2}$/.test(awal)) return parseInt(awal, 10);
+  var romawi = awal.toUpperCase();
+  if (!/^[IVX]{1,4}$/.test(romawi)) return 99;
+  var peta = { I: 1, V: 5, X: 10 };
+  var jumlah = 0;
+  for (var i = 0; i < romawi.length; i++) {
+    var kini = peta[romawi[i]];
+    var lanjut = peta[romawi[i + 1]] || 0;
+    jumlah += kini < lanjut ? -kini : kini;
+  }
+  return jumlah > 0 ? jumlah : 99;
+}
+
+/**
+ * REVISI 2026-10-03: mengurutkan daftar rombel menaik menurut jenjang
+ * (VII -> VIII -> IX, lalu X–XII bila ada). Urutan asal dipertahankan di
+ * dalam satu jenjang, sehingga urutan yang sudah diatur admin tetap
+ * dihormati. Dipakai dropdown Rombel pada kartu Token Ujian.
+ */
+function urutkanRombelJenjang_(daftar) {
+  return (daftar || []).map(function(nama, idx) {
+    return { nama: nama, idx: idx, jenjang: jenjangRombel_(nama) };
+  }).sort(function(a, b) {
+    if (a.jenjang !== b.jenjang) return a.jenjang - b.jenjang;
+    return a.idx - b.idx;
+  }).map(function(item) { return item.nama; });
+}
+
 function daftarRombelTokenGuru_(mapel) {
   var daftar = [];
   function tambah(nilai) {
@@ -7784,7 +7819,8 @@ function daftarRombelTokenGuru_(mapel) {
       tambah(item && item.rombel !== undefined ? item.rombel : item);
     });
   }
-  return daftar;
+  // VII -> VIII -> IX (urutan asal dipertahankan di dalam satu jenjang).
+  return urutkanRombelJenjang_(daftar);
 }
 
 /** Mengisi dropdown Mapel pada kartu token. */
@@ -7874,6 +7910,8 @@ async function muatRombelTokenGuru_(paksa) {
     if (mapel) payload.mapel = mapel;
     var hasil = await adminApi('getDataPeserta', payload);
     if (hasil && hasil.success && Array.isArray(hasil.rombel)) {
+      // Server boleh mengirim urutan lain (mis. menurut abjad); panel
+      // menampilkannya menaik menurut jenjang VII -> VIII -> IX.
       ADMIN.rombel = hasil.rombel;
       return true;
     }

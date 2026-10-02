@@ -555,6 +555,12 @@ function bindAdminInterface() {
     var tipeEl = document.getElementById(prefix + 'Tipe');
     if (tipeEl) tipeEl.addEventListener('change', function() { renderOpsiGambar_(prefix); renderKunciGambar_(prefix); });
     pasangLabelKolomKiri_(prefix);
+    ['JodohLabelKiri', 'JodohLabelKanan'].forEach(function(sufiks) {
+      var elLabel = document.getElementById(prefix + sufiks);
+      if (!elLabel) return;
+      elLabel.autocomplete = 'off';
+      elLabel.addEventListener('input', function() { perbaruiPratinjauJodoh_(prefix); });
+    });
     perbaruiPratinjauJodoh_(prefix);
     renderKunciGambar_(prefix);
   });
@@ -1540,6 +1546,15 @@ function pasangLabelKolomKiri_(prefix) {
   }
 }
 
+/** Label kolom tabel Menjodohkan yang bisa diganti guru (bawaan dipertahankan). */
+function labelJodoh_(prefix) {
+  var elKiri = document.getElementById(prefix + 'JodohLabelKiri');
+  var elKanan = document.getElementById(prefix + 'JodohLabelKanan');
+  var kiri = elKiri ? String(elKiri.value || '').trim() : '';
+  var kanan = elKanan ? String(elKanan.value || '').trim() : '';
+  return { kiri: kiri || 'Pernyataan', kanan: kanan || 'Pasangan Jawaban' };
+}
+
 /**
  * Pratinjau tabel Menjodohkan persis seperti tampilan peserta
  * (kolom kiri & pasangan, lengkap dengan gambar bila ada).
@@ -1549,7 +1564,7 @@ function perbaruiPratinjauJodoh_(prefix) {
   var state = JODOH_STATE[prefix];
   if (!prev) return;
   if (!state) { prev.innerHTML = ''; return; }
-  var label = 'Pernyataan';
+  var label = labelJodoh_(prefix);
   var baris = state.rows.filter(function(r) {
     return String(r.text || '').trim() || String(r.pasangan || '').trim() ||
       String(r.gambar || '').trim() || String(r.pasanganGambar || '').trim();
@@ -1562,7 +1577,7 @@ function perbaruiPratinjauJodoh_(prefix) {
   }
   /* 1) Tampilan peserta — persis seperti yang dilihat peserta ujian. */
   var tampilan = '<div class="pgk-cat-scroll"><table class="pgk-table jodoh-table"><thead><tr><th>' +
-    SRich.escapeHtml(label) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
+    SRich.escapeHtml(label.kiri) + '</th><th>' + SRich.escapeHtml(label.kanan) + '</th></tr></thead><tbody>' +
     baris.map(function(r, i) {
       var kiri = String(r.text || '').trim() ? SRich.renderRich(r.text) : '<em>(gambar saja)</em>';
       var kanan = String(r.pasangan || '').trim() ? SRich.escapeHtml(r.pasangan) : 'Pilih pasangan';
@@ -1987,6 +2002,7 @@ function validateSoalStruct_(prefix) {
  *   - opsi Menjodohkan : { id, text, pasangan, gambar, alt, pasanganGambar, pasanganAlt, labelKiri? }
  *   - kategori PGK     : penanda tersembunyi data-siado-pgk-gambar pada pertanyaan
  *   - label kolom kiri : data-siado-pgk-label (PGK) / opsi[0].labelKiri (Menjodohkan)
+ *   - label kolom kanan: opsi[0].labelKanan (Menjodohkan; bawaan "Pasangan Jawaban")
  * ================================================================== */
 var GAMBAR_OPSI_STATE = { f: [], e: [] };
 
@@ -2734,12 +2750,20 @@ async function buildQuestionPayload(prefix) {
     var hurufKunciForm = hurufKunciPilihan_(kunci, optionsFromField(prefix));
     if (hurufKunciForm.length) kunci = tipe === 'PG' ? hurufKunciForm[0] : hurufKunciForm.join(',');
   }
+  /* Label kolom tabel Menjodohkan disimpan pada opsi pertama, sama seperti
+     yang dibaca halaman peserta (opsi[0].labelKiri / labelKanan). */
+  var opsiSoal = optionsFromField(prefix);
+  if (tipe === 'MENJODOHKAN' && opsiSoal.length) {
+    var labelJodohSimpan = labelJodoh_(prefix);
+    opsiSoal[0].labelKiri = labelJodohSimpan.kiri;
+    opsiSoal[0].labelKanan = labelJodohSimpan.kanan;
+  }
   var hasil = {
     id_soal: prefix === 'e' ? document.getElementById('eId').value : undefined,
     tipe: tipe,
     poin: document.getElementById(prefix + 'Poin').value,
     pertanyaan: pertanyaanHtml,
-    opsi: optionsFromField(prefix),
+    opsi: opsiSoal,
     kunci_jawaban: kunci,
     stimulus_deskripsi: nilaiInput_(prefix + 'DeskripsiStimulus'),
     stimulus_gambar: media.gambar,
@@ -3240,6 +3264,10 @@ function openEditQuestion(id) {
       };
     }));
   }
+  /* Label kolom Menjodohkan yang tersimpan dikembalikan ke penyunting. */
+  var opsiPertamaEdit = (Array.isArray(question.opsi) && question.opsi[0]) || {};
+  setNilaiInput_('eJodohLabelKiri', opsiPertamaEdit.labelKiri || '');
+  setNilaiInput_('eJodohLabelKanan', opsiPertamaEdit.labelKanan || '');
   document.getElementById('eOpsi').value = optionsToLines(question);
   /* Gambar kunci/rubrik yang tersimpan dikembalikan ke penyunting. */
   KUNCI_GAMBAR_STATE.e = SRich.kunciGambarParse(question.pertanyaan).map(function(item) {
@@ -5601,7 +5629,10 @@ function uraiMenjodohkanExcel_(question) {
       return { pernyataan: 'Pernyataan ' + id, pasangan: teksExcelDariHtml_(jodoh[id]) || '-' };
     });
   }
-  return { baris: baris, labelKiri: 'Pernyataan', pasangan: true };
+  var opsiLabel = (opsi[0] || {});
+  var labelKiriExcel = String(opsiLabel.labelKiri || '').trim() || 'Pernyataan';
+  var labelKananExcel = String(opsiLabel.labelKanan || '').trim() || 'Pasangan Jawaban';
+  return { baris: baris, labelKiri: labelKiriExcel, labelKanan: labelKananExcel, pasangan: true };
 }
 
 /**
@@ -6333,7 +6364,7 @@ async function buatExcelBankSoal_(opsi) {
           tingkatDariNilai_(question.tingkat) + '  •  Nomor ' + (petaNomor[String(question.id_soal)] || '-') +
           '  •  Menjodohkan  •  Poin ' + angkaPoinExcel_(question.poin) + '  •  ' + (question.aktif ? 'AKTIF' : 'NONAKTIF'),
         pertanyaan: truncate(teksExcelDariHtml_(question.pertanyaan) || '-', 600),
-        header: ['No', uraiJodoh.labelKiri + ' / Soal', 'Pasangan (Kunci)'],
+        header: ['No', uraiJodoh.labelKiri, uraiJodoh.labelKanan],
         rata: ['tengah', 'kiri', 'kiri'],
         baris: uraiJodoh.baris.map(function(item, index) { return [index + 1, item.pernyataan, item.pasangan]; }),
         hias: function(gayaBaris) {

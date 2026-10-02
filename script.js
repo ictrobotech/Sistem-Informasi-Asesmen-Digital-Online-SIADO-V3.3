@@ -1467,7 +1467,9 @@ function renderAnswerInput(question, value) {
     // Peserta memilih jawaban dari daftar yang sudah diacak server.
     var jodoh = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     var pilihan = Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : [];
+    /* Nama kolom bisa diganti guru; soal lama tetap memakai nama bawaan. */
     var labelJodoh = String((options[0] && options[0].labelKiri) || '').trim() || 'Pernyataan';
+    var labelJodohKanan = String((options[0] && options[0].labelKanan) || '').trim() || 'Pasangan Jawaban';
     /* Peta teks pasangan -> gambar pasangan (server mengacak urutan pilihan). */
     var gambarPasangan = {};
     var pasanganBergambar = false;
@@ -1490,7 +1492,7 @@ function renderAnswerInput(question, value) {
       var teksPasangan = String(option.pasangan || '');
       if (option.pasanganGambar && option.pasanganJenis === 'teks' && teksPasangan) lampiranKanan[teksPasangan] = option.pasanganGambar;
     });
-    return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
+    return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>' + escapeHtml(labelJodohKanan) + '</th></tr></thead><tbody>' +
       options.map(function(option, index) {
         var terpilih = String(jodoh[option.id] || '');
         var daftar = pilihan.map(function(teks) {

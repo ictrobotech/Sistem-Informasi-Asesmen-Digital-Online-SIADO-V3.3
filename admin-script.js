@@ -1472,7 +1472,7 @@ async function loadDashboard() {
 function updateQuestionFormatHelp(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   var help = {
-    PG: '<strong>PG Biasa:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>. ' +
+    PG: '<strong>Pilihan Ganda:</strong> tulis 1 opsi per baris. Contoh opsi: Jakarta, Bandung, Palu. Kunci jawaban: <strong>A</strong>. ' +
       '<strong>Rumus:</strong> copy-paste langsung dari Word/AI didukung otomatis, atau tulis <strong>$x^2 + y^2 = z^2$</strong> / <strong>\\frac{a}{b}</strong> — tampil rapi di peserta.',
     PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai. ' +
       'Rumus pada pernyataan: copy-paste langsung dari Word/AI didukung otomatis.',
@@ -2470,7 +2470,7 @@ function labelSumberMedia_(sumber) {
 
 /** Label tipe soal yang ramah dibaca pada kotak dialog. */
 function labelTipeSoal_(tipe) {
-  return { PG: 'PG Biasa', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
+  return { PG: 'Pilihan Ganda', PGK: 'PGK Kategori', PGK_MCMA: 'PGK MCMA', MENJODOHKAN: 'Menjodohkan',
            ISIAN: 'Isian', URAIAN: 'Uraian' }[String(tipe || '').toUpperCase()] || String(tipe || '-');
 }
 

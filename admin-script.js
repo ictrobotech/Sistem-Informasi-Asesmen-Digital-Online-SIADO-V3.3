@@ -1622,7 +1622,7 @@ function perbaruiPratinjauJodoh_(prefix) {
       ' <span class="jodoh-kunci-sama">=</span> <b>' + SRich.escapeHtml(hurufKunci + kanan) + '</b></li>';
   }).join('');
   prev.innerHTML = tampilan +
-    '<div class="jodoh-kunci-panel"><strong><i class="fa-solid fa-key"></i> Kunci pasangan (hanya tampak di panel):</strong>' +
+    '<div class="jodoh-kunci-panel"><strong><i class="fa-solid fa-key"></i> Kunci Pasangan (Hanya Tampak Di Panel):</strong>' +
     '<ol class="jodoh-kunci-list">' + daftarKunci + '</ol></div>';
   /* Rumus di pernyataan/pasangan ikut dirender KaTeX (dulu hanya PGK yang
      melakukannya, sehingga rumus Menjodohkan tampil sebagai kode LaTeX). */

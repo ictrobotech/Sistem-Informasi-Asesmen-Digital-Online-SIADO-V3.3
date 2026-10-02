@@ -1275,7 +1275,7 @@ function renderQuestion() {
     mediaHtml = '<p class="stimulus-intro">' + formatText(deskripsiSoal) + '</p>' + mediaHtml;
   }
   var questionHtml = mediaHtml +
-    '<div class="question-content question-protected rich-content" data-protected-question="true">' + SRich.renderRich(question.pertanyaan) + '</div>';
+    '<div class="question-content question-protected rich-content" data-protected-question="true">' + SRich.renderRich(SRich.stripKunciMarker_(question.pertanyaan)) + '</div>';
 
   questionHtml += '<section class="answer-section" data-answer-type="' + escapeHtml(type) + '">' +
     '<p class="answer-label"><i class="fa-solid fa-pen-to-square"></i> Jawaban Anda' +
@@ -1473,26 +1473,38 @@ function renderAnswerInput(question, value) {
     var pasanganBergambar = false;
     options.forEach(function(option) {
       var teksPasangan = String(option.pasangan || '');
-      if (option.pasanganGambar && teksPasangan) gambarPasangan[teksPasangan] = { url: option.pasanganGambar, alt: option.pasanganAlt || '' };
+      if (option.pasanganGambar && option.pasanganJenis !== 'teks') {
+        gambarPasangan[teksPasangan || ('pasangan-' + option.id)] = { url: option.pasanganGambar, alt: option.pasanganAlt || '' };
+      }
     });
     Object.keys(gambarPasangan).forEach(function() { pasanganBergambar = true; });
     var daftarPasanganBergambar = pasanganBergambar
       ? '<div class="jodoh-gambar-daftar"><b>Pilihan pasangan bergambar:</b>' +
         Object.keys(gambarPasangan).map(function(teks) {
           return '<div class="jodoh-gambar-item"><span>' + escapeHtml(teks) + '</span>' +
-            SRich.lampiranGambarHtml_(gambarPasangan[teks].url, gambarPasangan[teks].alt || teks) + '</div>';
+            SRich.lampiranSlotHtml_(gambarPasangan[teks].url, 'gambar', gambarPasangan[teks].alt || teks) + '</div>';
         }).join('') + '</div>'
       : '';
+    var lampiranKanan = {};
+    options.forEach(function(option) {
+      var teksPasangan = String(option.pasangan || '');
+      if (option.pasanganGambar && option.pasanganJenis === 'teks' && teksPasangan) lampiranKanan[teksPasangan] = option.pasanganGambar;
+    });
     return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
       options.map(function(option, index) {
         var terpilih = String(jodoh[option.id] || '');
         var daftar = pilihan.map(function(teks) {
           return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(teks) + '</option>';
         }).join('');
-        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) +
-          SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar pernyataan ' + (index + 1))) + '</td>' +
+        var kiriHtml = String(option.text || '').trim()
+          ? formatTextInline(option.text) : '<em>(gambar saja)</em>';
+        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + kiriHtml +
+          SRich.lampiranSlotHtml_(option.gambar, option.gambarJenis, option.alt || ('Lampiran pernyataan ' + (index + 1))) + '</td>' +
           '<td><select class="pgk-select jodoh-select" data-answer-input="true" data-jodoh="' + escapeHtml(option.id) + '">' +
-          '<option value="">Pilih pasangan</option>' + daftar + '</select></td></tr>';
+          '<option value="">Pilih pasangan</option>' + daftar + '</select>' +
+          (lampiranKanan[String(option.pasangan || '')]
+            ? SRich.lampiranSlotHtml_(lampiranKanan[String(option.pasangan || '')], 'teks', 'Lampiran pasangan')
+            : '') + '</td></tr>';
       }).join('') + '</tbody></table>' + daftarPasanganBergambar;
   }
   if (type === 'URAIAN') {

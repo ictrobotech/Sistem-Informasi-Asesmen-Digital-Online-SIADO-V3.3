@@ -507,3 +507,8 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 .soal-teks-lampiran a{color:#1f6feb;text-decoration:underline}
 .jodoh-slot-teks{display:block;margin:6px 0 0;max-width:100%}
 .media-panel textarea.admin-input{min-height:74px}
+
+/* --- Daftar gambar kunci/rubrik pada penyunting soal --- */
+#fKunciGambar .gambar-opsi-baris .gambar-opsi-teks small{color:#6b8299}
+.kunci-gambar-mini{width:96px;height:68px;object-fit:cover;border:1px solid #cfdce9;border-radius:8px;background:#fff;margin-top:5px}
+.tabel-kunci-gambar img{display:block;margin-top:6px;max-width:220px;max-height:160px;border:1px solid #cfdce9;border-radius:8px;background:#fff;padding:2px}

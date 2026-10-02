@@ -553,9 +553,10 @@ function bindAdminInterface() {
     var opsiEl = document.getElementById(prefix + 'Opsi');
     if (opsiEl) opsiEl.addEventListener('input', function() { renderOpsiGambar_(prefix); });
     var tipeEl = document.getElementById(prefix + 'Tipe');
-    if (tipeEl) tipeEl.addEventListener('change', function() { renderOpsiGambar_(prefix); });
+    if (tipeEl) tipeEl.addEventListener('change', function() { renderOpsiGambar_(prefix); renderKunciGambar_(prefix); });
     pasangLabelKolomKiri_(prefix);
     perbaruiPratinjauJodoh_(prefix);
+    renderKunciGambar_(prefix);
   });
   document.getElementById('editQuestionForm').addEventListener('submit', function(event) { event.preventDefault(); saveEditedQuestion(); });
   document.getElementById('btnTerapkanDurasi').addEventListener('click', terapkanDurasiRealtime);
@@ -2126,6 +2127,82 @@ function pilihGambarSoal_(opsi) {
   });
 }
 
+/* ----------------- GAMBAR KUNCI JAWABAN / RUBRIK -----------------
+ * Berlaku untuk SEMUA tipe soal. Gambar disimpan pada penanda tersembunyi
+ * di dalam HTML pertanyaan (lihat SRich.kunciMarkerEmbed) sehingga tidak
+ * memerlukan perubahan database. Peserta ujian tidak pernah melihatnya
+ * (penanda dibuang oleh halaman peserta).
+ * ================================================================= */
+var KUNCI_GAMBAR_STATE = { f: [], e: [] };
+
+/** Menampilkan daftar gambar kunci/rubrik + tombol tambah pada penyunting soal. */
+function renderKunciGambar_(prefix) {
+  var wrap = document.getElementById(prefix + 'KunciGambar');
+  if (!wrap) return;
+  var daftar = KUNCI_GAMBAR_STATE[prefix] || (KUNCI_GAMBAR_STATE[prefix] = []);
+  var tipeEl = document.getElementById(prefix + 'Tipe');
+  var tipe = tipeEl ? String(tipeEl.value || '').toUpperCase() : '';
+  var catatanTipe = tipe === 'PG' || tipe === 'PGK_MCMA'
+    ? 'Berguna untuk menampilkan pembahasan bergambar pada kunci.'
+    : (tipe === 'ISIAN' || tipe === 'URAIAN'
+      ? 'Berguna untuk contoh jawaban atau pedoman penskoran bergambar.'
+      : 'Berguna untuk memperjelas kunci tiap pernyataan/pasangan.');
+  var html = '<h5><i class="fa-solid fa-key"></i> Gambar pada kunci / rubrik (opsional — semua tipe soal)</h5>' +
+    '<p>Lampirkan gambar pada kunci jawaban atau rubrik, misalnya contoh jawaban benar atau pedoman ' +
+    'penskoran bergambar. ' + catatanTipe + ' Peserta ujian <b>tidak</b> melihat bagian ini.</p>';
+  if (!daftar.length) {
+    html += '<div class="gambar-opsi-kosong">Belum ada gambar kunci. Tekan tombol di bawah untuk menambahkan.</div>';
+  }
+  daftar.forEach(function(item, i) {
+    html += '<div class="gambar-opsi-baris">' +
+      '<span class="gambar-opsi-huruf">' + (i + 1) + '.</span>' +
+      '<span class="gambar-opsi-teks">' +
+        '<img class="kunci-gambar-mini" src="' + escapeAdmin(urlGambarTampilAdmin_(item.gambar)) + '" alt="' + escapeAdmin(item.alt || ('Gambar kunci ' + (i + 1))) + '" loading="lazy">' +
+        (item.alt ? '<br><small>' + escapeAdmin(item.alt) + '</small>' : '') +
+      '</span>' +
+      '<span class="gambar-opsi-aksi">' +
+        '<button class="admin-secondary" type="button" data-ganti-kunci-gambar="' + i + '" style="min-height:30px"><i class="fa-solid fa-cloud-arrow-up"></i> Ganti gambar</button>' +
+        '<button class="admin-danger" type="button" data-hapus-kunci-gambar="' + i + '" style="min-height:30px"><i class="fa-solid fa-xmark"></i> Hapus</button>' +
+      '</span></div>';
+  });
+  html += '<div style="margin-top:10px"><button class="admin-secondary" type="button" data-tambah-kunci-gambar="true">' +
+    '<i class="fa-solid fa-plus"></i> Tambah gambar kunci / rubrik</button></div>';
+  wrap.innerHTML = html;
+
+  wrap.querySelector('[data-tambah-kunci-gambar]').addEventListener('click', async function() {
+    var hasil = await pilihGambarSoal_({
+      judul: 'Gambar Kunci / Rubrik #' + (KUNCI_GAMBAR_STATE[prefix].length + 1),
+      keterangan: 'Gambar ini hanya tampil di panel, pada penilaian jawaban uraian, dan pada berkas Excel hasil Export Soal — tidak dikirim ke peserta ujian.'
+    });
+    if (!hasil) return;
+    KUNCI_GAMBAR_STATE[prefix].push({ gambar: hasil.url, alt: hasil.alt });
+    renderKunciGambar_(prefix);
+    showToast('Gambar kunci ditambahkan.', 'success');
+  });
+  wrap.querySelectorAll('[data-ganti-kunci-gambar]').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var i = parseInt(this.dataset.gantiKunciGambar, 10);
+      var hasil = await pilihGambarSoal_({ judul: 'Ganti Gambar Kunci #' + (i + 1) });
+      if (!hasil) return;
+      KUNCI_GAMBAR_STATE[prefix][i] = { gambar: hasil.url, alt: hasil.alt };
+      renderKunciGambar_(prefix);
+    });
+  });
+  wrap.querySelectorAll('[data-hapus-kunci-gambar]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var i = parseInt(this.dataset.hapusKunciGambar, 10);
+      KUNCI_GAMBAR_STATE[prefix].splice(i, 1);
+      renderKunciGambar_(prefix);
+    });
+  });
+}
+
+/** Mengosongkan daftar gambar kunci setelah soal tersimpan. */
+function bersihkanKunciGambar_(prefix) {
+  KUNCI_GAMBAR_STATE[prefix] = [];
+  renderKunciGambar_(prefix);
+}
+
 /* ------------------- GAMBAR OPSI (PG & PGK MCMA) ------------------- */
 function opsiTeksBaris_(prefix) {
   var el = document.getElementById(prefix + 'Opsi');
@@ -2623,6 +2700,8 @@ async function buildQuestionPayload(prefix) {
       .replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '')
       .replace(/<span[^>]*data-siado-pgk-kategori[^>]*>\s*<\/span>/gi, '');
   }
+  /* Gambar pada kunci/rubrik berlaku untuk semua tipe soal. */
+  pertanyaanHtml = SRich.kunciMarkerEmbed(pertanyaanHtml, KUNCI_GAMBAR_STATE[prefix] || []);
   var kunci = document.getElementById(prefix + 'Kunci').value;
   if (tipe === 'PGK') {
     kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
@@ -2767,6 +2846,7 @@ function clearQuestionForm(prefix) {
   resetPgkEditor(prefix, null);
   resetJodohEditor(prefix, null);
   bersihkanGambarOpsi_(prefix);
+  bersihkanKunciGambar_(prefix);
   updateQuestionFormatHelp(prefix);
   var tingkat = document.getElementById(prefix + 'Tingkat');
   if (tingkat) tingkat.value = 'SEMUA';
@@ -3028,8 +3108,17 @@ function selOpsiKunciBankSoal_(question) {
   kunci = truncate(kunci || '-', 220);
   // Kunci panjang (mis. rubrik uraian): label di baris sendiri agar rata kiri-kanan
   // tidak meregangkan jarak setelah "Kunci :". Kunci pendek tetap satu baris.
-  return baris + '<div class="bs-kunci' + (kunci.length > 24 ? ' panjang' : '') + '">' +
+  var sel = baris + '<div class="bs-kunci' + (kunci.length > 24 ? ' panjang' : '') + '">' +
     '<b class="bs-kunci-label">Kunci :</b> ' + escapeAdmin(kunci) + '</div>';
+  /* Gambar pada kunci/rubrik tampil di bawah isi kunci (semua tipe soal). */
+  var lampiranKunci = SRich.kunciGambarParse(question.pertanyaan);
+  if (lampiranKunci.length) {
+    sel += '<div class="kunci-gambar-panel"><span class="bs-kunci-gambar-label">Gambar kunci / rubrik:</span>' +
+      lampiranKunci.map(function(item, i) {
+        return SRich.lampiranSlotHtml_(item.url, 'gambar', item.alt || ('Gambar kunci ' + (i + 1)));
+      }).join('') + '</div>';
+  }
+  return sel;
 }
 
 /** Kolom STIMULUS: teks polos "Gambar" / "Video", atau "-" bila kosong. */
@@ -3131,6 +3220,11 @@ function openEditQuestion(id) {
     }));
   }
   document.getElementById('eOpsi').value = optionsToLines(question);
+  /* Gambar kunci/rubrik yang tersimpan dikembalikan ke penyunting. */
+  KUNCI_GAMBAR_STATE.e = SRich.kunciGambarParse(question.pertanyaan).map(function(item) {
+    return { gambar: item.url, alt: item.alt || '' };
+  });
+  renderKunciGambar_('e');
   /* Gambar opsi (PG / PGK MCMA) yang tersimpan dikembalikan ke penyunting. */
   GAMBAR_OPSI_STATE.e = (question.opsi || []).map(function(op) {
     return op && op.gambar ? { gambar: op.gambar, alt: op.alt || '' } : null;
@@ -3656,7 +3750,8 @@ function renderEssayTable(rows) {
       ? ''
       : (isFinite(Number(nilaiTersimpan)) ? Number(nilaiTersimpan) : '');
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong><br>' + badge(row.kelas, 'blue') + '<br><span style="font-size:11px;color:#71879c">' + escapeAdmin(row.username) + '</span></td>' +
-      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(SRich.stripHtml(row.pertanyaan)) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') + '</div></td>' +
+      '<td><div class="essay-question"><strong>Soal #' + escapeAdmin(row.id_soal) + '</strong><br>' + escapeAdmin(SRich.stripHtml(row.pertanyaan)) + '</div><div class="essay-rubric"><strong>Rubrik:</strong><br>' + escapeAdmin(row.rubrik || '-') +
+        '<div class="tabel-kunci-gambar">' + SRich.lampiranKunciHtml_(row.pertanyaan) + '</div></div></td>' +
       '<td><div class="essay-answer">' + escapeAdmin(row.jawaban || '-') + '</div></td><td>' + statusBadge(row.status) + '</td>' +
       '<td><input class="admin-input essay-score" type="number" min="0" max="' + escapeAdmin(row.poin_maksimal) + '" step="0.01" value="' + escapeAdmin(numericScore) + '" inputmode="decimal" autocomplete="off" aria-label="Nilai uraian maksimal ' + escapeAdmin(row.poin_maksimal) + '"><br><small>Maks. ' + escapeAdmin(row.poin_maksimal) + '</small> <small class="essay-draft-flag" style="display:none;color:#b45309;font-weight:700">belum disimpan</small></td>' +
       '<td><button class="mini-button edit" type="button" data-grade-session="' + escapeAdmin(row.session_id) + '" data-grade-question="' + escapeAdmin(row.id_soal) + '"><i class="fa-solid fa-floppy-disk"></i> Simpan</button></td></tr>';
@@ -5125,6 +5220,9 @@ function opsiExcelBankSoal_(question) {
  * Menjodohkan: pasangan per nomor; Isian/Uraian: kunci atau rubrik.
  */
 function kunciExcelBankSoal_(question) {
+  /* Kunci teks menurut tipe soal, lalu ditambah tautan gambar kunci
+     (bila ada) supaya gambar tidak hilang pada berkas Excel. */
+  var dasar = (function() {
   var tipe = String(question.tipe || '').toUpperCase();
   var opsi = Array.isArray(question.opsi) ? question.opsi : [];
   var kunci = question.kunci_jawaban;
@@ -5164,6 +5262,10 @@ function kunciExcelBankSoal_(question) {
   }
   var teks = (kunci === undefined || kunci === null || typeof kunci === 'object') ? '' : String(kunci);
   return teksExcelDariHtml_(teks) || '-';
+  })();
+  var tautan = teksTautanGambarKunci_(question);
+  if (!tautan) return dasar;
+  return String(dasar || '').replace(/\s+$/, '') + '\n' + tautan;
 }
 
 /** Sel "Opsi / Kunci" untuk lembar BANK SOAL — mengikuti bentuk tabel panel. */
@@ -5183,6 +5285,30 @@ function selStimulusExcel_(question) {
 }
 
 /** URL stimulus yang sah dipakai sebagai tautan Excel (harus http/https). */
+/** Semua URL gambar kunci/rubrik sebuah soal (semua tipe soal). */
+function urlGambarKunciExcel_(question) {
+  var hasil = [];
+  SRich.kunciGambarParse(question && question.pertanyaan).forEach(function(item) {
+    var bersih = urlStimulusExcel_(item.url);
+    if (bersih && hasil.indexOf(bersih) === -1) hasil.push(bersih);
+  });
+  return hasil;
+}
+
+/** Rincian gambar kunci/rubrik untuk lembar "Gambar Kunci". */
+function entriGambarKunciExcel_(question) {
+  return SRich.kunciGambarParse(question && question.pertanyaan).map(function(item) {
+    return { alt: item.alt || '', url: item.url };
+  });
+}
+
+/** Baris teks tautan gambar kunci (dipakai pada sel kunci di lembar Excel). */
+function teksTautanGambarKunci_(question) {
+  return urlGambarKunciExcel_(question).map(function(url) {
+    return 'Gambar kunci: ' + url;
+  }).join('\n');
+}
+
 /** Semua URL gambar yang dilampirkan pada opsi/pernyataan/kategori/pasangan. */
 /** Judul kolom lembar "Gambar Opsi". */
 function opsiGambarHeaderExcel_() {
@@ -5964,9 +6090,15 @@ async function buatExcelBankSoal_(opsi) {
     });
   });
   if (entriGambarOpsi.length) {
+    var gambarOpsiTersemat = entriGambarOpsi.filter(function(entri) {
+      var item = petaMediaExcel[entri.url];
+      return !!(item && item.ok);
+    }).length;
     tambahSheetTabelExcelBankSoal_(workbook, {
       nama: 'Gambar Opsi',
       judul: 'GAMBAR PADA OPSI / PERNYATAAN / KATEGORI — ' + sekolah,
+      info: infoUmum + ' • Gambar bagian dalam soal: ' + entriGambarOpsi.length +
+        ' (disematkan: ' + gambarOpsiTersemat + ')',
       lebar: [8, 22, 11, 18, 14, 40, 26, 30],
       header: opsiGambarHeaderExcel_(),
       baris: entriGambarOpsi.map(function(entri) {
@@ -6000,6 +6132,65 @@ async function buatExcelBankSoal_(opsi) {
         baris.filter(soalPunyaGambarOpsiExcel_).length + ' butir',
       catatan: 'Setiap gambar juga dapat dibuka lewat tautan pada kolom Gambar (tautan). ' +
         'Untuk soal yang tidak dilampiri gambar, gambar tidak dibuat. Dokumen dibuat otomatis oleh SIADO.'
+    });
+  }
+
+  /* ---- LEMBAR GAMBAR KUNCI / RUBRIK (semua tipe soal) ---- */
+  var entriGambarKunci = [];
+  baris.forEach(function(question) {
+    var nomorSoalK = petaNomor[String(question.id_soal)] || '';
+    entriGambarKunciExcel_(question).forEach(function(entri) {
+      entriGambarKunci.push({
+        nomor: nomorSoalK, mapel: String(question.mapel || '-'), kelas: tingkatDariNilai_(question.tingkat) || 'SEMUA',
+        tipe: labelTipeBankSoal_(question.tipe), alt: entri.alt, url: entri.url
+      });
+    });
+  });
+  if (entriGambarKunci.length) {
+    var gambarKunciTersemat = entriGambarKunci.filter(function(entri) {
+      var item = petaMediaExcel[entri.url];
+      return !!(item && item.ok);
+    }).length;
+    tambahSheetTabelExcelBankSoal_(workbook, {
+      nama: 'Gambar Kunci',
+      judul: 'GAMBAR PADA KUNCI JAWABAN / RUBRIK — ' + sekolah,
+      info: infoUmum + ' • Gambar kunci/rubrik: ' + entriGambarKunci.length +
+        ' (disematkan: ' + gambarKunciTersemat + ')',
+      /* Kolom "Gambar" khusus tempat menyematkan gambar kunci, jadi
+         keterangan & tautan tetap terbaca (gambar tidak menimpa teks). */
+      lebar: [8, 22, 11, 18, 26, 34, 30],
+      rata: ['tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'kiri', 'kiri'],
+      header: ['No.', 'Mapel', 'Kelas', 'Tipe', 'Gambar', 'Keterangan Gambar', 'Gambar (tautan)'],
+      baris: entriGambarKunci.map(function(entri) {
+        return [String(entri.nomor), entri.mapel, entri.kelas, entri.tipe, '', entri.alt || '-', entri.url];
+      }),
+      hias: function(gayaBaris, nilai, indeks, sheetTujuan) {
+        var entri = entriGambarKunci[indeks] || {};
+        gayaBaris.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF102A43' } };
+        gayaBaris.getCell(4).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF7A4B00' } };
+        pasangTautanExcel_(gayaBaris.getCell(7), entri.url, 'Buka gambar');
+        var item = petaMediaExcel[entri.url];
+        if (item && item.ok) {
+          var idGambarKunci = daftarkanGambarExcel_(entri.url);
+          if (idGambarKunci !== null && idGambarKunci !== undefined) {
+            var skalaK = Math.min(1, 220 / Math.max(1, item.lebar), 150 / Math.max(1, item.tinggi));
+            var lebarK = Math.max(24, Math.round(item.lebar * skalaK));
+            var tinggiK = Math.max(18, Math.round(item.tinggi * skalaK));
+            try {
+              sheetTujuan.addImage(idGambarKunci, {
+                tl: { col: 4 + 0.08, row: gayaBaris.number - 1 + 0.08 },
+                ext: { width: lebarK, height: tinggiK },
+                editAs: 'oneCell'
+              });
+              gayaBaris.height = Math.max(gayaBaris.height || 24, tinggiK * 0.75 + 18);
+            } catch (galat) { /* tautannya tetap ada */ }
+          }
+        }
+      },
+      ringkasan: 'Gambar kunci/rubrik: ' + entriGambarKunci.length + ' gambar  •  Soal: ' +
+        baris.filter(function(q) { return urlGambarKunciExcel_(q).length > 0; }).length + ' butir',
+      catatan: 'Berisi gambar pada kunci jawaban / rubrik (semua tipe soal). Kolom "Gambar (tautan)" juga ' +
+        'memuat tautan yang bisa diklik. Dokumen dibuat otomatis oleh SIADO.'
     });
   }
 
@@ -6423,6 +6614,12 @@ async function exportBankSoalExcel(mode) {
       });
       soalGambarOpsi.forEach(function(q) {
         urlGambarOpsiExcel_(q).forEach(function(url) {
+          if (url && urlGambar.indexOf(url) === -1) urlGambar.push(url);
+        });
+      });
+      /* Gambar kunci/rubrik (semua tipe soal) ikut diunduh agar bisa disematkan. */
+      tampil.forEach(function(q) {
+        urlGambarKunciExcel_(q).forEach(function(url) {
           if (url && urlGambar.indexOf(url) === -1) urlGambar.push(url);
         });
       });

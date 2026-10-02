@@ -49,8 +49,10 @@
     table: {}, thead: {}, tbody: {}, tfoot: {}, tr: {}, td: { colspan: 1, rowspan: 1 }, th: { colspan: 1, rowspan: 1 }, caption: {},
     img: { src: 1, alt: 1, width: 1, height: 1 },
     span: { 'class': 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1,
-            'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1, hidden: 1 },
-    div: { 'data-siado-pgk-kategori': 1, 'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1, hidden: 1 },
+            'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1,
+            'data-siado-kunci-gambar': 1, 'data-siado-kunci-alt': 1, hidden: 1 },
+    div: { 'data-siado-pgk-kategori': 1, 'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1,
+           'data-siado-kunci-gambar': 1, 'data-siado-kunci-alt': 1, hidden: 1 },
     svg: { xmlns: 1, viewbox: 1, width: 1, height: 1, role: 1, 'aria-label': 1 },
     g: {}, rect: { x: 1, y: 1, width: 1, height: 1, rx: 1, ry: 1, fill: 1, stroke: 1, 'stroke-width': 1 },
     line: { x1: 1, y1: 1, x2: 1, y2: 1, stroke: 1, 'stroke-width': 1, 'stroke-dasharray': 1 },
@@ -78,7 +80,7 @@
     if (/^(points)$/.test(name)) return /^[-\d.,\s]+$/.test(v) ? v : '';
     if (/^(d)$/.test(name)) return /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+\-()]+$/.test(v) ? v : '';
     if (/^(class)$/.test(name)) return /\bsiado-tex\b/.test(v) ? 'siado-tex' : '';
-    if (/^(data-tex|data-siado-pgk-kategori|data-siado-pgk-gambar|data-siado-pgk-label)$/.test(name)) return v.slice(0, 4000);
+    if (/^(data-tex|data-siado-pgk-kategori|data-siado-pgk-gambar|data-siado-pgk-label|data-siado-kunci-gambar|data-siado-kunci-alt)$/.test(name)) return v.slice(0, 4000);
     if (/^(xmlns|role|text-anchor|dominant-baseline|font-weight)$/.test(name)) return v.slice(0, 60);
     if (/^(aria-label)$/.test(name)) return v.slice(0, 300);
     if (name === 'hidden') return 'hidden';
@@ -1019,6 +1021,53 @@
 
   /* --------------- PENANDA KATEGORI PGK (metadata) --------------- */
   /** Menyematkan daftar kategori ke dalam HTML pertanyaan (tersembunyi). */
+  /* --------------- PENANDA GAMBAR KUNCI / RUBRIK (metadata) ---------------
+   * Gambar pada kunci jawaban atau rubrik disimpan pada penanda tersembunyi di
+   * dalam HTML pertanyaan, sehingga tidak perlu mengubah struktur database.
+   * PENTING: penanda ini TIDAK ikut ditampilkan pada peserta ujian
+   * (lihat stripKunciMarker_ yang dipakai halaman peserta).
+   * ======================================================================== */
+  function bersihkanPenandaKunci_(html) {
+    return String(html || '')
+      .replace(/<(div|span)[^>]*data-siado-kunci-gambar[^>]*>\s*<\/\1>/gi, '')
+      .replace(/<(div|span)[^>]*data-siado-kunci-gambar[^>]*>\s*<\/\1>\s*/gi, '');
+  }
+  /** Menyematkan daftar gambar kunci ([{url, alt}]) ke dalam HTML pertanyaan. */
+  function kunciMarkerEmbed(pertanyaanHtml, daftar) {
+    var base = bersihkanPenandaKunci_(pertanyaanHtml);
+    /* Daftar boleh memakai kunci 'url' atau 'gambar' (panel admin memakai
+       'gambar'), supaya pemanggil tidak perlu menyamakan nama kolom. */
+    var ambilUrl = function (item) { return String((item && (item.url || item.gambar)) || '').trim(); };
+    var isi = (daftar || []).filter(function (item) { return !!ambilUrl(item); });
+    if (!isi.length) return base;
+    var url = isi.map(ambilUrl).join('|');
+    var alt = isi.map(function (item) { return String(item.alt || '').replace(/[|]/g, ' ').trim(); }).join('|');
+    return '<div data-siado-kunci-gambar="' + escapeHtml(url) + '"' +
+      (alt.replace(/\|/g, '').trim() ? ' data-siado-kunci-alt="' + escapeHtml(alt) + '"' : '') +
+      ' hidden></div>' + base;
+  }
+  /** Membaca daftar gambar kunci dari HTML pertanyaan. */
+  function kunciGambarParse(pertanyaanHtml) {
+    var m = /data-siado-kunci-gambar="([^"]*)"/i.exec(String(pertanyaanHtml || ''));
+    if (!m) return [];
+    var urls = decodeEntities(m[1]).split('|').map(function (x) { return String(x || '').trim(); });
+    var ma = /data-siado-kunci-alt="([^"]*)"/i.exec(String(pertanyaanHtml || ''));
+    var alts = ma ? decodeEntities(ma[1]).split('|') : [];
+    var hasil = [];
+    urls.forEach(function (u, i) { if (u) hasil.push({ url: u, alt: String(alts[i] || '').trim() }); });
+    return hasil;
+  }
+  /** Versi aman untuk peserta ujian: penanda kunci dibuang seluruhnya. */
+  function stripKunciMarker_(html) {
+    return bersihkanPenandaKunci_(html);
+  }
+  /** Tautan lampiran gambar kunci (HTML) untuk panel & lembar penilaian. */
+  function lampiranKunciHtml_(pertanyaanHtml) {
+    return kunciGambarParse(pertanyaanHtml).map(function (item, i) {
+      return lampiranSlotHtml_(item.url, 'gambar', item.alt || ('Gambar kunci ' + (i + 1)));
+    }).join('');
+  }
+
   function pgkMarkerEmbed(pertanyaanHtml, kategoriList, meta) {
     var base = String(pertanyaanHtml || '').replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '').replace(/<span[^>]*data-siado-pgk-kategori[^>]*>\s*<\/span>/gi, '');
     var daftar = (kategoriList || []).map(function (item) {
@@ -1521,6 +1570,10 @@
     pgkTableHtml: pgkTableHtml,
     lampiranGambarHtml_: lampiranGambarHtml_,
     lampiranSlotHtml_: lampiranSlotHtml_,
+    kunciMarkerEmbed: kunciMarkerEmbed,
+    kunciGambarParse: kunciGambarParse,
+    stripKunciMarker_: stripKunciMarker_,
+    lampiranKunciHtml_: lampiranKunciHtml_,
     urlGambarAman_: urlGambarAman_,
     satukanBarisPernyataan: satukanBarisPernyataan,
     mountEditor: mountEditor

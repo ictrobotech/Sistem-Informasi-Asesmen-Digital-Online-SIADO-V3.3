@@ -1514,6 +1514,12 @@ function updateQuestionFormatHelp(prefix) {
     }
   }
   if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
+  /* Menjodohkan: pastikan editor & pratinjaunya selalu terisi begitu tipe
+     ini dipilih (tidak pernah kosong / tertinggal dari tipe sebelumnya). */
+  if (type === 'MENJODOHKAN') {
+    if (!JODOH_STATE[prefix] || !(JODOH_STATE[prefix].rows || []).length) resetJodohEditor(prefix);
+    else perbaruiPratinjauJodoh_(prefix);
+  }
   /* Daftar gambar opsi hanya relevan untuk PG & PGK MCMA. */
   renderOpsiGambar_(prefix);
 }
@@ -1549,10 +1555,13 @@ function perbaruiPratinjauJodoh_(prefix) {
       String(r.gambar || '').trim() || String(r.pasanganGambar || '').trim();
   });
   if (!baris.length) {
-    prev.innerHTML = '<p class="pratinjau-kosong">Belum ada pasangan. Tulis pernyataan dan pasangannya, lalu pratinjau tampil di sini.</p>';
+    prev.innerHTML = '<p class="pratinjau-kosong">Belum ada pasangan. Tulis pernyataan dan pasangannya, lalu pratinjau tampil di sini.</p>' +
+      '<p class="pratinjau-kosong">Tampilan peserta: kolom kiri berisi pernyataan, kolom kanan berupa pilihan ' +
+      'pasangan yang diacak server; kunci pasangan hanya tampil di panel ini.</p>';
     return;
   }
-  prev.innerHTML = '<div class="pgk-cat-scroll"><table class="pgk-table jodoh-table"><thead><tr><th>' +
+  /* 1) Tampilan peserta — persis seperti yang dilihat peserta ujian. */
+  var tampilan = '<div class="pgk-cat-scroll"><table class="pgk-table jodoh-table"><thead><tr><th>' +
     SRich.escapeHtml(label) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
     baris.map(function(r, i) {
       var kiri = String(r.text || '').trim() ? SRich.renderRich(r.text) : '<em>(gambar saja)</em>';
@@ -1562,6 +1571,18 @@ function perbaruiPratinjauJodoh_(prefix) {
         '<td><span class="pgk-select tiruan">' + kanan + '</span>' +
         SRich.lampiranSlotHtml_(r.pasanganGambar, r.pasanganJenis, r.pasanganAlt || ('Lampiran kolom kanan ' + (i + 1))) + '</td></tr>';
     }).join('') + '</tbody></table></div>';
+  /* 2) Kunci pasangan — sengaja hanya ada di panel, tidak pernah sampai ke peserta. */
+  var daftarKunci = baris.map(function(r, i) {
+    var kiri = String(r.text || '').trim() ? SRich.stripHtml(r.text)
+      : (String(r.gambar || '').trim() ? '(gambar/lampiran kolom kiri)' : '(kosong)');
+    var kanan = String(r.pasangan || '').trim() ? SRich.stripHtml(r.pasangan)
+      : (String(r.pasanganGambar || '').trim() ? '(gambar/lampiran kolom kanan)' : '(kosong)');
+    return '<li><span class="jodoh-kunci-kiri">' + SRich.escapeHtml(kiri) + '</span>' +
+      ' <span class="jodoh-kunci-sama">=</span> <b>' + SRich.escapeHtml(kanan) + '</b></li>';
+  }).join('');
+  prev.innerHTML = tampilan +
+    '<div class="jodoh-kunci-panel"><strong><i class="fa-solid fa-key"></i> Kunci pasangan (hanya tampak di panel):</strong>' +
+    '<ol class="jodoh-kunci-list">' + daftarKunci + '</ol></div>';
 }
 
 /**

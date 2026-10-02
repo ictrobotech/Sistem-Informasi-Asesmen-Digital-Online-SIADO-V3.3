@@ -7787,16 +7787,97 @@ function jenjangRombel_(nama) {
 }
 
 /**
- * REVISI 2026-10-03: mengurutkan daftar rombel menaik menurut jenjang
- * (VII -> VIII -> IX, lalu X–XII bila ada). Urutan asal dipertahankan di
- * dalam satu jenjang, sehingga urutan yang sudah diatur admin tetap
- * dihormati. Dipakai dropdown Rombel pada kartu Token Ujian.
+ * URUTAN TETAP rombel pada dropdown (revisi 2026-10-03, permintaan guru).
+ * Urutan resmi SMP Labschool Untad Palu: kelompok VII, VIII, lalu IX.
+ * Rombel yang tidak ada dalam daftar ini tetap tampil — diletakkan di
+ * akhir kelompok jenjangnya — sehingga rombel baru tidak pernah hilang.
+ */
+var URUTAN_ROMBEL_PILIHAN_ = [
+  'VII KH DEWANTARA',
+  'VII AHMAD DAHLAN',
+  'VII RA KARTINI',
+  'VII AHMAD YANI',
+  'VIII AGUS SALIM',
+  'VIII SIS AL JUFRI',
+  'VIII ADAM MALIK',
+  'VIII TADULAKO',
+  'IX TOMBOLOTUTU',
+  'IX S HASANUDIN',
+  'IX HJ HAYUN',
+  'IX KARANJALEMBA'
+];
+
+/** Kunci pembanding nama rombel: huruf besar tanpa spasi/tanda baca. */
+function normalisasiRombelKunci_(nama) {
+  return String(nama || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Jarak Levenshtein sederhana (untuk mencocokkan ejaan yang berbeda). */
+function jarakLevenshtein_(a, b) {
+  a = String(a || '');
+  b = String(b || '');
+  if (a === b) return 0;
+  var la = a.length, lb = b.length;
+  if (!la) return lb;
+  if (!lb) return la;
+  var baris = new Array(lb + 1);
+  for (var j = 0; j <= lb; j++) baris[j] = j;
+  for (var i = 1; i <= la; i++) {
+    var diagonal = baris[0];
+    baris[0] = i;
+    for (var k = 1; k <= lb; k++) {
+      var simpan = baris[k];
+      baris[k] = Math.min(baris[k] + 1, baris[k - 1] + 1,
+        diagonal + (a.charAt(i - 1) === b.charAt(k - 1) ? 0 : 1));
+      diagonal = simpan;
+    }
+  }
+  return baris[lb];
+}
+
+/**
+ * Peringkat satu rombel pada daftar acuan. Pencocokan dibuat toleran
+ * (huruf besar/kecil, spasi, tanda baca, dan salah ketik ringan seperti
+ * "IX TOMBOLOTU" vs "IX TOMBOLOTUTU" atau "S H SANUDIN" vs "S HASANUDIN")
+ * supaya urutan tetap benar walau penulisan di data berbeda sedikit.
+ * Mengembalikan -1 bila tidak dikenali (dianggap rombel baru).
+ */
+function peringkatRombelPilihan_(nama) {
+  var kunci = normalisasiRombelKunci_(nama);
+  if (!kunci) return -1;
+  var terbaik = -1;
+  var skorTerbaik = 0;
+  for (var i = 0; i < URUTAN_ROMBEL_PILIHAN_.length; i++) {
+    var acuan = URUTAN_ROMBEL_PILIHAN_[i];
+    var kunciAcuan = normalisasiRombelKunci_(acuan);
+    if (kunci === kunciAcuan) return i;
+    if (jenjangRombel_(nama) !== jenjangRombel_(acuan)) continue;
+    var skor = 1 - jarakLevenshtein_(kunci, kunciAcuan) / Math.max(kunci.length, kunciAcuan.length);
+    if (skor > skorTerbaik) { skorTerbaik = skor; terbaik = i; }
+  }
+  return skorTerbaik >= 0.72 ? terbaik : -1;
+}
+
+/**
+ * Mengurutkan daftar rombel: kelompok jenjang VII -> VIII -> IX, dan di
+ * dalam satu jenjang mengikuti URUTAN_ROMBEL_PILIHAN_. Rombel yang belum
+ * ada di daftar acuan muncul di akhir kelompok jenjangnya (urutan asal
+ * dipertahankan) supaya data baru tetap terlihat. Dipakai dropdown Rombel
+ * pada kartu Token Ujian.
  */
 function urutkanRombelJenjang_(daftar) {
   return (daftar || []).map(function(nama, idx) {
-    return { nama: nama, idx: idx, jenjang: jenjangRombel_(nama) };
+    return {
+      nama: nama,
+      idx: idx,
+      jenjang: jenjangRombel_(nama),
+      peringkat: peringkatRombelPilihan_(nama)
+    };
   }).sort(function(a, b) {
     if (a.jenjang !== b.jenjang) return a.jenjang - b.jenjang;
+    var pa = a.peringkat < 0 ? 999 : a.peringkat;
+    var pb = b.peringkat < 0 ? 999 : b.peringkat;
+    if (pa !== pb) return pa - pb;
     return a.idx - b.idx;
   }).map(function(item) { return item.nama; });
 }
@@ -7819,7 +7900,7 @@ function daftarRombelTokenGuru_(mapel) {
       tambah(item && item.rombel !== undefined ? item.rombel : item);
     });
   }
-  // VII -> VIII -> IX (urutan asal dipertahankan di dalam satu jenjang).
+  // Urutan tetap: VII -> VIII -> IX sesuai URUTAN_ROMBEL_PILIHAN_.
   return urutkanRombelJenjang_(daftar);
 }
 

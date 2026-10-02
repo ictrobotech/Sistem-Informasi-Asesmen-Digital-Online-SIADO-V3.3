@@ -1104,9 +1104,13 @@
    * garis bawah, daftar, gambar, dan rumus tidak diubah.
    */
   function satukanBarisPernyataan(htmlBersih) {
-    return String(htmlBersih || '')
-      .replace(/<br\s*\/?>/gi, ' ')
-      .replace(/<\/p>\s*<p>/gi, ' ');
+    var teks = String(htmlBersih || '');
+    /* Gambar pada pernyataan dipindahkan ke akhir agar tampil pada baris di
+       bawah pernyataan (bukan menyelip di tengah kalimat). */
+    var gambar = [];
+    teks = teks.replace(/<img[^>]*>/gi, function(tag) { gambar.push(tag); return ''; });
+    teks = teks.replace(/<br\s*\/?>/gi, ' ').replace(/<\/p>\s*<p>/gi, ' ');
+    return teks + gambar.map(function(tag) { return '<p class="pernyataan-gambar">' + tag + '</p>'; }).join('');
   }
   /** Menyeragamkan daftar kategori menjadi objek { nama, gambar, alt }. */
   function kategoriBerGambar_(daftar, gambar) {
@@ -1150,11 +1154,10 @@
     var interaksi = !!opts.interaksi;
     var labelKiri = String(opts.labelKiri || '').trim() || 'Pernyataan';
     var html = '<table class="pgk-cat-table"><thead><tr><th class="pgk-cat-nohead" style="width:44px">No.</th><th class="pgk-statement-head">' + escapeHtml(labelKiri) + '</th>';
+    /* Kolom kategori hanya memuat nama + kotak centang (tanpa gambar),
+       sesuai format tabel PGK Kategori. */
     for (var k = 0; k < kategori.length; k++) {
-      var kat = kategori[k];
-      html += '<th class="pgk-cat-col">' + escapeHtml(kat.nama) +
-        (kat.gambar ? '<span class="pgk-cat-gambar">' + lampiranGambarHtml_(kat.gambar, kat.alt || kat.nama, 'kategori') + '</span>' : '') +
-        '</th>';
+      html += '<th class="pgk-cat-col">' + escapeHtml(kategori[k].nama) + '</th>';
     }
     html += '</tr></thead><tbody>';
     for (var i = 0; i < statements.length; i++) {

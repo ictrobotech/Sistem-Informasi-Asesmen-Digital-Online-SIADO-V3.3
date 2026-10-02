@@ -5884,7 +5884,7 @@ async function exportBankSoalExcel(mode) {
       [{ label: 'Nama Berkas', nilai: berkas },
        { label: 'Jumlah Soal', nilai: String(tampil.length) + ' Butir' },
        { label: 'Aktif / Nonaktif', nilai: aktif + ' / ' + (tampil.length - aktif) },
-       { label: 'Mapel Tercakup', nilai: String(Object.keys(mapel).length) + ' mapel' },
+       { label: 'Mapel Tercakup', nilai: String(Object.keys(mapel).length) + ' Mapel' },
        { label: 'Cakupan', nilai: (sesuaiFilter && info.adaFilter) ? info.deskripsi : 'Seluruh Bank Soal' }]
       .concat(rincianGambar)
       .concat([{ label: 'Lembar Berkas', nilai: lembarBerkas.join(', ') },

@@ -1443,7 +1443,8 @@ function renderAnswerInput(question, value) {
       var checked = type === 'PG' ? selected === label : selected.indexOf(label) !== -1;
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
-        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' + SRich.renderRich(option.text) + '</span></label>';
+        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' +
+        SRich.renderRich(option.text) + SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar opsi ' + label)) + '</span></label>';
     }).join('') + '</div>';
   }
   if (type === 'PGK') {
@@ -1454,6 +1455,8 @@ function renderAnswerInput(question, value) {
     var infoKategori = SRich.pgkCategories(question);
     return SRich.pgkTableHtml({
       kategori: infoKategori.kategori,
+      kategoriInfo: infoKategori.kategoriInfo,
+      labelKiri: infoKategori.labelKiri,
       statements: options.map(function(option) { return { id: option.id, html: option.text }; }),
       jawaban: objectValue,
       interaksi: true,
@@ -1464,16 +1467,33 @@ function renderAnswerInput(question, value) {
     // Peserta memilih jawaban dari daftar yang sudah diacak server.
     var jodoh = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     var pilihan = Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : [];
-    return '<table class="pgk-table jodoh-table"><thead><tr><th>Pernyataan</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
+    var labelJodoh = String((options[0] && options[0].labelKiri) || '').trim() || 'Pernyataan';
+    /* Peta teks pasangan -> gambar pasangan (server mengacak urutan pilihan). */
+    var gambarPasangan = {};
+    var pasanganBergambar = false;
+    options.forEach(function(option) {
+      var teksPasangan = String(option.pasangan || '');
+      if (option.pasanganGambar && teksPasangan) gambarPasangan[teksPasangan] = { url: option.pasanganGambar, alt: option.pasanganAlt || '' };
+    });
+    Object.keys(gambarPasangan).forEach(function() { pasanganBergambar = true; });
+    var daftarPasanganBergambar = pasanganBergambar
+      ? '<div class="jodoh-gambar-daftar"><b>Pilihan pasangan bergambar:</b>' +
+        Object.keys(gambarPasangan).map(function(teks) {
+          return '<div class="jodoh-gambar-item"><span>' + escapeHtml(teks) + '</span>' +
+            SRich.lampiranGambarHtml_(gambarPasangan[teks].url, gambarPasangan[teks].alt || teks) + '</div>';
+        }).join('') + '</div>'
+      : '';
+    return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
       options.map(function(option, index) {
         var terpilih = String(jodoh[option.id] || '');
         var daftar = pilihan.map(function(teks) {
           return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(teks) + '</option>';
         }).join('');
-        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) + '</td>' +
+        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + formatTextInline(option.text) +
+          SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar pernyataan ' + (index + 1))) + '</td>' +
           '<td><select class="pgk-select jodoh-select" data-answer-input="true" data-jodoh="' + escapeHtml(option.id) + '">' +
           '<option value="">Pilih pasangan</option>' + daftar + '</select></td></tr>';
-      }).join('') + '</tbody></table>';
+      }).join('') + '</tbody></table>' + daftarPasanganBergambar;
   }
   if (type === 'URAIAN') {
     return '<textarea id="answerText" class="answer-input essay-answer" data-answer-input="true" placeholder="Tuliskan jawaban uraian Anda di sini...">' + escapeHtml(value || '') + '</textarea>';

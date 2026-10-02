@@ -48,8 +48,9 @@
     sub: {}, sup: {}, code: {}, ul: {}, ol: { start: 1 }, li: {}, blockquote: {}, pre: {}, hr: {},
     table: {}, thead: {}, tbody: {}, tfoot: {}, tr: {}, td: { colspan: 1, rowspan: 1 }, th: { colspan: 1, rowspan: 1 }, caption: {},
     img: { src: 1, alt: 1, width: 1, height: 1 },
-    span: { 'class': 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1, hidden: 1 },
-    div: { 'data-siado-pgk-kategori': 1, hidden: 1 },
+    span: { 'class': 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1,
+            'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1, hidden: 1 },
+    div: { 'data-siado-pgk-kategori': 1, 'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1, hidden: 1 },
     svg: { xmlns: 1, viewbox: 1, width: 1, height: 1, role: 1, 'aria-label': 1 },
     g: {}, rect: { x: 1, y: 1, width: 1, height: 1, rx: 1, ry: 1, fill: 1, stroke: 1, 'stroke-width': 1 },
     line: { x1: 1, y1: 1, x2: 1, y2: 1, stroke: 1, 'stroke-width': 1, 'stroke-dasharray': 1 },
@@ -77,7 +78,7 @@
     if (/^(points)$/.test(name)) return /^[-\d.,\s]+$/.test(v) ? v : '';
     if (/^(d)$/.test(name)) return /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+\-()]+$/.test(v) ? v : '';
     if (/^(class)$/.test(name)) return /\bsiado-tex\b/.test(v) ? 'siado-tex' : '';
-    if (/^(data-tex|data-siado-pgk-kategori)$/.test(name)) return v.slice(0, 4000);
+    if (/^(data-tex|data-siado-pgk-kategori|data-siado-pgk-gambar|data-siado-pgk-label)$/.test(name)) return v.slice(0, 4000);
     if (/^(xmlns|role|text-anchor|dominant-baseline|font-weight)$/.test(name)) return v.slice(0, 60);
     if (/^(aria-label)$/.test(name)) return v.slice(0, 300);
     if (name === 'hidden') return 'hidden';
@@ -1018,10 +1019,31 @@
 
   /* --------------- PENANDA KATEGORI PGK (metadata) --------------- */
   /** Menyematkan daftar kategori ke dalam HTML pertanyaan (tersembunyi). */
-  function pgkMarkerEmbed(pertanyaanHtml, kategoriList) {
+  function pgkMarkerEmbed(pertanyaanHtml, kategoriList, meta) {
     var base = String(pertanyaanHtml || '').replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '').replace(/<span[^>]*data-siado-pgk-kategori[^>]*>\s*<\/span>/gi, '');
-    if (!kategoriList || !kategoriList.length) return base;
-    return '<div data-siado-pgk-kategori="' + escapeHtml(kategoriList.join('|')) + '" hidden></div>' + base;
+    var daftar = (kategoriList || []).map(function (item) {
+      return typeof item === 'string' ? item : String((item && (item.nama || item.text)) || '');
+    });
+    if (!daftar.length) return base;
+    /* meta (opsional): { gambar: [url per kategori sesuai urutan], labelKiri: 'Sebab' } */
+    var gambar = (meta && meta.gambar) || [];
+    var labelKiri = String((meta && meta.labelKiri) || '').trim();
+    var punyaGambar = gambar.some(function (u) { return String(u || '').trim(); });
+    return '<div data-siado-pgk-kategori="' + escapeHtml(daftar.join('|')) + '"' +
+      (punyaGambar ? ' data-siado-pgk-gambar="' + escapeHtml(gambar.map(function (u) { return String(u || '').trim(); }).join('|')) + '"' : '') +
+      (labelKiri ? ' data-siado-pgk-label="' + escapeHtml(labelKiri) + '"' : '') +
+      ' hidden></div>' + base;
+  }
+  /** Membaca gambar kategori (urutan sama dengan daftar kategori). */
+  function pgkMarkerGambarParse(pertanyaanHtml) {
+    var m = /data-siado-pgk-gambar="([^"]*)"/i.exec(String(pertanyaanHtml || ''));
+    if (!m) return [];
+    return decodeEntities(m[1]).split('|').map(function (x) { return String(x || '').trim(); });
+  }
+  /** Membaca label kolom kiri tabel PGK (mis. "Sebab"/"Alasan"). */
+  function pgkMarkerLabelParse(pertanyaanHtml) {
+    var m = /data-siado-pgk-label="([^"]*)"/i.exec(String(pertanyaanHtml || ''));
+    return m ? decodeEntities(m[1]).trim() : '';
   }
   function pgkMarkerParse(pertanyaanHtml) {
     var m = /data-siado-pgk-kategori="([^"]*)"/i.exec(String(pertanyaanHtml || ''));
@@ -1039,7 +1061,12 @@
   function pgkCategories(question) {
     var q = question || {};
     var dariMarker = pgkMarkerParse(q.pertanyaan);
-    if (dariMarker) return { kategori: dariMarker, legacy: false };
+    if (dariMarker) return {
+      kategori: dariMarker,
+      kategoriInfo: kategoriBerGambar_(dariMarker, pgkMarkerGambarParse(q.pertanyaan)),
+      labelKiri: pgkMarkerLabelParse(q.pertanyaan),
+      legacy: false
+    };
     var kunci = q.kunci_jawaban;
     if (typeof kunci === 'string') { try { kunci = JSON.parse(kunci); } catch (e) { kunci = null; } }
     var unik = [];
@@ -1054,12 +1081,14 @@
         if (v && unik.indexOf(v) === -1) unik.push(v);
       });
     }
+    var gambarKunci = pgkMarkerGambarParse(q.pertanyaan);
+    var labelKunci = pgkMarkerLabelParse(q.pertanyaan);
     if (unik.length >= 2) {
       var upper = unik.map(function (x) { return x.toUpperCase(); });
       var isLegacy = upper.length === 2 && upper.indexOf('BENAR') !== -1 && upper.indexOf('SALAH') !== -1;
-      return { kategori: unik, legacy: isLegacy };
+      return { kategori: unik, kategoriInfo: kategoriBerGambar_(unik, gambarKunci), labelKiri: labelKunci, legacy: isLegacy };
     }
-    return { kategori: ['BENAR', 'SALAH'], legacy: true };
+    return { kategori: ['BENAR', 'SALAH'], kategoriInfo: kategoriBerGambar_(['BENAR', 'SALAH'], gambarKunci), labelKiri: labelKunci, legacy: true };
   }
 
   /* --------- TABEL PGK KATEGORI (format sesuai gambar) ---------
@@ -1079,15 +1108,53 @@
       .replace(/<br\s*\/?>/gi, ' ')
       .replace(/<\/p>\s*<p>/gi, ' ');
   }
+  /** Menyeragamkan daftar kategori menjadi objek { nama, gambar, alt }. */
+  function kategoriBerGambar_(daftar, gambar) {
+    var url = gambar || [];
+    return (daftar || []).map(function (item, i) {
+      if (item && typeof item === 'object') {
+        return {
+          nama: String(item.nama || item.text || ''),
+          gambar: String(item.gambar || ''),
+          alt: String(item.alt || '')
+        };
+      }
+      return { nama: String(item == null ? '' : item), gambar: String(url[i] || ''), alt: '' };
+    });
+  }
+  /** Tautan halaman aman untuk <img> (hanya http/https/data gambar). */
+  function urlGambarAman_(url) {
+    var u = String(url || '').trim();
+    if (/^https?:\/\//i.test(u)) return u;
+    if (/^data:image\/(png|jpe?g|gif|webp|bmp);base64,[A-Za-z0-9+/=]+$/i.test(u)) return u;
+    return '';
+  }
+  /**
+   * Lampiran gambar untuk opsi/pernyataan/pasangan (dipakai panel DAN peserta).
+   * gambar: URL; alt: keterangan; ket: 'samping' (default) untuk opsi PG.
+   */
+  function lampiranGambarHtml_(gambar, alt, ket) {
+    var u = urlGambarAman_(gambar);
+    if (!u) return '';
+    return '<span class="soal-gambar-lampiran' + (ket ? ' ' + escapeHtml(ket) : '') + '">' +
+      '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(alt || 'Gambar soal') + '" loading="lazy"></span>';
+  }
+
   function pgkTableHtml(opts) {
     opts = opts || {};
-    var kategori = opts.kategori || ['BENAR', 'SALAH'];
+    var kategori = kategoriBerGambar_(opts.kategoriInfo || opts.kategori || ['BENAR', 'SALAH'],
+      Array.isArray(opts.gambarKategori) ? opts.gambarKategori : []);
+    if (!kategori.length) kategori = kategoriBerGambar_(['BENAR', 'SALAH']);
     var statements = opts.statements || [];
     var jawaban = opts.jawaban || {};
     var interaksi = !!opts.interaksi;
-    var html = '<table class="pgk-cat-table"><thead><tr><th class="pgk-cat-nohead" style="width:44px">No.</th><th class="pgk-statement-head">Pernyataan</th>';
+    var labelKiri = String(opts.labelKiri || '').trim() || 'Pernyataan';
+    var html = '<table class="pgk-cat-table"><thead><tr><th class="pgk-cat-nohead" style="width:44px">No.</th><th class="pgk-statement-head">' + escapeHtml(labelKiri) + '</th>';
     for (var k = 0; k < kategori.length; k++) {
-      html += '<th class="pgk-cat-col">' + escapeHtml(kategori[k]) + '</th>';
+      var kat = kategori[k];
+      html += '<th class="pgk-cat-col">' + escapeHtml(kat.nama) +
+        (kat.gambar ? '<span class="pgk-cat-gambar">' + lampiranGambarHtml_(kat.gambar, kat.alt || kat.nama, 'kategori') + '</span>' : '') +
+        '</th>';
     }
     html += '</tr></thead><tbody>';
     for (var i = 0; i < statements.length; i++) {
@@ -1095,9 +1162,10 @@
       var id = String(st.id !== undefined ? st.id : i);
       html += '<tr><td class="pgk-cat-no">' + (i + 1) + '</td><td class="pgk-statement"><div class="rich-content">' + satukanBarisPernyataan(sanitizeHtml(st.html)) + '</div></td>';
       for (var c = 0; c < kategori.length; c++) {
-        var nilai = kategori[c];
+        var nilai = kategori[c].nama;
+        var nilaiAlt = kategori[c].alt || nilai;
         var checked = String(jawaban[id] || '') === nilai;
-        var labelTampil = nilai === 'BENAR' ? 'Benar' : (nilai === 'SALAH' ? 'Salah' : nilai);
+        var labelTampil = nilaiAlt === 'BENAR' ? 'Benar' : (nilaiAlt === 'SALAH' ? 'Salah' : nilaiAlt);
         html += '<td class="pgk-cat-cell">' +
           (interaksi
             ? '<label title="' + escapeHtml(labelTampil) + '"><input type="radio" data-answer-input="true" data-statement="' + escapeHtml(id) + '" name="pgkcat-' + escapeHtml(id) + '" value="' + escapeHtml(nilai) + '"' + (checked ? ' checked' : '') + '><span class="cat-check"><i class="fa-solid fa-check"></i></span></label>'
@@ -1430,6 +1498,8 @@
     pgkMarkerParse: pgkMarkerParse,
     pgkCategories: pgkCategories,
     pgkTableHtml: pgkTableHtml,
+    lampiranGambarHtml_: lampiranGambarHtml_,
+    urlGambarAman_: urlGambarAman_,
     satukanBarisPernyataan: satukanBarisPernyataan,
     mountEditor: mountEditor
   };

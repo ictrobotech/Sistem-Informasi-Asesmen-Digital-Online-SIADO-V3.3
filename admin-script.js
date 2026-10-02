@@ -548,6 +548,13 @@ function bindAdminInterface() {
   document.getElementById('resetBrandingLogo').addEventListener('click', resetBrandingLogo);
 
   document.getElementById('addQuestionForm').addEventListener('submit', function(event) { event.preventDefault(); saveNewQuestion(); });
+  /* Daftar "Gambar pada opsi" mengikuti isi kolom opsi (PG & PGK MCMA). */
+  ['f', 'e'].forEach(function(prefix) {
+    var opsiEl = document.getElementById(prefix + 'Opsi');
+    if (opsiEl) opsiEl.addEventListener('input', function() { renderOpsiGambar_(prefix); });
+    var tipeEl = document.getElementById(prefix + 'Tipe');
+    if (tipeEl) tipeEl.addEventListener('change', function() { renderOpsiGambar_(prefix); });
+  });
   document.getElementById('editQuestionForm').addEventListener('submit', function(event) { event.preventDefault(); saveEditedQuestion(); });
   document.getElementById('btnTerapkanDurasi').addEventListener('click', terapkanDurasiRealtime);
   var btnResetSatu = document.getElementById('btnResetWaktuPeserta');
@@ -654,6 +661,7 @@ function bindAdminInterface() {
   });
   resetPgkEditor('f', null);
   resetJodohEditor('f', null);
+  bersihkanGambarOpsi_('f');
   bindClick_('fPgkAddRow', function() { pgkAddRow('f', '', ''); perbaruiKunciPgk_('f'); perbaruiPratinjauPgk_('f'); });
   bindClick_('ePgkAddRow', function() { pgkAddRow('e', '', ''); perbaruiKunciPgk_('e'); perbaruiPratinjauPgk_('e'); });
   bindClick_('fJodohAddRow', function() { jodohAddRow('f', '', ''); });
@@ -1503,6 +1511,8 @@ function updateQuestionFormatHelp(prefix) {
     }
   }
   if (type === 'PGK') perbaruiPratinjauPgk_(prefix);
+  /* Daftar gambar opsi hanya relevan untuk PG & PGK MCMA. */
+  renderOpsiGambar_(prefix);
 }
 
 /**
@@ -1534,7 +1544,7 @@ var JODOH_STATE = { f: null, e: null };
 var RTE_PERTANYAAN = { f: null, e: null };
 
 function pgkStateDefault() {
-  return { kategori: ['Informasi Penting', 'Dapat Diabaikan'], rows: [] };
+  return { labelKiri: '', kategori: kategoriObjek_(['Informasi Penting', 'Dapat Diabaikan']), rows: [] };
 }
 
 function renderPgkKategoriChips(prefix) {
@@ -1542,7 +1552,8 @@ function renderPgkKategoriChips(prefix) {
   var wrap = document.getElementById(prefix + 'PgkKategori');
   if (!wrap || !state) return;
   wrap.innerHTML = '';
-  state.kategori.forEach(function(nama, idx) {
+  state.kategori.forEach(function(item, idx) {
+    var nama = namaKategori_(item);
     var chip = document.createElement('span');
     chip.className = 'kategori-chip';
     var inp = document.createElement('input');
@@ -1550,12 +1561,41 @@ function renderPgkKategoriChips(prefix) {
     inp.maxLength = 40;
     inp.setAttribute('aria-label', 'Nama kategori ' + (idx + 1));
     inp.addEventListener('input', function() {
-      var lama = state.kategori[idx];
-      state.kategori[idx] = this.value;
-      state.rows.forEach(function(r) { if (r.kunci === lama) r.kunci = this.value; }, this);
+      var lama = namaKategori_(state.kategori[idx]);
+      var objek = state.kategori[idx];
+      if (objek && typeof objek === 'object') objek.nama = this.value;
+      else state.kategori[idx] = kategoriObjek_([this.value])[0];
+      state.rows.forEach(function(r) { if (r.kunci === lama) r.kunci = this.value; });
       syncPgkRowSelects(prefix);
       perbaruiKunciPgk_(prefix);
       perbaruiPratinjauPgk_(prefix);
+    });
+    /* Gambar kategori (opsional): ikut tampil pada tabel peserta & Export Soal. */
+    if (item && item.gambar) {
+      var mini = document.createElement('img');
+      mini.src = urlGambarTampilAdmin_(item.gambar);
+      mini.alt = item.alt || nama;
+      mini.loading = 'lazy';
+      chip.appendChild(mini);
+    }
+    var btnGambar = document.createElement('button');
+    btnGambar.type = 'button';
+    btnGambar.className = 'chip-gambar';
+    btnGambar.title = 'Gambar untuk kolom kategori ini';
+    btnGambar.innerHTML = '<i class="fa-regular fa-image"></i>';
+    btnGambar.addEventListener('click', async function() {
+      var hasil = await pilihGambarSoal_({
+        judul: 'Gambar Kategori ' + (idx + 1),
+        keterangan: 'Gambar ini tampil pada judul kolom kategori, mis. lambang atau contoh gambar.'
+      });
+      if (!hasil) return;
+      var objek = state.kategori[idx];
+      if (!objek || typeof objek !== 'object') objek = state.kategori[idx] = kategoriObjek_([namaKategori_(objek)])[0];
+      objek.gambar = hasil.url;
+      objek.alt = hasil.alt;
+      renderPgkKategoriChips(prefix);
+      perbaruiPratinjauPgk_(prefix);
+      showToast('Gambar kategori ' + (idx + 1) + ' siap dipakai.', 'success');
     });
     var del = document.createElement('button');
     del.type = 'button';
@@ -1563,7 +1603,7 @@ function renderPgkKategoriChips(prefix) {
     del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
     del.addEventListener('click', function() {
       if (state.kategori.length <= 2) { showToast('Minimal dua kategori.', 'error'); return; }
-      var buang = state.kategori.splice(idx, 1)[0];
+      var buang = namaKategori_(state.kategori.splice(idx, 1)[0]);
       state.rows.forEach(function(r) { if (r.kunci === buang) r.kunci = ''; });
       renderPgkKategoriChips(prefix);
       syncPgkRowSelects(prefix);
@@ -1571,6 +1611,7 @@ function renderPgkKategoriChips(prefix) {
       perbaruiPratinjauPgk_(prefix);
     });
     chip.appendChild(inp);
+    chip.appendChild(btnGambar);
     chip.appendChild(del);
     wrap.appendChild(chip);
   });
@@ -1581,7 +1622,7 @@ function renderPgkKategoriChips(prefix) {
   add.innerHTML = '<i class="fa-solid fa-plus"></i> Kategori';
   add.addEventListener('click', function() {
     if (state.kategori.length >= 5) { showToast('Maksimal lima kategori.', 'error'); return; }
-    state.kategori.push('Kategori ' + (state.kategori.length + 1));
+    state.kategori.push(kategoriObjek_(['Kategori ' + (state.kategori.length + 1)])[0]);
     renderPgkKategoriChips(prefix);
     syncPgkRowSelects(prefix);
     perbaruiPratinjauPgk_(prefix);
@@ -1592,7 +1633,8 @@ function renderPgkKategoriChips(prefix) {
 function syncOnePgkSelect(sel, state, rowState) {
   var val = rowState.kunci;
   sel.innerHTML = '<option value="">Pilih kategori kunci</option>' + state.kategori.map(function(k) {
-    return '<option value="' + SRich.escapeHtml(k) + '">' + SRich.escapeHtml(k) + '</option>';
+    var nama = namaKategori_(k);
+    return '<option value="' + SRich.escapeHtml(nama) + '">' + SRich.escapeHtml(nama) + '</option>';
   }).join('');
   if (state.kategori.indexOf(val) !== -1) sel.value = val;
   else { sel.value = ''; rowState.kunci = ''; }
@@ -1658,10 +1700,15 @@ function pgkAddRow(prefix, html, kunci) {
 }
 
 function resetPgkEditor(prefix, data) {
+  var dasar = data && data.kategori && data.kategori.length >= 2
+    ? data.kategori : ['Informasi Penting', 'Dapat Diabaikan'];
   PGK_STATE[prefix] = {
-    kategori: (data && data.kategori && data.kategori.length >= 2 ? data.kategori : ['Informasi Penting', 'Dapat Diabaikan']).slice(),
+    labelKiri: String((data && data.labelKiri) || ''),
+    kategori: kategoriObjek_(dasar, (data && data.gambarKategori) || []).slice(),
     rows: []
   };
+  var labelEl = document.getElementById(prefix + 'PgkLabelKiri');
+  if (labelEl) labelEl.value = PGK_STATE[prefix].labelKiri;
   var rowsWrap = document.getElementById(prefix + 'PgkRows');
   if (rowsWrap) rowsWrap.innerHTML = '';
   renderPgkKategoriChips(prefix);
@@ -1692,7 +1739,9 @@ function perbaruiPratinjauPgk_(prefix) {
   var jawaban = {};
   state.rows.forEach(function(r, i) { if (r.kunci) jawaban[String(i)] = r.kunci; });
   prev.innerHTML = SRich.pgkTableHtml({
-    kategori: state.kategori.slice(),
+    kategori: state.kategori.map(function(k) { return namaKategori_(k); }),
+    kategoriInfo: state.kategori.slice(),
+    labelKiri: state.labelKiri || '',
     statements: state.rows.map(function(r, i) {
       return { id: String(i), html: r.html || '(pernyataan belum ditulis)' };
     }),
@@ -1714,18 +1763,82 @@ function jodohAddRow(prefix, text, pasangan) {
   var eq = document.createElement('div'); eq.className = 'jodoh-eq'; eq.textContent = '=';
   var i2 = document.createElement('input');
   i2.placeholder = 'Pasangan (kolom kanan)'; i2.maxLength = 500;
+  var selKiri = document.createElement('div'); selKiri.className = 'jodoh-sel';
+  var selKanan = document.createElement('div'); selKanan.className = 'jodoh-pasangan';
+  selKiri.appendChild(i1); selKanan.appendChild(i2);
+  /* Gambar opsional pada kolom kiri & kanan pasangan (mis. gambar → nama). */
+  function bilahGambar(sisi, label) {
+    var bar = document.createElement('div'); bar.className = 'jodoh-gambar';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = '<i class="fa-regular fa-image"></i> ' + label;
+    btn.title = 'Lampirkan gambar pada ' + label.toLowerCase();
+    var mini = document.createElement('img');
+    mini.className = 'gambar-opsi-mini';
+    var hapus = document.createElement('button');
+    hapus.type = 'button';
+    hapus.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    hapus.title = 'Hapus gambar ' + label.toLowerCase();
+    bar.appendChild(btn); bar.appendChild(hapus); bar.appendChild(mini);
+    (sisi === 'pasangan' ? selKanan : selKiri).appendChild(bar);
+    return { bar: bar, btn: btn, mini: mini, hapus: hapus };
+  }
+  var slotKiri = bilahGambar('pernyataan', 'Gambar kolom kiri');
+  var slotKanan = bilahGambar('pasangan', 'Gambar kolom kanan');
   var del = document.createElement('button');
   del.type = 'button'; del.className = 'pgk-del';
   del.title = 'Hapus pasangan';
   del.innerHTML = '<i class="fa-solid fa-trash"></i>';
-  row.appendChild(no); row.appendChild(i1); row.appendChild(eq); row.appendChild(i2); row.appendChild(del);
+  row.appendChild(no); row.appendChild(selKiri); row.appendChild(eq); row.appendChild(selKanan); row.appendChild(del);
   wrap.appendChild(row);
-  var rowState = { text: text || '', pasangan: pasangan || '' };
+  var rowState = { text: text || '', pasangan: pasangan || '', gambar: '', alt: '', pasanganGambar: '', pasanganAlt: '' };
   state.rows.push(rowState);
   i1.value = rowState.text;
   i2.value = rowState.pasangan;
   i1.addEventListener('input', function() { rowState.text = this.value; perbaruiKunciJodoh_(prefix); });
   i2.addEventListener('input', function() { rowState.pasangan = this.value; perbaruiKunciJodoh_(prefix); });
+
+  function pasangSlot(slot, kunciGambar, kunciAlt, judul) {
+    slot.btn.addEventListener('click', async function() {
+      var hasil = await pilihGambarSoal_({
+        judul: judul,
+        keterangan: 'Gambar ini tampil bersama teks pasangan pada peserta ujian dan pada Export Soal.'
+      });
+      if (!hasil) return;
+      rowState[kunciGambar] = hasil.url;
+      rowState[kunciAlt] = hasil.alt;
+      segarkanSlot(slot, rowState[kunciGambar], rowState[kunciAlt]);
+      showToast('Gambar ' + judul.toLowerCase() + ' siap dipakai.', 'success');
+    });
+    slot.hapus.addEventListener('click', function() {
+      rowState[kunciGambar] = '';
+      rowState[kunciAlt] = '';
+      segarkanSlot(slot, '', '');
+    });
+  }
+  function segarkanSlot(slot, url, alt) {
+    var ada = !!url;
+    slot.mini.hidden = !ada;
+    slot.hapus.hidden = !ada;
+    if (ada) {
+      slot.mini.src = urlGambarTampilAdmin_(url);
+      slot.mini.alt = alt || 'Gambar pasangan';
+      slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> Ganti';
+    } else {
+      slot.mini.removeAttribute('src');
+      slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> ' + slot.btn.dataset.label;
+    }
+  }
+  slotKiri.btn.dataset.label = 'Gambar kolom kiri';
+  slotKanan.btn.dataset.label = 'Gambar kolom kanan';
+  segarkanSlot(slotKiri, '', '');
+  segarkanSlot(slotKanan, '', '');
+  pasangSlot(slotKiri, 'gambar', 'alt', 'Gambar kolom kiri');
+  pasangSlot(slotKanan, 'pasanganGambar', 'pasanganAlt', 'Gambar kolom kanan');
+  rowState._segarkanSlot = function() {
+    segarkanSlot(slotKiri, rowState.gambar, rowState.alt);
+    segarkanSlot(slotKanan, rowState.pasanganGambar, rowState.pasanganAlt);
+  };
   del.addEventListener('click', function() {
     if (state.rows.length <= 1) { showToast('Minimal satu pasangan.', 'error'); return; }
     var i = state.rows.indexOf(rowState);
@@ -1744,7 +1857,14 @@ function resetJodohEditor(prefix, rows) {
   var wrap = document.getElementById(prefix + 'JodohRows');
   if (wrap) wrap.innerHTML = '';
   var list = rows && rows.length ? rows : [{ text: '', pasangan: '' }];
-  list.forEach(function(r) { jodohAddRow(prefix, r.text, r.pasangan); });
+  var labelEl = document.getElementById(prefix + 'JodohLabelKiri');
+  if (labelEl) labelEl.value = String((rows && rows.length && rows[0].labelKiri) || '');
+  list.forEach(function(r) {
+    var rowState = jodohAddRow(prefix, r.text, r.pasangan);
+    if (r.gambar) { rowState.gambar = r.gambar; rowState.alt = r.alt || ''; }
+    if (r.pasanganGambar) { rowState.pasanganGambar = r.pasanganGambar; rowState.pasanganAlt = r.pasanganAlt || ''; }
+    if (rowState._segarkanSlot) rowState._segarkanSlot();
+  });
   perbaruiKunciJodoh_(prefix);
 }
 
@@ -1757,7 +1877,7 @@ function validateSoalStruct_(prefix) {
     var st = PGK_STATE[prefix];
     var unik = [];
     for (var c = 0; c < st.kategori.length; c++) {
-      var nm = String(st.kategori[c] || '').trim();
+      var nm = namaKategori_(st.kategori[c]).trim();
       if (!nm) return 'Nama kategori tidak boleh kosong.';
       if (/[|,]/.test(nm)) return 'Nama kategori tidak boleh mengandung koma atau tanda pipa (|): "' + nm + '".';
       if (unik.indexOf(nm) !== -1) return 'Nama kategori harus berbeda satu sama lain: "' + nm + '".';
@@ -1777,6 +1897,229 @@ function validateSoalStruct_(prefix) {
   return '';
 }
 
+/* ==================================================================
+ * GAMBAR PADA OPSI / PERNYATAAN / KATEGORI / PASANGAN  (revisi 2026-10-02)
+ *
+ * Guru dapat melampirkan gambar pada: opsi PG & PGK MCMA, kategori dan
+ * pernyataan PGK Kategori, serta pernyataan/pasangan Menjodohkan.
+ * Gambar boleh diunggah dari komputer (Supabase Storage), dari Google
+ * Drive, atau ditempel sebagai tautan — semuanya lewat satu kotak dialog
+ * "Sisipkan Gambar" yang memakai ulang pengunggah media yang sudah ada.
+ *
+ * Penyimpanan (ramah versi lama, tidak mengubah format CSV):
+ *   - opsi PG/PGK MCMA : { id, text, gambar, alt }
+ *   - opsi Menjodohkan : { id, text, pasangan, gambar, alt, pasanganGambar, pasanganAlt, labelKiri? }
+ *   - kategori PGK     : penanda tersembunyi data-siado-pgk-gambar pada pertanyaan
+ *   - label kolom kiri : data-siado-pgk-label (PGK) / opsi[0].labelKiri (Menjodohkan)
+ * ================================================================== */
+var GAMBAR_OPSI_STATE = { f: [], e: [] };
+
+/** Nama kategori dari bentuk string maupun objek { nama, gambar, alt }. */
+function namaKategori_(item) {
+  if (item && typeof item === 'object') return String(item.nama || item.text || '');
+  return String(item == null ? '' : item);
+}
+
+/** Menyeragamkan daftar kategori menjadi objek (dipakai penyunting PGK). */
+function kategoriObjek_(daftar, gambar, alt) {
+  var url = gambar || [], ket = alt || [];
+  return (daftar || []).map(function(item, i) {
+    if (item && typeof item === 'object') {
+      return { nama: String(item.nama || ''), gambar: String(item.gambar || ''), alt: String(item.alt || '') };
+    }
+    return { nama: String(item == null ? '' : item), gambar: String(url[i] || ''), alt: String(ket[i] || '') };
+  });
+}
+
+/** Mengambil semua URL gambar di dalam HTML (mis. pernyataan PGK bergambar). */
+function gambarDariHtml_(html) {
+  var hasil = [], m;
+  var pola = /<img[^>]+src="([^"]+)"/gi;
+  while ((m = pola.exec(String(html || '')))) {
+    if (hasil.indexOf(m[1]) === -1) hasil.push(m[1]);
+  }
+  return hasil;
+}
+
+function labelKolomKiri_(prefix, tipeKhusus) {
+  var el = document.getElementById(prefix + (tipeKhusus === 'MENJODOHKAN' ? 'JodohLabelKiri' : 'PgkLabelKiri'));
+  return el ? String(el.value || '').trim() : '';
+}
+
+/* ------------------------- KOTAK PILIH GAMBAR ------------------------- */
+/**
+ * Membuka kotak dialog "Sisipkan Gambar" (unggah / Google Drive / URL).
+ * Mengembalikan Promise berisi { url, alt } atau null bila dibatalkan.
+ */
+function pilihGambarSoal_(opsi) {
+  opsi = opsi || {};
+  return new Promise(function(resolve) {
+    var lama = document.getElementById('gambarSoalPicker');
+    if (lama && lama.parentNode) lama.parentNode.removeChild(lama);
+
+    var wadah = document.createElement('div');
+    wadah.id = 'gambarSoalPicker';
+    wadah.className = 'admin-modal show';
+    wadah.innerHTML =
+      '<div class="admin-modal-card">' +
+        '<div class="admin-modal-head"><h2><i class="fa-regular fa-image"></i> ' +
+          escapeAdmin(opsi.judul || 'Sisipkan Gambar') + '</h2>' +
+          '<button class="close-modal" type="button" data-picker-batal="true"><i class="fa-solid fa-xmark"></i></button></div>' +
+        '<p class="picker-sub">' + escapeAdmin(opsi.keterangan ||
+          'Pilih sumber gambar: unggah dari komputer, tempel tautan Google Drive, atau tautan gambar langsung.') + '</p>' +
+        '<div class="media-box" data-media-box="picker" data-media-kind="gambar">' +
+          '<div class="media-box-head"><h4><i class="fa-regular fa-image"></i> Sumber Gambar</h4>' +
+            '<div class="media-tabs">' +
+              '<button class="media-tab active" data-media-tab="komputer" type="button">Komputer</button>' +
+              '<button class="media-tab" data-media-tab="drive" type="button">Google Drive</button>' +
+              '<button class="media-tab" data-media-tab="url" type="button">URL</button>' +
+            '</div></div>' +
+          '<div class="media-panel show" data-media-panel="komputer">' +
+            '<input class="file-input" type="file" data-media-file="true" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp">' +
+            '<p class="media-hint">Gambar diunggah ke penyimpanan aplikasi (Supabase Storage) dan langsung dapat dilihat peserta.</p></div>' +
+          '<div class="media-panel" data-media-panel="drive">' +
+            '<input class="admin-input" type="text" data-media-drive="true" placeholder="Tempel link Google Drive gambar (share link)">' +
+            '<p class="media-hint">Format apa pun diterima: /file/d/..., ?id=..., atau link berbagi.</p></div>' +
+          '<div class="media-panel" data-media-panel="url">' +
+            '<input class="admin-input" type="url" data-media-url="true" placeholder="https://contoh.com/gambar.jpg">' +
+            '<p class="media-hint">Wajib HTTPS agar tidak diblokir peramban.</p></div>' +
+          '<div class="admin-field" style="margin-top:11px"><label for="pickerImageAlt">Keterangan gambar (opsional)</label>' +
+            '<input id="pickerImageAlt" class="admin-input" type="text" maxlength="300" placeholder="Contoh: lambang negara Indonesia">' +
+            '<small>Dibacakan pembaca layar dan dipakai sebagai judul gambar pada berkas Excel hasil export.</small></div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">' +
+            '<button class="admin-secondary" type="button" data-media-action="proses"><i class="fa-solid fa-cloud-arrow-up"></i> Proses &amp; Pratinjau</button>' +
+            '<button class="admin-secondary" type="button" data-media-action="hapus"><i class="fa-solid fa-eraser"></i> Kosongkan</button></div>' +
+          '<div class="upload-progress" data-media-progress="true"><b></b></div>' +
+          '<div class="media-status" data-media-status="true"></div>' +
+          '<input type="hidden" data-media-value="true">' +
+          '<div class="media-preview" data-media-preview="true"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">' +
+          '<button class="admin-secondary" type="button" data-picker-batal="true">Batal</button>' +
+          '<button class="admin-primary" type="button" data-picker-ok="true"><i class="fa-solid fa-check"></i> Gunakan Gambar Ini</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wadah);
+
+    var box = wadah.querySelector('[data-media-box="picker"]');
+    MEDIA_STATE.picker = { sumber: 'komputer', kind: 'gambar', url: '' };
+    wadah.querySelectorAll('[data-media-tab]').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        MEDIA_STATE.picker.sumber = this.dataset.mediaTab;
+        wadah.querySelectorAll('[data-media-tab]').forEach(function(t) { t.classList.remove('active'); });
+        this.classList.add('active');
+        wadah.querySelectorAll('[data-media-panel]').forEach(function(panel) {
+          panel.classList.toggle('show', panel.dataset.mediaPanel === this.dataset.mediaTab);
+        }, this);
+      });
+    });
+    var fileInput = box.querySelector('[data-media-file]');
+    fileInput.addEventListener('change', function() { prosesMediaBox_(box, true); });
+    box.querySelector('[data-media-action="proses"]').addEventListener('click', function() { prosesMediaBox_(box); });
+    box.querySelector('[data-media-action="hapus"]').addEventListener('click', function() { kosongkanMediaBox_(box); });
+
+    function tutup(hasil) {
+      if (wadah.parentNode) wadah.parentNode.removeChild(wadah);
+      if (MEDIA_STATE.picker) delete MEDIA_STATE.picker;
+      document.removeEventListener('keydown', tombolEsc, true);
+      resolve(hasil);
+    }
+    function tombolEsc(e) { if (e.key === 'Escape') { e.preventDefault(); tutup(null); } }
+    document.addEventListener('keydown', tombolEsc, true);
+    wadah.querySelectorAll('[data-picker-batal="true"]').forEach(function(b) {
+      b.addEventListener('click', function() { tutup(null); });
+    });
+    wadah.addEventListener('mousedown', function(e) { if (e.target === wadah) tutup(null); });
+
+    wadah.querySelector('[data-picker-ok="true"]').addEventListener('click', async function() {
+      var nilai = String(box.querySelector('[data-media-value]').value || '').trim();
+      if (!nilai) {
+        // Belum diproses: coba proses dulu (mis. tautan baru ditempel).
+        await prosesMediaBox_(box, true);
+        nilai = String(box.querySelector('[data-media-value]').value || '').trim();
+      }
+      if (!nilai) {
+        mediaStatus_(box, '<i class="fa-solid fa-circle-exclamation"></i> Gambar belum siap. Pilih berkas atau tempel tautan, lalu tekan Proses.', 'err');
+        return;
+      }
+      var altEl = wadah.querySelector('#pickerImageAlt');
+      tutup({ url: nilai, alt: altEl ? String(altEl.value || '').trim() : '' });
+    });
+  });
+}
+
+/* ------------------- GAMBAR OPSI (PG & PGK MCMA) ------------------- */
+function opsiTeksBaris_(prefix) {
+  var el = document.getElementById(prefix + 'Opsi');
+  if (!el) return [];
+  return String(el.value || '').split(/\r?\n/)
+    .map(function(l) { return l.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
+    .filter(Boolean);
+}
+
+/** Menampilkan daftar opsi + tombol gambar pada penyunting PG/PGK MCMA. */
+function renderOpsiGambar_(prefix) {
+  var wrap = document.getElementById(prefix + 'OpsiGambar');
+  if (!wrap) return;
+  var tipeEl = document.getElementById(prefix + 'Tipe');
+  var tipe = tipeEl ? String(tipeEl.value || '').toUpperCase() : '';
+  wrap.hidden = !(tipe === 'PG' || tipe === 'PGK_MCMA');
+  if (wrap.hidden) return;
+  var baris = opsiTeksBaris_(prefix);
+  var state = GAMBAR_OPSI_STATE[prefix] || (GAMBAR_OPSI_STATE[prefix] = []);
+  var html = '<h5><i class="fa-regular fa-image"></i> Gambar pada opsi (opsional)</h5>' +
+    '<p>Setiap opsi dapat diberi gambar — misalnya pilihan jawaban berupa gambar. Satu gambar per opsi; opsi tetap boleh berisi teks, gambar saja, atau keduanya.</p>';
+  if (!baris.length) {
+    html += '<div class="gambar-opsi-kosong">Tulis dulu opsi pada kolom di atas — daftar opsi akan muncul di sini untuk ditempeli gambar.</div>';
+  } else {
+    baris.forEach(function(teks, i) {
+      var gambar = state[i] || {};
+      html += '<div class="gambar-opsi-baris">' +
+        '<span class="gambar-opsi-huruf">' + String.fromCharCode(65 + i) + '.</span>' +
+        '<span class="gambar-opsi-teks">' + escapeAdmin(truncate(teks, 90)) +
+          (gambar.gambar ? '<br><img class="gambar-opsi-mini" src="' + escapeAdmin(urlGambarTampilAdmin_(gambar.gambar)) + '" alt="' + escapeAdmin(gambar.alt || 'Gambar opsi ' + (i + 1)) + '" loading="lazy">' : '') +
+          (gambar.alt ? '<br><small>' + escapeAdmin(gambar.alt) + '</small>' : '') +
+        '</span>' +
+        '<span class="gambar-opsi-aksi">' +
+          '<button class="admin-secondary" type="button" data-gambar-opsi="' + i + '" style="min-height:30px"><i class="fa-regular fa-image"></i> ' +
+            (gambar.gambar ? 'Ganti' : 'Gambar') + '</button>' +
+          (gambar.gambar ? '<button class="admin-danger" type="button" data-hapus-gambar-opsi="' + i + '" style="min-height:30px"><i class="fa-solid fa-xmark"></i> Hapus</button>' : '') +
+        '</span></div>';
+    });
+  }
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-gambar-opsi]').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var i = parseInt(this.dataset.gambarOpsi, 10);
+      var hasil = await pilihGambarSoal_({
+        judul: 'Gambar Opsi ' + String.fromCharCode(65 + i),
+        keterangan: 'Gambar ini tampil pada opsi ' + String.fromCharCode(65 + i) + ' baik di panel, pada peserta ujian, maupun pada Export Soal.'
+      });
+      if (!hasil) return;
+      GAMBAR_OPSI_STATE[prefix][i] = { gambar: hasil.url, alt: hasil.alt };
+      renderOpsiGambar_(prefix);
+      showToast('Gambar opsi ' + String.fromCharCode(65 + i) + ' siap dipakai.', 'success');
+    });
+  });
+  wrap.querySelectorAll('[data-hapus-gambar-opsi]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var i = parseInt(this.dataset.hapusGambarOpsi, 10);
+      GAMBAR_OPSI_STATE[prefix][i] = null;
+      renderOpsiGambar_(prefix);
+    });
+  });
+}
+
+/** Gambar untuk setiap baris opsi (sejajar dengan optionsFromField). */
+function gambarOpsiDari_(prefix) {
+  return (GAMBAR_OPSI_STATE[prefix] || []).slice();
+}
+
+function bersihkanGambarOpsi_(prefix) {
+  GAMBAR_OPSI_STATE[prefix] = [];
+  renderOpsiGambar_(prefix);
+}
+
 function optionsFromField(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   if (type === 'ISIAN' || type === 'URAIAN') return [];
@@ -1788,14 +2131,23 @@ function optionsFromField(prefix) {
   if (type === 'MENJODOHKAN') {
     var jd = JODOH_STATE[prefix];
     if (jd) {
-      return jd.rows
+      var labelJodoh = labelKolomKiri_(prefix, 'MENJODOHKAN');
+      var daftar = jd.rows
         .filter(function(r) { return r.text.trim() && r.pasangan.trim(); })
-        .map(function(r) { return { text: r.text.trim(), pasangan: r.pasangan.trim() }; });
+        .map(function(r) {
+          var item = { text: r.text.trim(), pasangan: r.pasangan.trim() };
+          if (r.gambar) { item.gambar = r.gambar; item.alt = r.alt || ''; }
+          if (r.pasanganGambar) { item.pasanganGambar = r.pasanganGambar; item.pasanganAlt = r.pasanganAlt || ''; }
+          return item;
+        });
+      if (daftar.length && labelJodoh) daftar[0].labelKiri = labelJodoh;
+      return daftar;
     }
   }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
     .map(function(line) { return line.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
     .filter(Boolean);
+  var gambarOpsi = gambarOpsiDari_(prefix);
   if (type === 'MENJODOHKAN') {
     // Setiap baris berformat "pernyataan = jawaban". Baris tanpa tanda sama
     // dengan diabaikan agar tidak membentuk pasangan yang tidak lengkap.
@@ -1808,7 +2160,12 @@ function optionsFromField(prefix) {
       };
     }).filter(function(item) { return item && item.text && item.pasangan; });
   }
-  return lines.map(function(text) { return { text: text }; });
+  return lines.map(function(text, i) {
+    var lampiran = gambarOpsi[i] || {};
+    var item = { text: text };
+    if (lampiran.gambar) { item.gambar = lampiran.gambar; item.alt = lampiran.alt || ''; }
+    return item;
+  });
 }
 
 /* ====================== UPLOADER MEDIA MULTI-SUMBER ======================
@@ -2170,7 +2527,14 @@ async function buildQuestionPayload(prefix) {
   var rte = RTE_PERTANYAAN[prefix];
   var pertanyaanHtml = rte ? rte.getHtml() : document.getElementById(prefix + 'Pertanyaan').value;
   if (tipe === 'PGK') {
-    pertanyaanHtml = SRich.pgkMarkerEmbed(pertanyaanHtml, (PGK_STATE[prefix] || { kategori: [] }).kategori);
+    var stPgk = PGK_STATE[prefix] || { kategori: [] };
+    pertanyaanHtml = SRich.pgkMarkerEmbed(
+      pertanyaanHtml,
+      stPgk.kategori.map(function(k) { return namaKategori_(k); }),
+      {
+        gambar: stPgk.kategori.map(function(k) { return (k && k.gambar) || ''; }),
+        labelKiri: labelKolomKiri_(prefix, 'PGK') || stPgk.labelKiri || ''
+      });
   } else {
     pertanyaanHtml = String(pertanyaanHtml)
       .replace(/<div[^>]*data-siado-pgk-kategori[^>]*>\s*<\/div>/gi, '')
@@ -2319,6 +2683,7 @@ function clearQuestionForm(prefix) {
   if (RTE_PERTANYAAN[prefix]) RTE_PERTANYAAN[prefix].setHtml('');
   resetPgkEditor(prefix, null);
   resetJodohEditor(prefix, null);
+  bersihkanGambarOpsi_(prefix);
   updateQuestionFormatHelp(prefix);
   var tingkat = document.getElementById(prefix + 'Tingkat');
   if (tingkat) tingkat.value = 'SEMUA';
@@ -2512,11 +2877,21 @@ function kunciTeruraiBankSoal_(nilai) {
  * `teksBawah` (opsional) tampil di baris sendiri di bawah teks — dipakai
  * pasangan Menjodohkan agar tidak muncul celah lebar akibat rata kiri-kanan.
  */
-function barisOpsiBankSoal_(penanda, teks, jenisPenanda, teksBawah) {
+function barisOpsiBankSoal_(penanda, teks, jenisPenanda, teksBawah, gambarHtml, gambarBawahHtml) {
   return '<div class="bs-opsi"><span class="bs-opsi-tanda ' + jenisPenanda + '">' + escapeAdmin(penanda) + '</span>' +
-    '<span class="bs-opsi-teks">' + escapeAdmin(teks) +
+    '<span class="bs-opsi-teks">' + escapeAdmin(teks) + (gambarHtml || '') +
     (teksBawah ? '<span class="bs-opsi-pasangan"><span class="bs-pasangan-tanda">=</span>' +
-      '<span class="bs-pasangan-teks">' + escapeAdmin(teksBawah) + '</span></span>' : '') + '</span></div>';
+      '<span class="bs-pasangan-teks">' + escapeAdmin(teksBawah) + '</span>' + (gambarBawahHtml || '') + '</span>' : '') + '</span></div>';
+}
+
+/** Kumpulan lampiran gambar sebuah opsi (gambar opsi + gambar di dalam HTML). */
+function lampiranGambarOpsi_(op) {
+  var daftar = [];
+  if (op && op.gambar) daftar.push(SRich.lampiranGambarHtml_(op.gambar, op.alt));
+  if (op && op.pasanganGambar) daftar.push(SRich.lampiranGambarHtml_(op.pasanganGambar, op.pasanganAlt));
+  var dalamHtml = gambarDariHtml_(op && op.text);
+  dalamHtml.forEach(function(url) { daftar.push(SRich.lampiranGambarHtml_(url, 'Gambar pernyataan')); });
+  return daftar.join('');
 }
 
 /**
@@ -2533,7 +2908,8 @@ function selOpsiKunciBankSoal_(question) {
   if (tipe === 'PG' || tipe === 'PGK_MCMA') {
     opsi.forEach(function(op, i) {
       var huruf = String(op.label || op.id || String.fromCharCode(65 + i));
-      baris += barisOpsiBankSoal_(huruf + '.', teks(op.text), 'huruf');
+      baris += barisOpsiBankSoal_(huruf + '.', teks(op.text), 'huruf', null,
+        SRich.lampiranGambarHtml_(op.gambar, op.alt));
     });
     var pilihan = kunciTeruraiBankSoal_(question.kunci_jawaban);
     kunci = (Array.isArray(pilihan) ? pilihan : String(question.kunci_jawaban || '').split(','))
@@ -2542,7 +2918,8 @@ function selOpsiKunciBankSoal_(question) {
     var peta = kunciTeruraiBankSoal_(question.kunci_jawaban);
     var daftar = Array.isArray(peta) ? peta : (peta ? null : String(question.kunci_jawaban || '').split(','));
     kunci = opsi.map(function(op, i) {
-      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor');
+      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor', null,
+        gambarDariHtml_(op.text).map(function(u) { return SRich.lampiranGambarHtml_(u, 'Gambar pernyataan'); }).join(''));
       var k;
       if (daftar) k = daftar[i];
       else {
@@ -2556,7 +2933,8 @@ function selOpsiKunciBankSoal_(question) {
     var jodoh = kunciTeruraiBankSoal_(question.kunci_jawaban) || {};
     opsi.forEach(function(op, i) {
       var pasangan = (jodoh[op.id] !== undefined && jodoh[op.id] !== '') ? jodoh[op.id] : op.pasangan;
-      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor', teks(pasangan) || '-');
+      baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor', teks(pasangan) || '-',
+        SRich.lampiranGambarHtml_(op.gambar, op.alt), SRich.lampiranGambarHtml_(op.pasanganGambar, op.pasanganAlt));
     });
     kunci = opsi.length ? 'sesuai pasangan di atas' : SRich.stripHtml(String(question.kunci_jawaban || ''));
   } else {
@@ -2652,14 +3030,28 @@ function openEditQuestion(id) {
       }
       return { html: op.text || '', kunci: k };
     });
-    resetPgkEditor('e', { kategori: infoKat.kategori, rows: rowsData.length ? rowsData : null });
+    resetPgkEditor('e', {
+      kategori: infoKat.kategoriInfo || infoKat.kategori,
+      labelKiri: infoKat.labelKiri || '',
+      rows: rowsData.length ? rowsData : null
+    });
   }
   if (tipeSoal === 'MENJODOHKAN') {
-    resetJodohEditor('e', (question.opsi || []).map(function(op) {
-      return { text: SRich.stripHtml(op.text || ''), pasangan: SRich.stripHtml(op.pasangan || '') };
+    resetJodohEditor('e', (question.opsi || []).map(function(op, idx) {
+      return {
+        text: SRich.stripHtml(op.text || ''), pasangan: SRich.stripHtml(op.pasangan || ''),
+        gambar: op.gambar || '', alt: op.alt || '',
+        pasanganGambar: op.pasanganGambar || '', pasanganAlt: op.pasanganAlt || '',
+        labelKiri: (idx === 0 && op.labelKiri) || ''
+      };
     }));
   }
   document.getElementById('eOpsi').value = optionsToLines(question);
+  /* Gambar opsi (PG / PGK MCMA) yang tersimpan dikembalikan ke penyunting. */
+  GAMBAR_OPSI_STATE.e = (question.opsi || []).map(function(op) {
+    return op && op.gambar ? { gambar: op.gambar, alt: op.alt || '' } : null;
+  });
+  renderOpsiGambar_('e');
   document.getElementById('eKunci').value = editableKey(question);
   document.getElementById('eImageLink').value = question.stimulus_gambar || '';
   document.getElementById('eImageFile').value = '';
@@ -4707,6 +5099,60 @@ function selStimulusExcel_(question) {
 }
 
 /** URL stimulus yang sah dipakai sebagai tautan Excel (harus http/https). */
+/** Semua URL gambar yang dilampirkan pada opsi/pernyataan/kategori/pasangan. */
+/** Judul kolom lembar "Gambar Opsi". */
+function opsiGambarHeaderExcel_() {
+  return ['No.', 'Mapel', 'Kelas', 'Tipe', 'Bagian', 'Teks Bagian', 'Keterangan Gambar', 'Gambar (tautan)'];
+}
+
+function urlGambarOpsiExcel_(question) {
+  var hasil = [];
+  var tambah = function(url) {
+    var bersih = urlStimulusExcel_(url);
+    if (bersih && hasil.indexOf(bersih) === -1) hasil.push(bersih);
+  };
+  (question && Array.isArray(question.opsi) ? question.opsi : []).forEach(function(op) {
+    if (!op) return;
+    tambah(op.gambar);
+    tambah(op.pasanganGambar);
+    gambarDariHtml_(op.text).forEach(tambah);
+  });
+  /* Gambar kategori PGK disimpan pada penanda pertanyaan (urutan = urutan kategori). */
+  var info = SRich.pgkCategories ? SRich.pgkCategories(question) : null;
+  ((info && info.kategoriInfo) || []).forEach(function(kat) { tambah(kat && kat.gambar); });
+  return hasil;
+}
+
+/** Benar bila soal memuat gambar pada opsi/pernyataan/kategori/pasangan. */
+function soalPunyaGambarOpsiExcel_(question) {
+  return urlGambarOpsiExcel_(question).length > 0;
+}
+
+/** Rincian gambar opsi sebuah soal untuk lembar "Gambar Opsi" pada Excel. */
+function entriGambarOpsiExcel_(question) {
+  var tipe = String((question && question.tipe) || '').toUpperCase();
+  var daftar = [];
+  var info = SRich.pgkCategories ? SRich.pgkCategories(question) : null;
+  if (tipe === 'PGK') {
+    ((info && info.kategoriInfo) || []).forEach(function(kat, i) {
+      if (kat && kat.gambar) {
+        daftar.push({ bagian: 'Kategori ' + (i + 1), teks: kat.nama, alt: kat.alt || '', url: kat.gambar });
+      }
+    });
+  }
+  (question && Array.isArray(question.opsi) ? question.opsi : []).forEach(function(op, i) {
+    if (!op) return;
+    if (op.gambar) daftar.push({ bagian: 'Opsi ' + String.fromCharCode(65 + i), teks: SRich.stripHtml(op.text || '') || '(gambar saja)', alt: op.alt || '', url: op.gambar });
+    if (op.pasanganGambar) daftar.push({ bagian: 'Pasangan ' + (i + 1), teks: SRich.stripHtml(op.pasangan || '') || '(gambar saja)', alt: op.pasanganAlt || '', url: op.pasanganGambar });
+    if (tipe !== 'MENJODOHKAN') {
+      gambarDariHtml_(op.text).forEach(function(u) {
+        daftar.push({ bagian: (tipe === 'PGK' ? 'Pernyataan ' : 'Opsi ') + (i + 1), teks: SRich.stripHtml(op.text || ''), alt: '', url: u });
+      });
+    }
+  });
+  return daftar;
+}
+
 function urlStimulusExcel_(nilai) {
   var url = String(nilai === undefined || nilai === null ? '' : nilai).trim();
   return /^https?:\/\//i.test(url) ? url : '';
@@ -4891,7 +5337,8 @@ function uraiPgkKategoriExcel_(question) {
       return { pernyataan: 'Pernyataan ' + id, kunci: String(peta[id] === undefined || peta[id] === null ? '' : peta[id]).trim() };
     });
   }
-  return { kategori: kategori, baris: baris };
+  var infoPgk = SRich.pgkCategories ? SRich.pgkCategories(question) : null;
+  return { kategori: kategori, baris: baris, labelKiri: String((infoPgk && infoPgk.labelKiri) || '').trim() || 'Pernyataan' };
 }
 
 /** Urai soal Menjodohkan menjadi tabel: [{ pernyataan, pasangan }]. */
@@ -4911,7 +5358,8 @@ function uraiMenjodohkanExcel_(question) {
       return { pernyataan: 'Pernyataan ' + id, pasangan: teksExcelDariHtml_(jodoh[id]) || '-' };
     });
   }
-  return baris;
+  var labelJodoh = String((opsi[0] && opsi[0].labelKiri) || '').trim() || 'Pernyataan';
+  return { baris: baris, labelKiri: labelJodoh, pasangan: true };
 }
 
 /**
@@ -5408,6 +5856,58 @@ async function buatExcelBankSoal_(opsi) {
       'Dokumen dibuat otomatis oleh SIADO.'
   });
 
+  /* ---- LEMBAR GAMBAR OPSI (opsi/pernyataan/kategori/pasangan bergambar) ---- */
+  var entriGambarOpsi = [];
+  baris.forEach(function(question) {
+    var nomorSoal = petaNomor[String(question.id_soal)] || '';
+    entriGambarOpsiExcel_(question).forEach(function(entri) {
+      entriGambarOpsi.push({
+        nomor: nomorSoal, mapel: String(question.mapel || '-'), kelas: tingkatDariNilai_(question.tingkat) || 'SEMUA',
+        tipe: labelTipeBankSoal_(question.tipe), bagian: entri.bagian, teks: entri.teks,
+        alt: entri.alt, url: entri.url, soal: question
+      });
+    });
+  });
+  if (entriGambarOpsi.length) {
+    tambahSheetTabelExcelBankSoal_(workbook, {
+      nama: 'Gambar Opsi',
+      judul: 'GAMBAR PADA OPSI / PERNYATAAN / KATEGORI — ' + sekolah,
+      lebar: [8, 22, 11, 18, 14, 40, 26, 30],
+      header: opsiGambarHeaderExcel_(),
+      baris: entriGambarOpsi.map(function(entri) {
+        return [String(entri.nomor), entri.mapel, entri.kelas, entri.tipe, entri.bagian,
+          entri.teks || '-', entri.alt || '-', entri.url];
+      }),
+      hias: function(gayaBaris, nilai, indeks, sheetTujuan) {
+        var entri = entriGambarOpsi[indeks] || {};
+        gayaBaris.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF102A43' } };
+        gayaBaris.getCell(4).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF1F6FEB' } };
+        pasangTautanExcel_(gayaBaris.getCell(8), entri.url, 'Buka gambar');
+        var item = petaMediaExcel[entri.url];
+        if (item && item.ok) {
+          var idGambar = daftarkanGambarExcel_(entri.url);
+          if (idGambar !== null && idGambar !== undefined) {
+            var skala = Math.min(1, 220 / Math.max(1, item.lebar), 150 / Math.max(1, item.tinggi));
+            var lebarMini = Math.max(24, Math.round(item.lebar * skala));
+            var tinggiMini = Math.max(18, Math.round(item.tinggi * skala));
+            try {
+              sheetTujuan.addImage(idGambar, {
+                tl: { col: 6 + 0.55, row: gayaBaris.number - 1 + 0.16 },
+                ext: { width: lebarMini, height: tinggiMini },
+                editAs: 'oneCell'
+              });
+              gayaBaris.height = Math.max(gayaBaris.height || 24, tinggiMini * 0.75 + 18);
+            } catch (galat) { /* tautannya tetap ada */ }
+          }
+        }
+      },
+      ringkasan: 'Gambar opsi/pernyataan/kategori: ' + entriGambarOpsi.length + ' gambar  •  Soal: ' +
+        baris.filter(soalPunyaGambarOpsiExcel_).length + ' butir',
+      catatan: 'Setiap gambar juga dapat dibuka lewat tautan pada kolom Gambar (tautan). ' +
+        'Untuk soal yang tidak dilampiri gambar, gambar tidak dibuat. Dokumen dibuat otomatis oleh SIADO.'
+    });
+  }
+
   /* ---- Lembar 3: GAMBAR STIMULUS (gambar disisipkan ke dalam berkas) ---- */
   var soalStimulusExcel = baris.filter(soalPunyaStimulusExcel_);
   if (opsi.media && opsi.media.aktif && soalStimulusExcel.length) {
@@ -5477,7 +5977,7 @@ async function buatExcelBankSoal_(opsi) {
           tingkatDariNilai_(question.tingkat) + '  •  Nomor ' + (petaNomor[String(question.id_soal)] || '-') +
           '  •  PGK Kategori  •  Poin ' + angkaPoinExcel_(question.poin) + '  •  ' + (question.aktif ? 'AKTIF' : 'NONAKTIF'),
         pertanyaan: truncate(teksExcelDariHtml_(question.pertanyaan) || '-', 600),
-        header: ['No', 'Pernyataan'].concat(urai.kategori).concat(['Kunci (teks)']),
+        header: ['No', urai.labelKiri].concat(urai.kategori).concat(['Kunci (teks)']),
         rata: ['tengah', 'kiri'].concat(urai.kategori.map(function() { return 'tengah'; })).concat(['tengah']),
         baris: urai.baris.map(function(item, index) {
           return [index + 1, item.pernyataan]
@@ -5526,9 +6026,9 @@ async function buatExcelBankSoal_(opsi) {
           tingkatDariNilai_(question.tingkat) + '  •  Nomor ' + (petaNomor[String(question.id_soal)] || '-') +
           '  •  Menjodohkan  •  Poin ' + angkaPoinExcel_(question.poin) + '  •  ' + (question.aktif ? 'AKTIF' : 'NONAKTIF'),
         pertanyaan: truncate(teksExcelDariHtml_(question.pertanyaan) || '-', 600),
-        header: ['No', 'Pernyataan / Soal', 'Pasangan (Kunci)'],
+        header: ['No', uraiJodoh.labelKiri + ' / Soal', 'Pasangan (Kunci)'],
         rata: ['tengah', 'kiri', 'kiri'],
-        baris: uraiJodoh.map(function(item, index) { return [index + 1, item.pernyataan, item.pasangan]; }),
+        baris: uraiJodoh.baris.map(function(item, index) { return [index + 1, item.pernyataan, item.pasangan]; }),
         hias: function(gayaBaris) {
           gayaBaris.getCell(3).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF1B5E20' } };
         }
@@ -5817,17 +6317,25 @@ async function exportBankSoalExcel(mode) {
        (butuh waktu) supaya bisa benar-benar disisipkan ke lembar Excel. */
     var soalStimulus = tampil.filter(soalPunyaStimulusExcel_);
     var media = { aktif: false, peta: {}, dilewati: 0 };
+    /* Gambar opsi/pernyataan/kategori/pasangan ikut diunduh agar dapat
+       disematkan ke lembar "Gambar Opsi" pada berkas Excel. */
+    var soalGambarOpsi = tampil.filter(soalPunyaGambarOpsiExcel_);
     if (mauGambar && soalStimulus.length) {
       var urlGambar = [];
       soalStimulus.forEach(function(q) {
         var url = urlStimulusExcel_(q.stimulus_gambar);
         if (url && urlGambar.indexOf(url) === -1) urlGambar.push(url);
       });
+      soalGambarOpsi.forEach(function(q) {
+        urlGambarOpsiExcel_(q).forEach(function(url) {
+          if (url && urlGambar.indexOf(url) === -1) urlGambar.push(url);
+        });
+      });
       media.aktif = true;
       if (urlGambar.length) {
-        statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengambil gambar stimulus 0/' + urlGambar.length + '...');
+        statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengambil gambar (stimulus & opsi) 0/' + urlGambar.length + '...');
         var hasilGambar = await muatGambarStimulusExcel_(urlGambar, function(selesai, total) {
-          statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengambil gambar stimulus ' + selesai + '/' + total + '...');
+          statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Mengambil gambar (stimulus & opsi) ' + selesai + '/' + total + '...');
         });
         media.peta = hasilGambar.peta;
         media.dilewati = hasilGambar.dilewati;

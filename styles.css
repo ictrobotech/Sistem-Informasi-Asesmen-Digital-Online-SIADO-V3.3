@@ -451,3 +451,46 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 /* REVISI 2026-09-22: keterangan cara menjawab di bawah lencana tipe soal (client). */
 .question-type{line-height:1.5}
 .question-type-hint{margin:0 0 12px;padding:10px 14px;background:#fff8e7;border:1.5px dashed #eeb14a;border-radius:10px;color:#8a5a00;font-size:13px;font-style:italic;line-height:1.6}
+
+/* ===================== GAMBAR PADA OPSI / PERNYATAAN / KATEGORI / PASANGAN =====================
+ * Dipakai bersama oleh panel admin dan tampilan peserta ujian (revisi 2026-10-02).
+ * ============================================================================================ */
+.soal-gambar-lampiran{display:block;margin:6px 0 2px;max-width:100%}
+.soal-gambar-lampiran img{max-width:min(360px,100%);max-height:260px;border:1px solid #cfdce9;border-radius:9px;background:#fff;padding:3px;display:block}
+.soal-gambar-lampiran.kategori{margin:5px 0 0}
+.soal-gambar-lampiran.kategori img{max-width:150px;max-height:110px;margin:0 auto}
+.pgk-cat-gambar{display:block;margin-top:4px}
+.choice-text .soal-gambar-lampiran{display:inline-block;vertical-align:middle;margin:4px 0 0}
+.jodoh-sel .soal-gambar-lampiran img,.jodoh-pasangan .soal-gambar-lampiran img{max-width:220px;max-height:160px}
+
+/* --- Penyunting: label kolom bisa diedit --- */
+.label-kolom-input{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.label-kolom-input .admin-field{flex:1;min-width:190px}
+
+/* --- Penyunting: daftar gambar opsi (PG / PGK MCMA) --- */
+.gambar-opsi-list{margin-top:11px;border:1.5px dashed #c7d7e6;border-radius:12px;padding:11px 12px;background:#f8fbff}
+.gambar-opsi-list>h5{margin:0 0 4px;font-size:12px;color:#3d5f7c;text-transform:uppercase;letter-spacing:.35px}
+.gambar-opsi-list>p{margin:0 0 9px;font-size:11.5px;color:#6b8299;line-height:1.5}
+.gambar-opsi-baris{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #e4edf5}
+.gambar-opsi-baris:first-of-type{border-top:0}
+.gambar-opsi-huruf{flex:0 0 auto;min-width:22px;font:800 12.5px/1.6 system-ui,sans-serif;color:#1f6feb}
+.gambar-opsi-teks{flex:1 1 auto;min-width:0;font-size:12.5px;color:#456;line-height:1.5;word-break:break-word}
+.gambar-opsi-aksi{flex:0 0 auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.gambar-opsi-mini{width:74px;height:52px;object-fit:cover;border:1px solid #cfdce9;border-radius:8px;background:#fff}
+.gambar-opsi-kosong{font-size:11.5px;color:#8fa3b7}
+
+/* --- Penyunting: chip kategori bergambar (PGK) --- */
+.kategori-chips .chip{display:flex;align-items:center;gap:6px}
+.kategori-chips .chip img{width:34px;height:34px;object-fit:cover;border:1px solid #cfdce9;border-radius:7px;background:#fff}
+.kategori-chips .chip button.chip-gambar{border:0;background:#eef5fd;color:#1f6feb;border-radius:7px;padding:4px 6px;font-size:10.5px;font-weight:800}
+
+/* --- Penyunting: gambar pada baris Menjodohkan --- */
+.jodoh-row .jodoh-sel,.jodoh-row .jodoh-pasangan{flex:1 1 0;min-width:0}
+.jodoh-gambar{margin-top:6px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.jodoh-gambar .gambar-opsi-mini{width:64px;height:46px}
+.jodoh-gambar button{border:1px dashed #bcd3ea;background:#f5faff;color:#1f6feb;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:800}
+
+/* --- Kotak pilih gambar (unggah / Drive / URL) --- */
+#gambarSoalPicker .admin-modal-card{max-width:560px}
+#gambarSoalPicker h3{margin:0 0 4px;font-size:16.5px;color:#102a43}
+#gambarSoalPicker .picker-sub{margin:0 0 13px;font-size:12px;color:#687f95;line-height:1.5}

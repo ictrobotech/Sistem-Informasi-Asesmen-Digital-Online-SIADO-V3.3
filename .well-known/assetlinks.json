@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "id.my.smplabschooluntadpalu.siado.twa",
+      "sha256_cert_fingerprints": [
+        "B5:B4:99:26:C6:7D:BB:19:9A:54:E0:3C:91:80:26:77:30:66:67:71:33:73:31:FC:24:73:C2:02:B5:95:67:DF"
+      ]
+    }
+  }
+]

@@ -3719,7 +3719,7 @@ async function setAllQuestionStatus(aktif) {
     await hasilSukses_(aktif ? 'Semua Soal Diaktifkan' : 'Semua Soal Dinonaktifkan',
       result.message || 'Status seluruh soal berhasil diperbarui.', [
         { label: 'Status baru', nilai: aktif ? 'Aktif' : 'Nonaktif' },
-        { label: 'Jumlah soal', nilai: String(result.jumlah !== undefined ? result.jumlah : (ADMIN.questions || []).length) }
+        { label: 'Jumlah Soal', nilai: String(result.jumlah !== undefined ? result.jumlah : (ADMIN.questions || []).length) }
       ]);
   } catch (error) {
     await hasilGagal_('Status Soal Gagal Diubah', error.message || 'Status soal gagal diubah.');
@@ -5226,14 +5226,60 @@ function stempelWaktuExcel_() {
   return tanggal + ' ' + pad(sekarang.getHours()) + '.' + pad(sekarang.getMinutes());
 }
 
-/** Nama berkas: Bank-Soal-<cakupan>-<YYYYMMDD-HHMM>.xlsx */
-function namaBerkasExcelBankSoal_(slug) {
+/**
+ * Merapikan teks menjadi bagian nama berkas: huruf/angka & TANDA KURUNG
+ * dipertahankan, spasi dan tanda baca lain menjadi tanda hubung.
+ * "Koding Dan Kecerdasan Artifisial (KKA)" -> "Koding-Dan-Kecerdasan-Artifisial-(KKA)"
+ */
+function slugNamaBerkasExcel_(teks) {
+  return String(teks === undefined || teks === null ? '' : teks)
+    .replace(/[\\/:*?"<>|]+/g, '-')       // karakter yang terlarang pada nama berkas
+    .replace(/[^A-Za-z0-9()\-]+/g, '-')    // sisakan huruf, angka, tanda kurung, tanda hubung
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Bagian nama berkas berisi MAPEL + ROMBEL/KELAS yang tercakup:
+ *   satu mapel + satu kelas   -> "Koding-Dan-Kecerdasan-Artifisial-(KKA)-VII"
+ *   satu mapel + banyak kelas -> "Koding-Dan-Kecerdasan-Artifisial-(KKA)-VII-VIII"
+ *   banyak mapel              -> "3-Mapel" (kelas tidak ditulis agar nama tetap pendek)
+ * Filter tipe/status ditambahkan bila export memakai filter tersebut.
+ */
+function bagianCakupanNamaBerkasExcel_(rows, info) {
+  var daftarMapel = [], daftarKelas = [];
+  (rows || []).forEach(function(question) {
+    var mapel = String((question && question.mapel) || '').trim();
+    if (mapel && daftarMapel.indexOf(mapel) === -1) daftarMapel.push(mapel);
+    var kelas = tingkatDariNilai_(question && question.tingkat);
+    if (daftarKelas.indexOf(kelas) === -1) daftarKelas.push(kelas);
+  });
+  daftarKelas.sort(function(a, b) { return peringkatKelasExcel_(a) - peringkatKelasExcel_(b); });
+  var labelKelas = function(kelas) { return kelas === 'SEMUA' ? 'Semua-Kelas' : kelas; };
+
+  var bagian = [];
+  if (daftarMapel.length === 1) bagian.push(slugNamaBerkasExcel_(daftarMapel[0]));
+  else if (daftarMapel.length > 1) bagian.push(daftarMapel.length + '-Mapel');
+  if (daftarKelas.length === 1) bagian.push(slugNamaBerkasExcel_(labelKelas(daftarKelas[0])));
+  else if (daftarKelas.length > 1 && daftarMapel.length === 1) bagian.push(daftarKelas.map(labelKelas).join('-'));
+  if (info && info.adaFilter) {
+    if (info.tipe) bagian.push(slugNamaBerkasExcel_(info.tipe === 'PGK_MCMA' ? 'PGK-MCMA' : labelTipeBankSoal_(info.tipe)));
+    if (info.status) bagian.push(info.status === 'aktif' ? 'Aktif' : 'Nonaktif');
+  }
+  return bagian.filter(Boolean).join('-').replace(/-{2,}/g, '-').slice(0, 90).replace(/-+$/, '');
+}
+
+/**
+ * Nama berkas: Bank-Soal-<Mapel>-<Rombel/Kelas>-<YYYYMMDD-HHMM>.xlsx
+ * Contoh: Bank-Soal-Koding-Dan-Kecerdasan-Artifisial-(KKA)-VII-20261002-1631.xlsx
+ */
+function namaBerkasExcelBankSoal_(rows, info) {
   var sekarang = new Date();
   var pad = function(n) { return String(n).padStart(2, '0'); };
   var stempel = sekarang.getFullYear() + pad(sekarang.getMonth() + 1) + pad(sekarang.getDate()) + '-' +
     pad(sekarang.getHours()) + pad(sekarang.getMinutes());
-  var bersih = String(slug || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  return 'Bank-Soal-' + (bersih ? bersih + '-' : '') + stempel + '.xlsx';
+  var cakupan = bagianCakupanNamaBerkasExcel_(rows, info);
+  return 'Bank-Soal-' + (cakupan ? cakupan + '-' : '') + stempel + '.xlsx';
 }
 
 /**
@@ -5755,15 +5801,15 @@ async function exportBankSoalExcel(mode) {
       statusExportBankSoal_('');
       await hasilInfo_('Bank Soal Masih Kosong',
         'Belum ada soal tersimpan pada akun ini. Tambahkan soal lewat Import Soal atau form Tambah Soal Baru, lalu ulangi export.',
-        [{ label: 'Peran akun', nilai: ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel' }]);
+        [{ label: 'Peran Akun', nilai: ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel' }]);
       return;
     }
     if (!tampil.length) {
       statusExportBankSoal_('');
       await hasilInfo_('Tidak Ada Soal yang Cocok',
         'Filter Bank Soal yang aktif tidak menghasilkan satu soal pun. Kosongkan sebagian filter (atau tekan Unduh Semua Soal), lalu ulangi export.',
-        [{ label: 'Filter aktif', nilai: info.deskripsi || '-' },
-         { label: 'Soal tersimpan', nilai: String(seluruh.length) }]);
+        [{ label: 'Filter Aktif', nilai: info.deskripsi || '-' },
+         { label: 'Soal Tersimpan', nilai: String(seluruh.length) }]);
       return;
     }
 
@@ -5789,7 +5835,7 @@ async function exportBankSoalExcel(mode) {
     }
     var ringkasGambar = ringkasGambarStimulusExcel_(media);
 
-    var berkas = namaBerkasExcelBankSoal_((sesuaiFilter && info.adaFilter) ? info.slug : '');
+    var berkas = namaBerkasExcelBankSoal_(tampil, info);
     var pakaiCsv = false;
     try {
       statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Menyusun berkas Excel' + (ringkasGambar.ok ? ' dengan ' + ringkasGambar.ok + ' gambar...' : '...'));
@@ -5819,13 +5865,13 @@ async function exportBankSoalExcel(mode) {
     var rincianGambar = [];
     if (soalStimulus.length) {
       rincianGambar.push({
-        label: 'Gambar stimulus',
-        nilai: !mauGambar ? 'Tidak disisipkan (pilihan dimatikan)'
-          : (ringkasGambar.ok + ' disisipkan' + (ringkasGambar.gagal ? ', ' + ringkasGambar.gagal + ' gagal' : '') +
-             (ringkasGambar.dilewati ? ', ' + ringkasGambar.dilewati + ' dilewati' : ''))
+        label: 'Gambar Stimulus',
+        nilai: !mauGambar ? 'Tidak Disisipkan (Pilihan Dimatikan)'
+          : (ringkasGambar.ok + ' Disisipkan' + (ringkasGambar.gagal ? ', ' + ringkasGambar.gagal + ' Gagal' : '') +
+             (ringkasGambar.dilewati ? ', ' + ringkasGambar.dilewati + ' Dilewati' : ''))
       });
       if (mauGambar && ringkasGambar.gagal && ringkasGambar.alasan.length) {
-        rincianGambar.push({ label: 'Sebab gambar gagal', nilai: ringkasGambar.alasan.join('; ') });
+        rincianGambar.push({ label: 'Sebab Gambar Gagal', nilai: ringkasGambar.alasan.join('; ') });
       }
     }
     await (pakaiCsv ? hasilInfo_ : hasilSukses_)(
@@ -5835,14 +5881,14 @@ async function exportBankSoalExcel(mode) {
         : 'Berkas .xlsx berisi ' + lembarBerkas.length + ' lembar: pertanyaan, opsi, dan kunci ditulis lengkap tanpa pemotongan' +
           (adaLembarGambar ? ', gambar stimulus ikut disisipkan' : '') + '.') +
       ' Berkas tersimpan di folder Unduhan perangkat Anda.',
-      [{ label: 'Nama berkas', nilai: berkas },
-       { label: 'Jumlah soal', nilai: String(tampil.length) + ' butir' },
-       { label: 'Aktif / nonaktif', nilai: aktif + ' / ' + (tampil.length - aktif) },
-       { label: 'Mapel tercakup', nilai: String(Object.keys(mapel).length) + ' mapel' },
-       { label: 'Cakupan', nilai: (sesuaiFilter && info.adaFilter) ? info.deskripsi : 'Seluruh bank soal' }]
+      [{ label: 'Nama Berkas', nilai: berkas },
+       { label: 'Jumlah Soal', nilai: String(tampil.length) + ' Butir' },
+       { label: 'Aktif / Nonaktif', nilai: aktif + ' / ' + (tampil.length - aktif) },
+       { label: 'Mapel Tercakup', nilai: String(Object.keys(mapel).length) + ' mapel' },
+       { label: 'Cakupan', nilai: (sesuaiFilter && info.adaFilter) ? info.deskripsi : 'Seluruh Bank Soal' }]
       .concat(rincianGambar)
-      .concat([{ label: 'Lembar berkas', nilai: lembarBerkas.join(', ') },
-               { label: 'Diproses sebagai', nilai: (ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel') + (ADMIN.nama ? ' — ' + ADMIN.nama : '') }]));
+      .concat([{ label: 'Lembar Berkas', nilai: lembarBerkas.join(', ') },
+               { label: 'Diproses Sebagai', nilai: (ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel') + (ADMIN.nama ? ' — ' + ADMIN.nama : '') }]));
   } catch (galat) {
     statusExportBankSoal_('');
     if (isAdminSessionInvalidMessage_((galat && galat.message) || '')) return;

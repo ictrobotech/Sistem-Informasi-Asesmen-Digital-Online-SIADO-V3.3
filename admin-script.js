@@ -5832,11 +5832,8 @@ async function exportBankSoalExcel(mode) {
       pakaiCsv ? 'Bank Soal Diunduh (CSV cadangan)' : 'Bank Soal Berhasil Diexport',
       (pakaiCsv
         ? 'Pustaka Excel (exceljs.min.js) belum termuat pada perangkat ini sehingga bank soal diunduh sebagai CSV dengan kolom yang sama seperti tabel Bank Soal. Unggah exceljs.min.js ke hosting agar berkas .xlsx berformat rapi dapat dibuat.'
-        : 'Berkas .xlsx berisi ' + lembarBerkas.length + ' lembar: ' + lembarBerkas.join(' — ') + '. ' +
-              'Lembar Rincian & Kunci memuat pertanyaan, opsi, dan kunci lengkap tanpa pemotongan' +
-              (adaLembarGambar ? ', gambar stimulus disisipkan pada lembar Gambar Stimulus dan sebagai gambar mini di lembar Rincian & Kunci' : '') +
-              (lembarBerkas.indexOf('PGK Kategori') !== -1 ? ', kunci PGK Kategori disusun ulang menjadi kolom kategori asli bertanda centang' : '') +
-              (lembarBerkas.indexOf('Menjodohkan') !== -1 ? ', dan pasangan Menjodohkan ditulis sebagai tabel dua kolom' : '') + '.') +
+        : 'Berkas .xlsx berisi ' + lembarBerkas.length + ' lembar: pertanyaan, opsi, dan kunci ditulis lengkap tanpa pemotongan' +
+          (adaLembarGambar ? ', gambar stimulus ikut disisipkan' : '') + '.') +
       ' Berkas tersimpan di folder Unduhan perangkat Anda.',
       [{ label: 'Nama berkas', nilai: berkas },
        { label: 'Jumlah soal', nilai: String(tampil.length) + ' butir' },
@@ -5844,7 +5841,7 @@ async function exportBankSoalExcel(mode) {
        { label: 'Mapel tercakup', nilai: String(Object.keys(mapel).length) + ' mapel' },
        { label: 'Cakupan', nilai: (sesuaiFilter && info.adaFilter) ? info.deskripsi : 'Seluruh bank soal' }]
       .concat(rincianGambar)
-      .concat([{ label: 'Lembar pada berkas', nilai: lembarBerkas.join(', ') },
+      .concat([{ label: 'Lembar berkas', nilai: lembarBerkas.join(', ') },
                { label: 'Diproses sebagai', nilai: (ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel') + (ADMIN.nama ? ' — ' + ADMIN.nama : '') }]));
   } catch (galat) {
     statusExportBankSoal_('');

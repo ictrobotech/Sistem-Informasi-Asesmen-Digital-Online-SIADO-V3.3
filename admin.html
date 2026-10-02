@@ -174,11 +174,21 @@
        .toast (9000) agar pemberitahuan seperti "Materi Belum Diisi" selalu
        tampil DI DEPAN modal Kartu Soal, bukan tersembunyi di belakangnya. */
     .app-dialog{position:fixed;inset:0;z-index:9500;display:none;align-items:center;justify-content:center;
-      padding:20px;background:rgba(9,26,45,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+      padding:20px;background:rgba(9,26,45,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+      overflow-y:auto;overscroll-behavior:contain}
     .app-dialog.show{display:flex;animation:dlgFade .18s ease}
     @keyframes dlgFade{from{opacity:0}to{opacity:1}}
+    /* REVISI 2026-10-02: kartu dialog dibatasi tinggi layar dan isinya dapat
+       digulir, sehingga tombol aksi di bawah SELALU terlihat & bisa diklik
+       walau rincian hasil panjang (mis. ringkasan export bank soal). */
     .app-dialog-card{width:100%;max-width:440px;background:#fff;border-radius:16px;padding:26px 24px 20px;
-      text-align:center;box-shadow:0 26px 60px rgba(9,26,45,.32);animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2)}
+      text-align:center;box-shadow:0 26px 60px rgba(9,26,45,.32);animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2);
+      max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);
+      display:flex;flex-direction:column;overflow:hidden}
+    .app-dialog-icon,.app-dialog-card>h3{flex:0 0 auto}
+    .app-dialog-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;padding:0 3px 2px}
+    .app-dialog-actions{flex:0 0 auto}
     @keyframes dlgPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
     .app-dialog-icon{width:60px;height:60px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;
       font-size:25px;background:#eaf3ff;color:#1f6feb}
@@ -191,7 +201,8 @@
     .app-dialog-field.show{display:block}
     .app-dialog-field label{display:block;margin-bottom:6px;font-size:12px;font-weight:800;color:#22496e}
     .app-dialog-field small{display:block;margin-top:6px;font-size:11px;color:#7d93a8;line-height:1.5}
-    .app-dialog-actions{display:flex;gap:9px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+    .app-dialog-actions{display:flex;gap:9px;justify-content:center;margin-top:16px;flex-wrap:wrap;
+      padding-top:14px;border-top:1px solid #edf3f9}
     .app-dialog-actions button{min-width:132px;justify-content:center}
     .app-dialog-actions .admin-danger{min-width:132px}
     @media(max-width:480px){
@@ -1192,11 +1203,13 @@
     <div class="app-dialog-card" role="document">
       <div class="app-dialog-icon" id="appDialogIcon"><i class="fa-solid fa-circle-question"></i></div>
       <h3 id="appDialogTitle">Konfirmasi</h3>
-      <p id="appDialogMessage">Pesan konfirmasi.</p>
-      <div class="app-dialog-field" id="appDialogFieldWrap">
-        <label id="appDialogLabel" for="appDialogInput">Masukkan nilai</label>
-        <input id="appDialogInput" class="admin-input" type="text" autocomplete="off">
-        <small id="appDialogHint"></small>
+      <div class="app-dialog-body">
+        <p id="appDialogMessage">Pesan konfirmasi.</p>
+        <div class="app-dialog-field" id="appDialogFieldWrap">
+          <label id="appDialogLabel" for="appDialogInput">Masukkan nilai</label>
+          <input id="appDialogInput" class="admin-input" type="text" autocomplete="off">
+          <small id="appDialogHint"></small>
+        </div>
       </div>
       <div class="app-dialog-actions">
         <button id="appDialogCancel" class="admin-secondary" type="button">Batal</button>
@@ -1221,7 +1234,7 @@
   <script src="exceljs.min.js?v=20260909b"></script>
   <script src="jspdf.umd.min.js?v=20260909"></script>
   <script src="jspdf.plugin.autotable.min.js?v=20260909"></script>
-  <script src="admin-script.js?v=20261002-export-bank-soal-tabel-3"></script>
+  <script src="admin-script.js?v=20261002-export-bank-soal-tabel-4"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -1271,6 +1284,6 @@
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fe28a17fdf9',t:'MTc5MDI1OTcwMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a40314400b4e6cc1',t:'MTc5MDI2NjQzNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4122a26ac818359',t:'MTc5MDQyNDYxOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a42d4676f9bb0b9e',t:'MTc5MDcwODg5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4424cd3beca7e17',t:'MTc5MDkyOTM1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-</body>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4425838bee1f932',t:'MTc5MDkyOTgyMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

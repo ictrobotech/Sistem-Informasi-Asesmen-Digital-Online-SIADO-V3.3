@@ -1105,6 +1105,8 @@ function terapkanHakAkses_() {
   // REVISI 5: daftar "Mapel tujuan" bergantung pada peran (guru dikunci ke
   // mapel yang diampu), jadi dibangun ulang setiap kali peran diterapkan.
   segarkanMapelImport_();
+  // REVISI 2026-10-02: dropdown token mengikuti mapel penetapan admin.
+  segarkanPilihanTokenGuru_();
 }
 
 async function tryRestoreAdminSession() {
@@ -1278,6 +1280,9 @@ function switchAdminTab(tab) {
   if (tab === 'pengguna') {
     if (ADMIN.isAdmin) { loadTeachers(); siapkanFormKelasGuru_(); }
     muatTokenGuruUI_();
+    // Kartu token guru: dropdown mapel & rombel harus siap begitu tab dibuka.
+    segarkanPilihanTokenGuru_();
+    if (!ADMIN.isAdmin) muatRombelTokenGuru_().then(segarkanPilihanTokenGuru_);
   }
   if (tab === 'notifikasi') loadNotifications();
   if (tab === 'pengaturan') { loadSettings(); muatDaftarPesertaDurasi_(); }
@@ -4519,6 +4524,8 @@ async function muatInfoBatasKelasGuru_() {
   }
   ADMIN.infoMapelGuru_ = info;
   perbaruiInfoBatasKelasGuru_();
+  // Batas kelas per mapel dipakai dropdown rombel pada kartu Token Ujian.
+  segarkanPilihanTokenGuru_();
 }
 
 /** Membangun dropdown #sMapel dan menyinkronkan kotak ketik manual. */
@@ -7670,6 +7677,212 @@ async function clearAllNotifications() {
 /* ==================================================================
  * AKUN GURU MAPEL (KHUSUS ADMIN)
  * ================================================================== */
+/* ==================================================================
+ * REVISI 2026-10-02 — DROPDOWN MAPEL & ROMBEL PADA KARTU TOKEN
+ *
+ * Permintaan guru: kolom "Mapel" dan "Rombel" pada kartu Token Ujian
+ * tidak lagi diketik bebas, melainkan DIPILIH dari daftar:
+ *   - Mapel  -> mata pelajaran yang diujikan (mapel aktif) yang
+ *               ditetapkan admin untuk akun guru ini (mapelDiampu /
+ *               info_mapel_guru) — sumber yang sama dengan dropdown
+ *               di Pengaturan.
+ *   - Rombel -> data rombel dari admin. Bila admin menetapkan batas
+ *               kelas untuk mapel itu (kelasMapel1/kelasMapel2),
+ *               daftar dipersempit ke kelas tersebut; bila mapel tidak
+ *               dibatasi, seluruh rombel yang termuat di panel dipakai.
+ *
+ * Nilai yang dikirim ke server tetap teks mapel/rombel seperti
+ * sebelumnya, jadi backend tidak perlu diubah.
+ *
+ * ROMBEL TERKUNCI: pilihan hanya boleh berasal dari daftar rombel
+ * penetapan admin — tidak ada lagi pilihan "ketik manual". Bila daftar
+ * kosong, dropdown berisi penanda dan penyimpanan ditolak dengan pesan
+ * yang meminta admin melengkapi data rombel. (Mapel: cadangan manual
+ * tetap ada dan hanya muncul bila admin belum menetapkan mapel akun.)
+ * ================================================================== */
+
+/** Membaca nilai dropdown; kotak manual dipakai hanya bila pilihan manual dipilih (khusus mapel). */
+function nilaiTokenGuru_(idSelect, idManual, sentinel) {
+  var el = document.getElementById(idSelect);
+  if (!el) return '';
+  var nilai = String(el.value || '');
+  if (el.tagName === 'SELECT' && nilai === sentinel) {
+    var manual = document.getElementById(idManual);
+    return manual ? String(manual.value || '').trim() : '';
+  }
+  return nilai.trim();
+}
+
+/**
+ * Menulis nilai ke dropdown. Mengembalikan true bila nilainya berhasil
+ * dipilih, false bila nilai itu tidak ada pada daftar.
+ *
+ * `sentinel` (khusus mapel) bila diberikan: nilai yang belum ada di daftar
+ * boleh ditambahkan sebagai pilihan. Untuk ROMBEL sentinel tidak diberikan,
+ * sehingga daftar tetap tertutup — hanya rombel penetapan admin yang sah.
+ */
+function isiNilaiTokenGuru_(idSelect, nilai, sentinel) {
+  var el = document.getElementById(idSelect);
+  var bersih = String(nilai || '').trim();
+  if (!el || !bersih) return false;
+  if (el.tagName !== 'SELECT') { el.value = bersih; return true; }
+  var opsi = null;
+  Array.prototype.some.call(el.options, function(o) {
+    if (o.value === bersih) { opsi = o; return true; }
+    return false;
+  });
+  if (!opsi) {
+    if (!sentinel) return false;
+    opsi = document.createElement('option');
+    opsi.value = bersih;
+    opsi.textContent = bersih;
+    var penanda = null;
+    Array.prototype.some.call(el.options, function(o) {
+      if (o.value === sentinel) { penanda = o; return true; }
+      return false;
+    });
+    if (penanda && penanda.parentNode) el.insertBefore(opsi, penanda);
+    else el.appendChild(opsi);
+  }
+  el.value = bersih;
+  return true;
+}
+
+/** Slot mapel (1/2) menurut penetapan admin; 0 bila tidak dikenali. */
+function slotMapelTokenGuru_(mapel) {
+  var info = ADMIN.infoMapelGuru_ || {};
+  var kanon = pecahMapelGuru_(String(info.mapelAkun || ''));
+  var cari = String(mapel || '').trim().toLowerCase();
+  for (var i = 0; i < kanon.length; i++) {
+    if (cari && kanon[i].toLowerCase() === cari) return i + 1;
+  }
+  return 0;
+}
+
+/** Daftar mapel yang diujikan untuk akun ini (penetapan admin). */
+function daftarMapelTokenGuru_() {
+  var kini = nilaiTokenGuru_('tokenGuruMapel', 'tokenGuruMapelManual', MAPEL_MANUAL_);
+  return daftarMapelMilik_(kini).filter(function(m) { return m !== MAPEL_MANUAL_; });
+}
+
+/** Daftar rombel untuk satu mapel: batas kelas admin, atau seluruh rombel. */
+function daftarRombelTokenGuru_(mapel) {
+  var daftar = [];
+  function tambah(nilai) {
+    var bersih = String(nilai || '').trim();
+    if (!bersih) return;
+    var ada = daftar.some(function(x) { return x.toLowerCase() === bersih.toLowerCase(); });
+    if (!ada) daftar.push(bersih);
+  }
+  var info = ADMIN.infoMapelGuru_ || {};
+  var slot = slotMapelTokenGuru_(mapel);
+  if (slot === 1) normalisasiKelas_(info.kelasMapel1).forEach(tambah);
+  else if (slot === 2) normalisasiKelas_(info.kelasMapel2).forEach(tambah);
+  else normalisasiKelas_(info.kelasAktif).forEach(tambah);
+  if (!daftar.length) {
+    (ADMIN.rombel || []).forEach(function(item) {
+      tambah(item && item.rombel !== undefined ? item.rombel : item);
+    });
+  }
+  return daftar;
+}
+
+/** Mengisi dropdown Mapel pada kartu token. */
+function isiDropdownMapelTokenGuru_() {
+  var pilih = document.getElementById('tokenGuruMapel');
+  if (!pilih || pilih.tagName !== 'SELECT') return;
+  var sebelum = String(pilih.value || '');
+  var daftar = daftarMapelTokenGuru_();
+  var html = daftar.map(function(m) {
+    return '<option value="' + escapeAdmin(m) + '">' + escapeAdmin(m) + '</option>';
+  }).join('');
+  if (!daftar.length) {
+    html = '<option value="">Belum ditetapkan admin</option>' +
+      '<option value="' + MAPEL_MANUAL_ + '">+ Mapel lain (ketik manual)...</option>';
+  }
+  pilih.innerHTML = html;
+  var cocok = daftar.filter(function(m) { return m.toLowerCase() === sebelum.toLowerCase(); })[0];
+  pilih.value = cocok || daftar[0] || (daftar.length ? '' : MAPEL_MANUAL_);
+}
+
+/** Mengisi dropdown Rombel pada kartu token (mengikuti mapel terpilih). */
+function isiDropdownRombelTokenGuru_() {
+  var pilih = document.getElementById('tokenGuruRombel');
+  if (!pilih || pilih.tagName !== 'SELECT') return;
+  var sebelum = String(pilih.value || '');
+  var mapel = nilaiTokenGuru_('tokenGuruMapel', 'tokenGuruMapelManual', MAPEL_MANUAL_);
+  var daftar = daftarRombelTokenGuru_(mapel);
+  // Bila mapelnya diganti, rombel lama TIDAK dipertahankan (bisa jadi rombel
+  // mapel lain). Pilihan lama hanya dijaga saat daftar dibangun ulang untuk
+  // mapel yang sama (mis. setelah menyimpan atau menekan Refresh).
+  var mapelSama = String(pilih.dataset.mapelToken || '') === mapel;
+  pilih.dataset.mapelToken = mapel;
+  var html = daftar.map(function(m) {
+    return '<option value="' + escapeAdmin(m) + '">' + escapeAdmin(m) + '</option>';
+  }).join('');
+  // REVISI 2026-10-02 (lanjutan): rombel WAJIB dari daftar yang ditetapkan
+  // admin — tidak ada lagi pilihan "ketik manual". Bila daftar kosong,
+  // dropdown hanya berisi penanda dan tombol simpan menolak dengan pesan jelas.
+  if (!daftar.length) html = '<option value="">(Belum ada rombel dari admin)</option>';
+  pilih.innerHTML = html;
+  var cocok = mapelSama ? daftar.filter(function(m) { return m.toLowerCase() === sebelum.toLowerCase(); })[0] : null;
+  // Rombel di luar daftar admin TIDAK pernah ditambahkan sebagai pilihan.
+  pilih.value = cocok || daftar[0] || '';
+}
+
+/** Menampilkan kotak ketik manual mapel hanya saat pilihan manual dipilih. */
+function tampilManualTokenGuru_() {
+  var pasang = [['tokenGuruMapel', 'tokenGuruMapelManualWrap', MAPEL_MANUAL_]];
+  pasang.forEach(function(p) {
+    var pilih = document.getElementById(p[0]);
+    var bungkus = document.getElementById(p[1]);
+    if (!bungkus) return;
+    var tampil = pilih && (pilih.value === p[2] || !String(pilih.value || '').length);
+    bungkus.style.display = tampil ? '' : 'none';
+  });
+}
+
+/** Membangun ulang kedua dropdown token mengikuti data admin terbaru. */
+function segarkanPilihanTokenGuru_() {
+  isiDropdownMapelTokenGuru_();
+  isiDropdownRombelTokenGuru_();
+  tampilManualTokenGuru_();
+}
+
+/** Membersihkan token & ketikan manual, lalu menyusun ulang dropdown. */
+function kosongkanTokenGuruForm_() {
+  ['tokenGuruMapelManual', 'tokenGuruNilai'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  segarkanPilihanTokenGuru_();
+}
+
+/**
+ * Memuat daftar rombel dari data admin (getDataPeserta) bila belum ada.
+ * Guru menerima daftar rombel terbatas sesuai mapel aktifnya. `paksa`
+ * dipakai tombol Refresh agar pemuatan ulang tetap dilakukan.
+ */
+async function muatRombelTokenGuru_(paksa) {
+  if (ADMIN.isAdmin) return false;
+  var mapel = '';
+  try { mapel = mapelDiujikan_(); } catch (abaikan) { mapel = ''; }
+  if (!paksa && (ADMIN.rombel || []).length && ADMIN.rombelTokenMapel_ === mapel) return true;
+  ADMIN.rombelTokenMapel_ = mapel;
+  try {
+    var payload = { rombel: '' };
+    if (mapel) payload.mapel = mapel;
+    var hasil = await adminApi('getDataPeserta', payload);
+    if (hasil && hasil.success && Array.isArray(hasil.rombel)) {
+      ADMIN.rombel = hasil.rombel;
+      return true;
+    }
+  } catch (galat) {
+    console.warn('Daftar rombel token gagal dimuat:', galat && galat.message);
+  }
+  return false;
+}
+
 function bindTokenGuruUI_() {
   var save = document.getElementById('saveTokenGuru');
   var toggle = document.getElementById('toggleStatusTokenGuru');
@@ -7688,7 +7901,17 @@ function bindTokenGuruUI_() {
     setStatusTokenGuruTampilan_(ADMIN.isAdmin ? false : true);
     if (!ADMIN.isAdmin) toggle.addEventListener('click', ubahStatusTokenGuruUI_);
   }
-  if (refresh) refresh.addEventListener('click', muatTokenGuruUI_);
+  if (refresh) refresh.addEventListener('click', function() {
+    muatTokenGuruUI_();
+    muatRombelTokenGuru_(true).then(segarkanPilihanTokenGuru_);
+    segarkanPilihanTokenGuru_();
+  });
+  // REVISI 2026-10-02: dropdown mapel & rombel terisi otomatis dari data admin.
+  var pilihMapel = document.getElementById('tokenGuruMapel');
+  if (pilihMapel) pilihMapel.addEventListener('change', function() { segarkanPilihanTokenGuru_(); });
+  var pilihRombel = document.getElementById('tokenGuruRombel');
+  if (pilihRombel) pilihRombel.addEventListener('change', tampilManualTokenGuru_);
+  segarkanPilihanTokenGuru_();
 }
 
 function setStatusTokenGuruTampilan_(aktif) {
@@ -7707,7 +7930,7 @@ function setStatusTokenGuruTampilan_(aktif) {
 
 function tokenGuruPayloadUI_() {
   return {
-    mapel: String((document.getElementById('tokenGuruMapel') || {}).value || '').trim(),
+    mapel: nilaiTokenGuru_('tokenGuruMapel', 'tokenGuruMapelManual', MAPEL_MANUAL_),
     rombel: String((document.getElementById('tokenGuruRombel') || {}).value || '').trim(),
     token: String((document.getElementById('tokenGuruNilai') || {}).value || '').trim()
   };
@@ -7717,12 +7940,12 @@ async function simpanTokenGuruUI_() {
   var p = tokenGuruPayloadUI_();
   var out = document.getElementById('tokenGuruResult');
   if (out) out.style.display = 'block';
-  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
+  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib dipilih. Rombel hanya boleh dari daftar yang ditetapkan admin (bila daftar kosong, minta admin menambahkan rombel).'; return; }
   try {
     var r = await adminApi('simpanTokenGuru', p);
     if (!r || !r.success) throw new Error((r && r.message) || 'Token gagal disimpan.');
     if(out) out.textContent = 'Token berhasil disimpan: ' + (r.token || '');
-    ['tokenGuruMapel','tokenGuruRombel','tokenGuruNilai'].forEach(function(id) { var el=document.getElementById(id); if(el) el.value=''; });
+    kosongkanTokenGuruForm_();
     await muatTokenGuruUI_();
   } catch(e) { if(out) out.textContent=e.message || 'Token gagal disimpan.'; }
 }
@@ -7731,14 +7954,14 @@ async function ubahStatusTokenGuruUI_() {
   var p = tokenGuruPayloadUI_();
   var out = document.getElementById('tokenGuruResult');
   if (out) out.style.display = 'block';
-  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib diisi.'; return; }
+  if (!p.mapel || !p.rombel) { if(out) out.textContent='Mapel dan rombel wajib dipilih. Rombel hanya boleh dari daftar yang ditetapkan admin (bila daftar kosong, minta admin menambahkan rombel).'; return; }
   var aktif = String((document.getElementById('toggleStatusTokenGuru') || {}).dataset.aktif || 'true') !== 'true';
   try {
     var r = await adminApi('ubahStatusRombelGuru', { mapel:p.mapel, rombel:p.rombel, aktif:aktif });
     if (!r || !r.success) throw new Error((r && r.message) || 'Status gagal diubah.');
     setStatusTokenGuruTampilan_(aktif);
     if(out) out.textContent = r.message || 'Status akses guru berhasil diubah.';
-    ['tokenGuruMapel','tokenGuruRombel','tokenGuruNilai'].forEach(function(id) { var el=document.getElementById(id); if(el) el.value=''; });
+    kosongkanTokenGuruForm_();
     await muatTokenGuruUI_();
   } catch(e) { if(out) out.textContent=e.message || 'Status gagal diubah.'; }
 }
@@ -7752,8 +7975,17 @@ async function muatTokenGuruUI_() {
       var satu = rows[0];
       var m = document.getElementById('tokenGuruMapel');
       var rb = document.getElementById('tokenGuruRombel');
-      if (m && !m.value) m.value = satu.mapel || '';
-      if (rb && !rb.value) rb.value = satu.rombel || '';
+      if (m && !m.value) isiNilaiTokenGuru_('tokenGuruMapel', satu.mapel, MAPEL_MANUAL_);
+      if (rb && !rb.value) {
+        var terpasang = isiNilaiTokenGuru_('tokenGuruRombel', satu.rombel);
+        if (!terpasang && satu.rombel) {
+          var outKat = document.getElementById('tokenGuruResult');
+          if (outKat) {
+            outKat.style.display = 'block';
+            outKat.textContent = 'Rombel tersimpan (' + satu.rombel + ') tidak ada pada daftar rombel admin untuk mapel ini. Silakan pilih rombel dari daftar.';
+          }
+        }
+      }
       setStatusTokenGuruTampilan_(!!(satu.aktifGuru && satu.statusAdmin));
     }
     box.innerHTML='<table class="admin-table"><thead><tr><th style="text-align:center">Username</th><th style="text-align:center">Mapel</th><th style="text-align:center">Rombel</th><th style="text-align:center">Status Admin</th><th style="text-align:center">Status Guru</th></tr></thead><tbody>'+rows.map(function(x){return '<tr><td style="text-align:center">'+escapeAdmin(x.pemilikGuru||'-')+'</td><td style="text-align:center">'+escapeAdmin(x.mapel||'-')+'</td><td style="text-align:center">'+escapeAdmin(x.rombel||'-')+'</td><td style="text-align:center">'+((x.statusAdmin)?'Aktif':'Nonaktif')+'</td><td style="text-align:center">'+((x.aktifGuru)?'Aktif':'Nonaktif')+'</td></tr>';}).join('')+'</tbody></table>';

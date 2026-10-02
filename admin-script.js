@@ -4472,7 +4472,7 @@ function unduhTemplatePeserta() {
 /* ==================================================================
  * EXPORT BANK SOAL KE EXCEL (REVISI 2026-10-02)
  *
- * Menambah tombol "Export Excel" pada kartu Bank Soal (menu Kelola Soal)
+ * Menambah tombol "Export Soal" pada kartu Bank Soal (menu Kelola Soal),
  * dan kartu "Export Bank Soal" pada menu Export Laporan. Fitur ini dipakai
  * bersama oleh akun Guru Mapel dan Proktor/Admin karena keduanya memakai
  * panel ini — guru otomatis menerima bank soal sesuai hak aksesnya.

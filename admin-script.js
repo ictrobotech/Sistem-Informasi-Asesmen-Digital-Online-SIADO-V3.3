@@ -1522,6 +1522,7 @@ function updateQuestionFormatHelp(prefix) {
  * langsung melihat perubahan nama kolom pada tabel pratinjau.
  */
 function pasangLabelKolomKiri_(prefix) {
+  /* Kolom label hanya ada pada PGK Kategori; Menjodohkan memakai label tetap. */
   var pgk = document.getElementById(prefix + 'PgkLabelKiri');
   if (pgk) {
     pgk.autocomplete = 'off';
@@ -1529,11 +1530,6 @@ function pasangLabelKolomKiri_(prefix) {
       if (PGK_STATE[prefix]) PGK_STATE[prefix].labelKiri = this.value;
       perbaruiPratinjauPgk_(prefix);
     });
-  }
-  var jodoh = document.getElementById(prefix + 'JodohLabelKiri');
-  if (jodoh) {
-    jodoh.autocomplete = 'off';
-    jodoh.addEventListener('input', function() { perbaruiPratinjauJodoh_(prefix); });
   }
 }
 
@@ -1546,8 +1542,11 @@ function perbaruiPratinjauJodoh_(prefix) {
   var state = JODOH_STATE[prefix];
   if (!prev) return;
   if (!state) { prev.innerHTML = ''; return; }
-  var label = labelKolomKiri_(prefix, 'MENJODOHKAN') || 'Pernyataan';
-  var baris = state.rows.filter(function(r) { return String(r.text || '').trim() || String(r.pasangan || '').trim(); });
+  var label = 'Pernyataan';
+  var baris = state.rows.filter(function(r) {
+    return String(r.text || '').trim() || String(r.pasangan || '').trim() ||
+      String(r.gambar || '').trim() || String(r.pasanganGambar || '').trim();
+  });
   if (!baris.length) {
     prev.innerHTML = '<p class="pratinjau-kosong">Belum ada pasangan. Tulis pernyataan dan pasangannya, lalu pratinjau tampil di sini.</p>';
     return;
@@ -1555,10 +1554,12 @@ function perbaruiPratinjauJodoh_(prefix) {
   prev.innerHTML = '<div class="pgk-cat-scroll"><table class="pgk-table jodoh-table"><thead><tr><th>' +
     SRich.escapeHtml(label) + '</th><th>Pasangan Jawaban</th></tr></thead><tbody>' +
     baris.map(function(r, i) {
-      return '<tr><td><strong>' + (i + 1) + '.</strong> ' + SRich.renderRich(r.text || '(pernyataan belum ditulis)') +
-        SRich.lampiranGambarHtml_(r.gambar, r.alt || ('Gambar pernyataan ' + (i + 1))) + '</td>' +
-        '<td><span class="pgk-select tiruan">' + SRich.escapeHtml(String(r.pasangan || 'Pilih pasangan')) + '</span>' +
-        SRich.lampiranGambarHtml_(r.pasanganGambar, r.pasanganAlt || ('Gambar pasangan ' + (i + 1))) + '</td></tr>';
+      var kiri = String(r.text || '').trim() ? SRich.renderRich(r.text) : '<em>(gambar saja)</em>';
+      var kanan = String(r.pasangan || '').trim() ? SRich.escapeHtml(r.pasangan) : 'Pilih pasangan';
+      return '<tr><td><strong>' + (i + 1) + '.</strong> ' + kiri +
+        SRich.lampiranSlotHtml_(r.gambar, r.gambarJenis, r.alt || ('Lampiran kolom kiri ' + (i + 1))) + '</td>' +
+        '<td><span class="pgk-select tiruan">' + kanan + '</span>' +
+        SRich.lampiranSlotHtml_(r.pasanganGambar, r.pasanganJenis, r.pasanganAlt || ('Lampiran kolom kanan ' + (i + 1))) + '</td></tr>';
     }).join('') + '</tbody></table></div>';
 }
 
@@ -1787,81 +1788,94 @@ function jodohAddRow(prefix, text, pasangan) {
   var selKiri = document.createElement('div'); selKiri.className = 'jodoh-sel';
   var selKanan = document.createElement('div'); selKanan.className = 'jodoh-pasangan';
   selKiri.appendChild(i1); selKanan.appendChild(i2);
-  /* Gambar opsional pada kolom kiri & kanan pasangan (mis. gambar → nama). */
-  function bilahGambar(sisi, label) {
-    var bar = document.createElement('div'); bar.className = 'jodoh-gambar';
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.innerHTML = '<i class="fa-regular fa-image"></i> ' + label;
-    btn.title = 'Lampirkan gambar pada ' + label.toLowerCase();
-    var mini = document.createElement('img');
-    mini.className = 'gambar-opsi-mini';
-    var hapus = document.createElement('button');
-    hapus.type = 'button';
-    hapus.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-    hapus.title = 'Hapus gambar ' + label.toLowerCase();
-    bar.appendChild(btn); bar.appendChild(hapus); bar.appendChild(mini);
-    (sisi === 'pasangan' ? selKanan : selKiri).appendChild(bar);
-    return { bar: bar, btn: btn, mini: mini, hapus: hapus };
-  }
-  var slotKiri = bilahGambar('pernyataan', 'Gambar kolom kiri');
-  var slotKanan = bilahGambar('pasangan', 'Gambar kolom kanan');
   var del = document.createElement('button');
   del.type = 'button'; del.className = 'pgk-del';
   del.title = 'Hapus pasangan';
   del.innerHTML = '<i class="fa-solid fa-trash"></i>';
   row.appendChild(no); row.appendChild(selKiri); row.appendChild(eq); row.appendChild(selKanan); row.appendChild(del);
   wrap.appendChild(row);
-  var rowState = { text: text || '', pasangan: pasangan || '', gambar: '', alt: '', pasanganGambar: '', pasanganAlt: '' };
+
+  /**
+   * Slot tambahan tiap kolom: boleh GAMBAR (imgg) atau TEKS/tautan.
+   * Tombolnya "Gambar / Teks kolom kiri|kanan" — di dalam kotak pilihannya
+   * tersedia tab Teks/Tautan.
+   */
+  function bilahSlot(sisi, label) {
+    var bar = document.createElement('div'); bar.className = 'jodoh-gambar';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = '<i class="fa-regular fa-image"></i> ' + label;
+    btn.title = 'Lampirkan gambar atau teks pada ' + label.toLowerCase();
+    btn.dataset.label = label;
+    var pratinjau = document.createElement('span');
+    pratinjau.className = 'jodoh-slot-pratinjau';
+    var hapus = document.createElement('button');
+    hapus.type = 'button';
+    hapus.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    hapus.title = 'Hapus lampiran ' + label.toLowerCase();
+    bar.appendChild(btn); bar.appendChild(hapus); bar.appendChild(pratinjau);
+    (sisi === 'pasangan' ? selKanan : selKiri).appendChild(bar);
+    return { bar: bar, btn: btn, pratinjau: pratinjau, hapus: hapus };
+  }
+
+  var rowState = {
+    text: text || '', pasangan: pasangan || '',
+    gambar: '', gambarJenis: 'gambar', alt: '',
+    pasanganGambar: '', pasanganJenis: 'gambar', pasanganAlt: ''
+  };
   state.rows.push(rowState);
+
+  function segarkanSlot(slot, nilai, jenis, alt) {
+    var ada = String(nilai || '').trim().length > 0;
+    slot.hapus.hidden = !ada;
+    if (!ada) {
+      slot.pratinjau.innerHTML = '';
+      slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> Gambar / Teks ' + slot.btn.dataset.label.replace('Gambar / Teks ', '');
+      return;
+    }
+    slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> Ganti lampiran';
+    slot.pratinjau.innerHTML = SRich.lampiranSlotHtml_(nilai, jenis, alt);
+  }
+
+  function pasangSlot(slot, kunciNilai, kunciJenis, kunciAlt, judul) {
+    slot.btn.addEventListener('click', async function() {
+      var hasil = await pilihGambarSoal_({
+        judul: judul,
+        izinkanTeks: true,
+        keterangan: 'Pilih gambar (komputer, Google Drive, atau tautan) — atau buka tab Teks / Tautan untuk mengisi kolom ini dengan teks biasa.'
+      });
+      if (!hasil) return;
+      if (hasil.jenis === 'teks') {
+        rowState[kunciNilai] = hasil.teks;
+        rowState[kunciJenis] = 'teks';
+        rowState[kunciAlt] = '';
+      } else {
+        rowState[kunciNilai] = hasil.url;
+        rowState[kunciJenis] = 'gambar';
+        rowState[kunciAlt] = hasil.alt || '';
+      }
+      segarkanSlot(slot, rowState[kunciNilai], rowState[kunciJenis], rowState[kunciAlt]);
+      perbaruiPratinjauJodoh_(prefix);
+      showToast((hasil.jenis === 'teks' ? 'Teks' : 'Gambar') + ' kolom ' + judul.toLowerCase().replace('gambar / teks ', '') + ' siap dipakai.', 'success');
+    });
+    slot.hapus.addEventListener('click', function() {
+      rowState[kunciNilai] = '';
+      rowState[kunciAlt] = '';
+      segarkanSlot(slot, '', 'gambar', '');
+      perbaruiPratinjauJodoh_(prefix);
+    });
+  }
+
+  var slotKiri = bilahSlot('pernyataan', 'Gambar / Teks kolom kiri');
+  var slotKanan = bilahSlot('pasangan', 'Gambar / Teks kolom kanan');
+  rowState._segarkanSlot = function() {
+    segarkanSlot(slotKiri, rowState.gambar, rowState.gambarJenis, rowState.alt);
+    segarkanSlot(slotKanan, rowState.pasanganGambar, rowState.pasanganJenis, rowState.pasanganAlt);
+  };
   i1.value = rowState.text;
   i2.value = rowState.pasangan;
   i1.addEventListener('input', function() { rowState.text = this.value; perbaruiKunciJodoh_(prefix); perbaruiPratinjauJodoh_(prefix); });
   i2.addEventListener('input', function() { rowState.pasangan = this.value; perbaruiKunciJodoh_(prefix); perbaruiPratinjauJodoh_(prefix); });
-
-  function pasangSlot(slot, kunciGambar, kunciAlt, judul) {
-    slot.btn.addEventListener('click', async function() {
-      var hasil = await pilihGambarSoal_({
-        judul: judul,
-        keterangan: 'Gambar ini tampil bersama teks pasangan pada peserta ujian dan pada Export Soal.'
-      });
-      if (!hasil) return;
-      rowState[kunciGambar] = hasil.url;
-      rowState[kunciAlt] = hasil.alt;
-      segarkanSlot(slot, rowState[kunciGambar], rowState[kunciAlt]);
-      perbaruiPratinjauJodoh_(prefix);
-      showToast('Gambar ' + judul.toLowerCase() + ' siap dipakai.', 'success');
-    });
-    slot.hapus.addEventListener('click', function() {
-      rowState[kunciGambar] = '';
-      rowState[kunciAlt] = '';
-      segarkanSlot(slot, '', '');
-      perbaruiPratinjauJodoh_(prefix);
-    });
-  }
-  function segarkanSlot(slot, url, alt) {
-    var ada = !!url;
-    slot.mini.hidden = !ada;
-    slot.hapus.hidden = !ada;
-    if (ada) {
-      slot.mini.src = urlGambarTampilAdmin_(url);
-      slot.mini.alt = alt || 'Gambar pasangan';
-      slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> Ganti';
-    } else {
-      slot.mini.removeAttribute('src');
-      slot.btn.innerHTML = '<i class="fa-regular fa-image"></i> ' + slot.btn.dataset.label;
-    }
-  }
-  slotKiri.btn.dataset.label = 'Gambar kolom kiri';
-  slotKanan.btn.dataset.label = 'Gambar kolom kanan';
-  segarkanSlot(slotKiri, '', '');
-  segarkanSlot(slotKanan, '', '');
-  pasangSlot(slotKiri, 'gambar', 'alt', 'Gambar kolom kiri');
-  pasangSlot(slotKanan, 'pasanganGambar', 'pasanganAlt', 'Gambar kolom kanan');
-  rowState._segarkanSlot = function() {
-    segarkanSlot(slotKiri, rowState.gambar, rowState.alt);
-    segarkanSlot(slotKanan, rowState.pasanganGambar, rowState.pasanganAlt);
-  };
   del.addEventListener('click', function() {
     if (state.rows.length <= 1) { showToast('Minimal satu pasangan.', 'error'); return; }
     var i = state.rows.indexOf(rowState);
@@ -1871,6 +1885,10 @@ function jodohAddRow(prefix, text, pasangan) {
     perbaruiKunciJodoh_(prefix);
     perbaruiPratinjauJodoh_(prefix);
   });
+  pasangSlot(slotKiri, 'gambar', 'gambarJenis', 'alt', 'Gambar / Teks kolom kiri');
+  pasangSlot(slotKanan, 'pasanganGambar', 'pasanganJenis', 'pasanganAlt', 'Gambar / Teks kolom kanan');
+  segarkanSlot(slotKiri, rowState.gambar, rowState.gambarJenis, rowState.alt);
+  segarkanSlot(slotKanan, rowState.pasanganGambar, rowState.pasanganJenis, rowState.pasanganAlt);
   pgkRenumber(prefix, prefix + 'JodohRows');
   perbaruiKunciJodoh_(prefix);
   return rowState;
@@ -1881,12 +1899,18 @@ function resetJodohEditor(prefix, rows) {
   var wrap = document.getElementById(prefix + 'JodohRows');
   if (wrap) wrap.innerHTML = '';
   var list = rows && rows.length ? rows : [{ text: '', pasangan: '' }];
-  var labelEl = document.getElementById(prefix + 'JodohLabelKiri');
-  if (labelEl) labelEl.value = String((rows && rows.length && rows[0].labelKiri) || '');
   list.forEach(function(r) {
     var rowState = jodohAddRow(prefix, r.text, r.pasangan);
-    if (r.gambar) { rowState.gambar = r.gambar; rowState.alt = r.alt || ''; }
-    if (r.pasanganGambar) { rowState.pasanganGambar = r.pasanganGambar; rowState.pasanganAlt = r.pasanganAlt || ''; }
+    if (r.gambar) {
+      rowState.gambar = r.gambar;
+      rowState.gambarJenis = r.gambarJenis === 'teks' ? 'teks' : 'gambar';
+      rowState.alt = r.alt || '';
+    }
+    if (r.pasanganGambar) {
+      rowState.pasanganGambar = r.pasanganGambar;
+      rowState.pasanganJenis = r.pasanganJenis === 'teks' ? 'teks' : 'gambar';
+      rowState.pasanganAlt = r.pasanganAlt || '';
+    }
     if (rowState._segarkanSlot) rowState._segarkanSlot();
   });
   perbaruiKunciJodoh_(prefix);
@@ -1916,8 +1940,13 @@ function validateSoalStruct_(prefix) {
   }
   if (tipe === 'MENJODOHKAN') {
     var jd = JODOH_STATE[prefix];
-    var valid = jd.rows.filter(function(r) { return r.text.trim() && r.pasangan.trim(); });
-    if (valid.length < 2) return 'Menjodohkan membutuhkan minimal dua pasangan pernyataan yang lengkap.';
+    var valid = jd.rows.filter(function(r) {
+      return (String(r.text || '').trim() || String(r.gambar || '').trim()) &&
+        (String(r.pasangan || '').trim() || String(r.pasanganGambar || '').trim());
+    });
+    if (valid.length < 2) {
+      return 'Menjodohkan membutuhkan minimal dua pasangan yang lengkap: setiap kolom berisi teks atau gambar.';
+    }
   }
   return '';
 }
@@ -1966,8 +1995,9 @@ function gambarDariHtml_(html) {
   return hasil;
 }
 
-function labelKolomKiri_(prefix, tipeKhusus) {
-  var el = document.getElementById(prefix + (tipeKhusus === 'MENJODOHKAN' ? 'JodohLabelKiri' : 'PgkLabelKiri'));
+function labelKolomKiri_(prefix) {
+  /* Hanya PGK Kategori yang punya kolom label; Menjodohkan memakai label tetap. */
+  var el = document.getElementById(prefix + 'PgkLabelKiri');
   return el ? String(el.value || '').trim() : '';
 }
 
@@ -1998,6 +2028,7 @@ function pilihGambarSoal_(opsi) {
               '<button class="media-tab active" data-media-tab="komputer" type="button">Komputer</button>' +
               '<button class="media-tab" data-media-tab="drive" type="button">Google Drive</button>' +
               '<button class="media-tab" data-media-tab="url" type="button">URL</button>' +
+              (opsi.izinkanTeks ? '<button class="media-tab" data-media-tab="teks" type="button">Teks / Tautan</button>' : '') +
             '</div></div>' +
           '<div class="media-panel show" data-media-panel="komputer">' +
             '<input class="file-input" type="file" data-media-file="true" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp">' +
@@ -2008,6 +2039,11 @@ function pilihGambarSoal_(opsi) {
           '<div class="media-panel" data-media-panel="url">' +
             '<input class="admin-input" type="url" data-media-url="true" placeholder="https://contoh.com/gambar.jpg">' +
             '<p class="media-hint">Wajib HTTPS agar tidak diblokir peramban.</p></div>' +
+          (opsi.izinkanTeks
+            ? '<div class="media-panel" data-media-panel="teks">' +
+                '<textarea class="admin-input" data-media-teks="true" rows="3" placeholder="Tulis teks biasa, atau tempel tautan (mis. https://...). Teks ini tampil menggantikan gambar pada kolom tersebut."></textarea>' +
+                '<p class="media-hint">Pilihan ini membuat kolom berisi <b>teks/tautan</b>, bukan gambar. Berguna bila kolom kanan/kiri lebih cocok berisi kalimat atau tautan.</p></div>'
+            : '') +
           '<div class="admin-field" style="margin-top:11px"><label for="pickerImageAlt">Keterangan gambar (opsional)</label>' +
             '<input id="pickerImageAlt" class="admin-input" type="text" maxlength="300" placeholder="Contoh: lambang negara Indonesia">' +
             '<small>Dibacakan pembaca layar dan dipakai sebagai judul gambar pada berkas Excel hasil export.</small></div>' +
@@ -2028,6 +2064,7 @@ function pilihGambarSoal_(opsi) {
 
     var box = wadah.querySelector('[data-media-box="picker"]');
     MEDIA_STATE.picker = { sumber: 'komputer', kind: 'gambar', url: '' };
+    var tombolProses = box.querySelector('[data-media-action="proses"]');
     wadah.querySelectorAll('[data-media-tab]').forEach(function(tab) {
       tab.addEventListener('click', function() {
         MEDIA_STATE.picker.sumber = this.dataset.mediaTab;
@@ -2036,6 +2073,12 @@ function pilihGambarSoal_(opsi) {
         wadah.querySelectorAll('[data-media-panel]').forEach(function(panel) {
           panel.classList.toggle('show', panel.dataset.mediaPanel === this.dataset.mediaTab);
         }, this);
+        /* Tab Teks tidak butuh proses unduh/periksa URL. */
+        if (tombolProses) tombolProses.hidden = this.dataset.mediaTab === 'teks';
+        if (this.dataset.mediaTab === 'teks') {
+          var area = box.querySelector('[data-media-teks]');
+          if (area) area.focus();
+        }
       });
     });
     var fileInput = box.querySelector('[data-media-file]');
@@ -2057,6 +2100,16 @@ function pilihGambarSoal_(opsi) {
     wadah.addEventListener('mousedown', function(e) { if (e.target === wadah) tutup(null); });
 
     wadah.querySelector('[data-picker-ok="true"]').addEventListener('click', async function() {
+      if (opsi.izinkanTeks && MEDIA_STATE.picker && MEDIA_STATE.picker.sumber === 'teks') {
+        var areaTeks = box.querySelector('[data-media-teks]');
+        var isiTeks = areaTeks ? String(areaTeks.value || '').trim() : '';
+        if (!isiTeks) {
+          mediaStatus_(box, '<i class="fa-solid fa-circle-exclamation"></i> Tuliskan teks atau tempel tautan terlebih dahulu.', 'err');
+          return;
+        }
+        tutup({ jenis: 'teks', teks: isiTeks, alt: '' });
+        return;
+      }
       var nilai = String(box.querySelector('[data-media-value]').value || '').trim();
       if (!nilai) {
         // Belum diproses: coba proses dulu (mis. tautan baru ditempel).
@@ -2068,7 +2121,7 @@ function pilihGambarSoal_(opsi) {
         return;
       }
       var altEl = wadah.querySelector('#pickerImageAlt');
-      tutup({ url: nilai, alt: altEl ? String(altEl.value || '').trim() : '' });
+      tutup({ jenis: 'gambar', url: nilai, teks: '', alt: altEl ? String(altEl.value || '').trim() : '' });
     });
   });
 }
@@ -2157,17 +2210,21 @@ function optionsFromField(prefix) {
   if (type === 'MENJODOHKAN') {
     var jd = JODOH_STATE[prefix];
     if (jd) {
-      var labelJodoh = labelKolomKiri_(prefix, 'MENJODOHKAN');
-      var daftar = jd.rows
-        .filter(function(r) { return r.text.trim() && r.pasangan.trim(); })
+      /* Setiap kolom boleh berisi TEKS saja, GAMBAR saja, atau keduanya. */
+      return jd.rows
+        .filter(function(r) {
+          return (String(r.text || '').trim() || String(r.gambar || '').trim()) &&
+            (String(r.pasangan || '').trim() || String(r.pasanganGambar || '').trim());
+        })
         .map(function(r) {
-          var item = { text: r.text.trim(), pasangan: r.pasangan.trim() };
-          if (r.gambar) { item.gambar = r.gambar; item.alt = r.alt || ''; }
-          if (r.pasanganGambar) { item.pasanganGambar = r.pasanganGambar; item.pasanganAlt = r.pasanganAlt || ''; }
+          var item = { text: String(r.text || '').trim(), pasangan: String(r.pasangan || '').trim() };
+          if (r.gambar) { item.gambar = r.gambar; item.alt = r.alt || ''; item.gambarJenis = r.gambarJenis || 'gambar'; }
+          if (r.pasanganGambar) {
+            item.pasanganGambar = r.pasanganGambar; item.pasanganAlt = r.pasanganAlt || '';
+            item.pasanganJenis = r.pasanganJenis || 'gambar';
+          }
           return item;
         });
-      if (daftar.length && labelJodoh) daftar[0].labelKiri = labelJodoh;
-      return daftar;
     }
   }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
@@ -2559,7 +2616,7 @@ async function buildQuestionPayload(prefix) {
       stPgk.kategori.map(function(k) { return namaKategori_(k); }),
       {
         gambar: stPgk.kategori.map(function(k) { return (k && k.gambar) || ''; }),
-        labelKiri: labelKolomKiri_(prefix, 'PGK') || stPgk.labelKiri || ''
+        labelKiri: labelKolomKiri_(prefix) || stPgk.labelKiri || ''
       });
   } else {
     pertanyaanHtml = String(pertanyaanHtml)
@@ -2960,7 +3017,8 @@ function selOpsiKunciBankSoal_(question) {
     opsi.forEach(function(op, i) {
       var pasangan = (jodoh[op.id] !== undefined && jodoh[op.id] !== '') ? jodoh[op.id] : op.pasangan;
       baris += barisOpsiBankSoal_((i + 1) + '.', teks(op.text), 'nomor', teks(pasangan) || '-',
-        SRich.lampiranGambarHtml_(op.gambar, op.alt), SRich.lampiranGambarHtml_(op.pasanganGambar, op.pasanganAlt));
+        SRich.lampiranSlotHtml_(op.gambar, op.gambarJenis, op.alt),
+        SRich.lampiranSlotHtml_(op.pasanganGambar, op.pasanganJenis, op.pasanganAlt));
     });
     kunci = opsi.length ? 'sesuai pasangan di atas' : SRich.stripHtml(String(question.kunci_jawaban || ''));
   } else {
@@ -3063,12 +3121,12 @@ function openEditQuestion(id) {
     });
   }
   if (tipeSoal === 'MENJODOHKAN') {
-    resetJodohEditor('e', (question.opsi || []).map(function(op, idx) {
+    resetJodohEditor('e', (question.opsi || []).map(function(op) {
       return {
         text: SRich.stripHtml(op.text || ''), pasangan: SRich.stripHtml(op.pasangan || ''),
-        gambar: op.gambar || '', alt: op.alt || '',
-        pasanganGambar: op.pasanganGambar || '', pasanganAlt: op.pasanganAlt || '',
-        labelKiri: (idx === 0 && op.labelKiri) || ''
+        gambar: op.gambar || '', gambarJenis: op.gambarJenis || 'gambar', alt: op.alt || '',
+        pasanganGambar: op.pasanganGambar || '', pasanganJenis: op.pasanganJenis || 'gambar',
+        pasanganAlt: op.pasanganAlt || ''
       };
     }));
   }
@@ -5168,8 +5226,12 @@ function entriGambarOpsiExcel_(question) {
   }
   (question && Array.isArray(question.opsi) ? question.opsi : []).forEach(function(op, i) {
     if (!op) return;
-    if (op.gambar) daftar.push({ bagian: 'Opsi ' + String.fromCharCode(65 + i), teks: SRich.stripHtml(op.text || '') || '(gambar saja)', alt: op.alt || '', url: op.gambar });
-    if (op.pasanganGambar) daftar.push({ bagian: 'Pasangan ' + (i + 1), teks: SRich.stripHtml(op.pasangan || '') || '(gambar saja)', alt: op.pasanganAlt || '', url: op.pasanganGambar });
+    if (op.gambar && op.gambarJenis !== 'teks') {
+      daftar.push({ bagian: 'Opsi ' + String.fromCharCode(65 + i), teks: SRich.stripHtml(op.text || '') || '(gambar saja)', alt: op.alt || '', url: op.gambar });
+    }
+    if (op.pasanganGambar && op.pasanganJenis !== 'teks') {
+      daftar.push({ bagian: 'Pasangan ' + (i + 1), teks: SRich.stripHtml(op.pasangan || '') || '(gambar saja)', alt: op.pasanganAlt || '', url: op.pasanganGambar });
+    }
     if (tipe !== 'MENJODOHKAN') {
       gambarDariHtml_(op.text).forEach(function(u) {
         daftar.push({ bagian: (tipe === 'PGK' ? 'Pernyataan ' : 'Opsi ') + (i + 1), teks: SRich.stripHtml(op.text || ''), alt: '', url: u });
@@ -5371,11 +5433,19 @@ function uraiPgkKategoriExcel_(question) {
 function uraiMenjodohkanExcel_(question) {
   var opsi = Array.isArray(question.opsi) ? question.opsi : [];
   var jodoh = kunciTeruraiBankSoal_(question.kunci_jawaban) || {};
+  /* Lampiran berupa TEKS/tautan ikut ditulis pada selnya (gambar ditangani
+     lembar "Gambar Opsi"), supaya tidak ada isi soal yang hilang. */
+  function gabungLampiranTeks(teksUtama, lampiran, jenis) {
+    var isi = String(lampiran || '').trim();
+    var dasar = String(teksUtama || '').trim();
+    if (jenis === 'teks' && isi) return dasar ? dasar + '\n' + isi : isi;
+    return dasar;
+  }
   var baris = opsi.map(function(option) {
     var pasangan = (jodoh[option.id] !== undefined && jodoh[option.id] !== '') ? jodoh[option.id] : option.pasangan;
     return {
-      pernyataan: teksExcelDariHtml_(option.text) || '-',
-      pasangan: teksExcelDariHtml_(pasangan) || '-'
+      pernyataan: gabungLampiranTeks(teksExcelDariHtml_(option.text), option.gambar, option.gambarJenis) || '-',
+      pasangan: gabungLampiranTeks(teksExcelDariHtml_(pasangan), option.pasanganGambar, option.pasanganJenis) || '-'
     };
   });
   // Soal lama tanpa daftar pernyataan: tampilkan pasangan dari kunci saja.
@@ -5384,8 +5454,7 @@ function uraiMenjodohkanExcel_(question) {
       return { pernyataan: 'Pernyataan ' + id, pasangan: teksExcelDariHtml_(jodoh[id]) || '-' };
     });
   }
-  var labelJodoh = String((opsi[0] && opsi[0].labelKiri) || '').trim() || 'Pernyataan';
-  return { baris: baris, labelKiri: labelJodoh, pasangan: true };
+  return { baris: baris, labelKiri: 'Pernyataan', pasangan: true };
 }
 
 /**

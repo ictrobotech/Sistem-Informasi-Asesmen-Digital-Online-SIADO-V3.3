@@ -1144,6 +1144,24 @@
       '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(alt || 'Gambar soal') + '" loading="lazy"></span>';
   }
 
+  /**
+   * Lampiran sebuah slot (kolom kiri/kanan Menjodohkan, opsi, dll) yang boleh
+   * berupa GAMBAR atau TEKS/tautan biasa. `jenis` diisi 'teks' bila isinya
+   * teks, selain itu diperlakukan sebagai URL gambar.
+   */
+  function lampiranSlotHtml_(nilai, jenis, alt) {
+    var isi = String(nilai || '').trim();
+    if (!isi) return '';
+    if (jenis === 'teks') {
+      var aman = escapeHtml(isi);
+      var badan = /^https?:\/\/\S+$/i.test(isi)
+        ? '<a href="' + aman + '" target="_blank" rel="noopener">' + aman + '</a>' : aman;
+      return '<span class="soal-teks-lampiran">' + badan + '</span>';
+    }
+    if (/^data:image\//i.test(isi) || /^https?:\/\//i.test(isi)) return lampiranGambarHtml_(isi, alt);
+    return '<span class="soal-teks-lampiran">' + escapeHtml(isi) + '</span>';
+  }
+
   function pgkTableHtml(opts) {
     opts = opts || {};
     var kategori = kategoriBerGambar_(opts.kategoriInfo || opts.kategori || ['BENAR', 'SALAH'],
@@ -1502,6 +1520,7 @@
     pgkCategories: pgkCategories,
     pgkTableHtml: pgkTableHtml,
     lampiranGambarHtml_: lampiranGambarHtml_,
+    lampiranSlotHtml_: lampiranSlotHtml_,
     urlGambarAman_: urlGambarAman_,
     satukanBarisPernyataan: satukanBarisPernyataan,
     mountEditor: mountEditor

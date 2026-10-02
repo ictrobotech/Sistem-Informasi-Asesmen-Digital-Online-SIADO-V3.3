@@ -651,8 +651,9 @@
 
             <article class="admin-card">
               <div class="admin-card-head">
-                <div><h2><i class="fa-solid fa-list-check"></i> Bank Soal</h2><p>Gunakan tombol edit untuk memperbaiki soal secara realtime, atau ubah status seluruh soal sekaligus. Kolom <b>Nomor</b> berisi nomor urut soal per mapel (otomatis).</p></div>
+                <div><h2><i class="fa-solid fa-list-check"></i> Bank Soal</h2><p>Gunakan tombol edit untuk memperbaiki soal secara realtime, atau ubah status seluruh soal sekaligus. Kolom <b>Nomor</b> berisi nomor urut soal per mapel (otomatis). Tombol <b>Export Excel</b> mengunduh tabel ini sebagai berkas .xlsx rapi — mengikuti filter yang sedang dipakai (mapel, kelas, tipe, status, dan kata kunci).</p></div>
                 <div class="admin-card-actions">
+                  <button id="exportBankSoalExcel" class="admin-secondary" type="button" title="Unduh bank soal sesuai filter yang aktif sebagai berkas Excel (.xlsx)"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
                   <button id="deleteAllQuestions" class="admin-danger" type="button"><i class="fa-solid fa-trash-can"></i> Hapus Semua Soal</button>
                   <button id="deactivateAllQuestions" class="admin-danger" type="button"><i class="fa-solid fa-toggle-off"></i> Nonaktifkan Semua Soal</button>
                   <button id="activateAllQuestions" class="admin-secondary" type="button"><i class="fa-solid fa-toggle-on"></i> Aktifkan Semua</button>
@@ -667,6 +668,7 @@
                 <div class="admin-field"><label for="filterSoalMapel">Mapel</label><select id="filterSoalMapel" class="admin-input"><option value="">Semua Mapel</option></select></div>
               </div>
               <div id="questionTable" class="table-scroll"><div class="empty-state"><i class="fa-solid fa-circle-notch fa-spin"></i> Memuat soal...</div></div>
+              <div id="bankSoalExportStatus" class="media-status"></div>
             </article>
           </section>
 
@@ -795,6 +797,18 @@
               </div>
               <div id="exportStatus" class="media-status"></div>
               <p class="form-help" style="margin-top:14px"><strong>Saran:</strong> nilai seluruh jawaban uraian pada menu <b>Nilai Uraian</b> terlebih dahulu agar kolom status pada laporan tidak berisi "Menunggu Penilaian". Laporan mengikuti <b>mapel aktif</b> — bila 1 akun memegang 2 mapel, export dilakukan per mapel (aktifkan mapelnya di Pengaturan, lalu export).</p>
+            </article>
+
+            <article class="admin-card">
+              <div class="admin-card-head">
+                <div><h2><i class="fa-solid fa-file-excel"></i> Export Bank Soal</h2><p>Unduh bank soal sebagai berkas Excel <b>.xlsx</b> berisi tiga lembar: <b>Bank Soal</b> (tabel rapi dengan kolom dan urutan sama seperti menu Kelola Soal), <b>Rincian &amp; Kunci</b> (pertanyaan, opsi, dan kunci jawaban lengkap tanpa pemotongan teks), serta <b>Rekap</b> jumlah soal per mapel dan kelas. Tersedia untuk akun <b>Guru Mapel</b> maupun <b>Proktor/Admin</b>.</p></div>
+                <div class="admin-card-actions">
+                  <button id="exportBankSoalSemua" class="admin-primary" type="button"><i class="fa-solid fa-download"></i> Unduh Semua Soal</button>
+                  <button id="exportBankSoalFilter" class="admin-secondary" type="button" title="Unduh hanya soal yang tampil pada tabel Bank Soal sesuai filter aktif"><i class="fa-solid fa-filter"></i> Sesuai Filter Bank Soal</button>
+                </div>
+              </div>
+              <div id="exportBankSoalStatus" class="media-status"></div>
+              <p class="form-help" style="margin-top:14px"><strong>Catatan:</strong> nomor soal pada berkas tetap mengikuti penomoran Bank Soal (per <b>mapel + kelas</b>), termasuk saat hanya sebagian soal yang diunduh. Berkas siap dicetak (A4 landscape, header berulang, filter aktif) dan tidak mengubah data apa pun di server.</p>
             </article>
           </section>
 
@@ -1203,7 +1217,7 @@
   <script src="exceljs.min.js?v=20260909b"></script>
   <script src="jspdf.umd.min.js?v=20260909"></script>
   <script src="jspdf.plugin.autotable.min.js?v=20260909"></script>
-  <script src="admin-script.js?v=20260929-peserta-guru-1"></script>
+  <script src="admin-script.js?v=20261002-export-bank-soal-1"></script>
   <script>
   /* ================================================================
    * PENGAWAS INDEPENDEN - blok skrip TERPISAH dari admin-script.
@@ -1253,5 +1267,6 @@
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4026fe28a17fdf9',t:'MTc5MDI1OTcwMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a40314400b4e6cc1',t:'MTc5MDI2NjQzNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4122a26ac818359',t:'MTc5MDQyNDYxOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a42d4676f9bb0b9e',t:'MTc5MDcwODg5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a44232402a73d4a0',t:'MTc5MDkyODI2Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

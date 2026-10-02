@@ -68,7 +68,7 @@ var TAB_META = {
   uraian:      { judul: 'Nilai Uraian', sub: 'Penilaian manual jawaban uraian sebelum export' },
   hasil:       { judul: 'Hasil Ujian', sub: 'Nilai, KKM, dan status Tuntas/Remedial peserta' },
   rekap:       { judul: 'Rekap Kelas', sub: 'Ringkasan pencapaian setiap kelas' },
-  export:      { judul: 'Export Laporan', sub: 'Unduh laporan nilai dan pelanggaran (Excel/PDF)' },
+  export:      { judul: 'Export Laporan', sub: 'Unduh laporan nilai/pelanggaran dan bank soal (Excel/PDF)' },
   peserta:     { judul: 'Data Peserta', sub: 'Validasi peserta dan rombel VII sampai IX' },
   pengguna:    { judul: 'Akun Guru Mapel', sub: 'Kelola akun guru, reset password, dan hapus akun' },
   notifikasi:  { judul: 'Notifikasi', sub: 'Semua informasi aktivitas aplikasi' },
@@ -447,6 +447,13 @@ function bindAdminInterface() {
   // Export laporan
   bindClick_('exportExcel', function() { exportLaporanFile('excel'); });
   bindClick_('exportPdf', function() { exportLaporanFile('pdf'); });
+
+  // REVISI 2026-10-02: export bank soal ke Excel (.xlsx) untuk akun Guru Mapel
+  // maupun Proktor/Admin. Tombol pada kartu Bank Soal dan menu Export Laporan
+  // memakai alur yang sama; mode 'tampil' mengikuti filter Bank Soal aktif.
+  bindClick_('exportBankSoalExcel', function() { exportBankSoalExcel('tampil'); });
+  bindClick_('exportBankSoalSemua', function() { exportBankSoalExcel('semua'); });
+  bindClick_('exportBankSoalFilter', function() { exportBankSoalExcel('tampil'); });
 
   // Notifikasi
   bindClick_('refreshNotif', buatRefresh_('Notifikasi', loadNotifications));
@@ -4460,6 +4467,731 @@ function unduhTemplatePeserta() {
       { label: 'Kolom wajib', nilai: 'nama, rombel' },
       { label: 'Kolom opsional', nilai: 'nis' }
     ]);
+}
+
+/* ==================================================================
+ * EXPORT BANK SOAL KE EXCEL (REVISI 2026-10-02)
+ *
+ * Menambah tombol "Export Excel" pada kartu Bank Soal (menu Kelola Soal)
+ * dan kartu "Export Bank Soal" pada menu Export Laporan. Fitur ini dipakai
+ * bersama oleh akun Guru Mapel dan Proktor/Admin karena keduanya memakai
+ * panel ini — guru otomatis menerima bank soal sesuai hak aksesnya.
+ *
+ * Berkas .xlsx berisi tiga lembar:
+ *   1. BANK SOAL       — tabel rapi dengan URUTAN KOLOM SAMA seperti tabel
+ *                        Bank Soal di panel (ID, Nomor, Tipe, Mapel,
+ *                        Pertanyaan, Kelas, Opsi/Kunci, Stimulus, Poin,
+ *                        Status), tetapi tanpa pemotongan teks.
+ *   2. RINCIAN & KUNCI — satu baris per butir: pertanyaan, seluruh opsi,
+ *                        kunci jawaban, dan keterangan stimulus dipisah ke
+ *                        kolomnya sendiri agar mudah diperiksa/dicetak.
+ *   3. REKAP           — jumlah soal per mapel + kelas beserta sebaran tipe
+ *                        soal, status aktif/nonaktif, dan total poin.
+ *
+ * Data selalu diminta ulang ke server (action getAllSoal) supaya berkas yang
+ * diunduh memuat bank soal terkini; bila permintaan gagal, dipakai data yang
+ * sudah termuat di panel. Mode "sesuai filter" mengikuti filter Bank Soal
+ * yang sedang aktif (mapel, kelas, tipe, status, dan kata kunci pencarian).
+ * Nomor soal tetap dihitung dari SELURUH bank soal (per mapel + kelas) agar
+ * sama dengan kolom Nomor pada panel, meski hasil export sedang difilter.
+ * ================================================================== */
+
+var EXCEL_BANK_SOAL_HEADER_ = ['ID', 'Nomor', 'Tipe', 'Mapel', 'Pertanyaan', 'Kelas', 'Opsi / Kunci', 'Stimulus', 'Poin', 'Status'];
+var EXCEL_BANK_SOAL_LEBAR_ = [9, 9, 16, 20, 62, 9, 60, 12, 8, 12];
+var EXCEL_BANK_SOAL_RATA_ = ['tengah', 'tengah', 'tengah', 'tengah', 'kiri', 'tengah', 'kiri', 'tengah', 'tengah', 'tengah'];
+
+var EXCEL_BANK_RINCIAN_HEADER_ = ['No', 'ID', 'Nomor', 'Tipe', 'Mapel', 'Kelas', 'Poin', 'Status',
+  'Pertanyaan', 'Opsi', 'Kunci Jawaban', 'Stimulus', 'Deskripsi Stimulus', 'Tautan / Keterangan Media'];
+var EXCEL_BANK_RINCIAN_LEBAR_ = [6, 8, 8, 16, 20, 9, 7, 11, 52, 52, 36, 13, 40, 40];
+var EXCEL_BANK_RINCIAN_RATA_ = ['tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah',
+  'kiri', 'kiri', 'kiri', 'tengah', 'kiri', 'kiri'];
+
+var EXCEL_BANK_REKAP_HEADER_ = ['Mapel', 'Kelas', 'Jumlah Soal', 'PG', 'PGK Kategori', 'PGK MCMA', 'Menjodohkan',
+  'Isian', 'Uraian', 'Aktif', 'Nonaktif', 'Total Poin'];
+var EXCEL_BANK_REKAP_LEBAR_ = [28, 11, 13, 8, 14, 12, 14, 9, 9, 9, 11, 12];
+var EXCEL_BANK_REKAP_RATA_ = ['kiri', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah', 'tengah'];
+
+/* ------------------- TEKS: HTML KAYA -> SEL EXCEL ------------------- */
+
+/** Mengubah entitas HTML umum menjadi karakter aslinya (tanpa bantuan DOM). */
+function ungkapEntitasExcel_(teks) {
+  var peta = {
+    nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+    ldquo: '\u201C', rdquo: '\u201D', lsquo: '\u2018', rsquo: '\u2019',
+    ndash: '\u2013', mdash: '\u2014', hellip: '\u2026', bull: '\u2022',
+    deg: '\u00B0', times: '\u00D7', divide: '\u00F7', minus: '\u2212',
+    laquo: '\u00AB', raquo: '\u00BB', middot: '\u00B7', copy: '\u00A9',
+    reg: '\u00AE', trade: '\u2122', euro: '\u20AC', pound: '\u00A3', yen: '\u00A5'
+  };
+  return String(teks === undefined || teks === null ? '' : teks)
+    .replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, function(utuh, kode) {
+      if (kode.charAt(0) === '#') {
+        var angka = kode.charAt(1).toLowerCase() === 'x'
+          ? parseInt(kode.slice(2), 16) : parseInt(kode.slice(1), 10);
+        return (!angka || angka < 32 || angka > 1114111) ? '' : String.fromCodePoint(angka);
+      }
+      var nilai = peta[kode.toLowerCase()];
+      return nilai === undefined ? utuh : nilai;
+    });
+}
+
+/**
+ * Merapikan teks hasil konversi: spasi berlebih, tanda pipa (pemisah sel
+ * tabel) dirapatkan, pipa di ujung baris dibuang, dan baris kosong beruntun
+ * dikurangi. Dipakai untuk semua sel teks pada lembar Excel.
+ */
+function rapikanTeksExcel_(teks) {
+  var keluaran = [];
+  String(teks === undefined || teks === null ? '' : teks).replace(/\r\n?/g, '\n').split('\n').forEach(function(baris) {
+    var bersih = String(baris)
+      .replace(/[ \t]+/g, ' ')
+      .replace(/(\s*\|\s*)+/g, ' | ')
+      .replace(/^\s*\|\s*/, '')
+      .replace(/\s*\|\s*$/, '')
+      .trim();
+    if (!bersih && (!keluaran.length || keluaran[keluaran.length - 1] === '')) return;
+    keluaran.push(bersih);
+  });
+  while (keluaran.length && keluaran[keluaran.length - 1] === '') keluaran.pop();
+  return keluaran.join('\n');
+}
+
+/**
+ * Mengubah HTML kaya (pertanyaan, opsi, kunci) menjadi teks multi-baris yang
+ * rapi untuk sel Excel: <br> dan batas paragraf menjadi baris baru, daftar
+ * memakai penanda "• ", sel tabel dipisah " | ". Rumus yang tersimpan sebagai
+ * potongan LaTeX tetap tampil sebagai teks rumusnya (bukan gambar).
+ */
+function teksExcelDariHtml_(html) {
+  var s = String(html === undefined || html === null ? '' : html);
+  if (!/<[a-zA-Z][^>]*>/.test(s)) return rapikanTeksExcel_(ungkapEntitasExcel_(s));
+  s = s
+    .replace(/<\s*(script|style|noscript)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*hr\s*\/?>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '\n\u2022 ')
+    .replace(/<\s*(td|th)[^>]*>/gi, ' | ')
+    .replace(/<\s*\/\s*(p|div|ul|ol|tr|table|h[1-6]|blockquote|section|article|figure)\s*>/gi, '\n')
+    .replace(/<\s*(img|svg|iframe|video|audio)[^>]*>/gi, ' [media] ')
+    .replace(/<[^>]*>/g, '');
+  return rapikanTeksExcel_(ungkapEntitasExcel_(s));
+}
+
+/** Angka poin soal yang aman dipakai pada Excel (angka >= 0, tanpa NaN). */
+function angkaPoinExcel_(nilai) {
+  var angka = Number(String(nilai === undefined || nilai === null ? '' : nilai).replace(',', '.'));
+  if (!isFinite(angka) || angka < 0) return 0;
+  return Math.round(angka * 100) / 100;
+}
+
+/* ------------------- ISI KOLOM PER BUTIR SOAL ------------------- */
+
+/** Penanda opsi pada Excel: huruf untuk PG/PGK MCMA, nomor untuk tipe lain. */
+function penandaOpsiExcel_(question, option, index) {
+  var tipe = String(question.tipe || '').toUpperCase();
+  if (tipe === 'PG' || tipe === 'PGK_MCMA') return String(option.label || String.fromCharCode(65 + index));
+  return String(index + 1);
+}
+
+/** Seluruh opsi satu soal, satu opsi per baris ("A. teks" / "1. teks = pasangan"). */
+function opsiExcelBankSoal_(question) {
+  var opsi = Array.isArray(question.opsi) ? question.opsi : [];
+  return opsi.map(function(option, index) {
+    var teks = teksExcelDariHtml_(option.text) || '-';
+    var pasangan = teksExcelDariHtml_(option.pasangan);
+    return penandaOpsiExcel_(question, option, index) + '. ' + teks + (pasangan ? ' = ' + pasangan : '');
+  }).join('\n');
+}
+
+/**
+ * Kunci jawaban satu soal sebagai teks multi-baris, tanpa pemotongan:
+ * PG/PGK MCMA: huruf dipisah koma; PGK Kategori: nomor pernyataan + kategori;
+ * Menjodohkan: pasangan per nomor; Isian/Uraian: kunci atau rubrik.
+ */
+function kunciExcelBankSoal_(question) {
+  var tipe = String(question.tipe || '').toUpperCase();
+  var opsi = Array.isArray(question.opsi) ? question.opsi : [];
+  var kunci = question.kunci_jawaban;
+
+  if (tipe === 'PG' || tipe === 'PGK_MCMA') {
+    var pilihan = kunciTeruraiBankSoal_(kunci);
+    var daftar = Array.isArray(pilihan) ? pilihan : String(kunci === undefined || kunci === null ? '' : kunci).split(',');
+    var huruf = daftar.map(function(k) { return String(k === undefined || k === null ? '' : k).trim(); })
+      .filter(Boolean).join(', ');
+    return huruf || '-';
+  }
+  if (tipe === 'PGK') {
+    var peta = kunciTeruraiBankSoal_(kunci);
+    var larik = Array.isArray(peta) ? peta : null;
+    if (!opsi.length) return teksExcelDariHtml_(typeof kunci === 'string' ? kunci : '') || '-';
+    return opsi.map(function(option, index) {
+      var nilai;
+      if (larik) nilai = larik[index];
+      else if (peta) {
+        nilai = peta[option.id !== undefined ? option.id : String(index)];
+        if (nilai === undefined) nilai = peta[String(index)];
+      }
+      return (index + 1) + '. ' + (String(nilai === undefined || nilai === null ? '' : nilai).trim() || '-');
+    }).join('\n');
+  }
+  if (tipe === 'MENJODOHKAN') {
+    var jodoh = kunciTeruraiBankSoal_(kunci) || {};
+    if (!opsi.length) {
+      return Object.keys(jodoh).map(function(id) {
+        return id + ' = ' + teksExcelDariHtml_(jodoh[id]);
+      }).join('\n') || '-';
+    }
+    return opsi.map(function(option, index) {
+      var pasangan = (jodoh[option.id] !== undefined && jodoh[option.id] !== '') ? jodoh[option.id] : option.pasangan;
+      return (index + 1) + '. ' + (teksExcelDariHtml_(option.text) || '-') + ' = ' + (teksExcelDariHtml_(pasangan) || '-');
+    }).join('\n');
+  }
+  var teks = (kunci === undefined || kunci === null || typeof kunci === 'object') ? '' : String(kunci);
+  return teksExcelDariHtml_(teks) || '-';
+}
+
+/** Sel "Opsi / Kunci" untuk lembar BANK SOAL — mengikuti bentuk tabel panel. */
+function selOpsiKunciExcel_(question) {
+  var opsi = opsiExcelBankSoal_(question);
+  var kunci = kunciExcelBankSoal_(question);
+  var panjang = kunci.indexOf('\n') !== -1 || kunci.length > 44;
+  return (opsi ? opsi + '\n' : '') + (panjang ? 'Kunci :\n' : 'Kunci : ') + kunci;
+}
+
+/** Jenis stimulus: "Gambar", "Video", "Gambar & Video", atau "-". */
+function selStimulusExcel_(question) {
+  var jenis = [];
+  if (question.stimulus_gambar) jenis.push('Gambar');
+  if (question.stimulus_video) jenis.push('Video');
+  return jenis.length ? jenis.join(' & ') : '-';
+}
+
+/** Tautan dan keterangan gambar/video (dipisah baris agar mudah ditelusuri). */
+function selTautanMediaExcel_(question) {
+  var baris = [];
+  if (question.stimulus_gambar) baris.push('Gambar: ' + (teksExcelDariHtml_(question.stimulus_gambar) || '-'));
+  if (question.stimulus_video) baris.push('Video: ' + (teksExcelDariHtml_(question.stimulus_video) || '-'));
+  if (question.stimulus_alt) baris.push('Keterangan gambar: ' + teksExcelDariHtml_(question.stimulus_alt));
+  if (question.stimulus_video_alt) baris.push('Keterangan video: ' + teksExcelDariHtml_(question.stimulus_video_alt));
+  return baris.join('\n');
+}
+
+/** Satu baris lembar BANK SOAL (urutan kolom sama dengan tabel panel). */
+function barisExcelBankSoal_(question, nomor) {
+  return [
+    '#' + String(question.id_soal === undefined || question.id_soal === null ? '-' : question.id_soal),
+    nomor ? String(nomor) : '-',
+    labelTipeBankSoal_(question.tipe),
+    String(question.mapel || '-'),
+    teksExcelDariHtml_(question.pertanyaan) || '-',
+    tingkatDariNilai_(question.tingkat),
+    selOpsiKunciExcel_(question),
+    selStimulusExcel_(question),
+    angkaPoinExcel_(question.poin),
+    question.aktif ? 'AKTIF' : 'NONAKTIF'
+  ];
+}
+
+/** Satu baris lembar RINCIAN & KUNCI (kolom terpisah, teks penuh). */
+function barisRincianBankSoal_(question, nomor, urutan) {
+  return [
+    urutan,
+    String(question.id_soal === undefined || question.id_soal === null ? '-' : question.id_soal),
+    nomor ? String(nomor) : '-',
+    labelTipeBankSoal_(question.tipe),
+    String(question.mapel || '-'),
+    tingkatDariNilai_(question.tingkat),
+    angkaPoinExcel_(question.poin),
+    question.aktif ? 'AKTIF' : 'NONAKTIF',
+    teksExcelDariHtml_(question.pertanyaan) || '-',
+    opsiExcelBankSoal_(question) || '-',
+    kunciExcelBankSoal_(question) || '-',
+    selStimulusExcel_(question),
+    teksExcelDariHtml_(question.stimulus_deskripsi) || '-',
+    selTautanMediaExcel_(question) || '-'
+  ];
+}
+
+/** Peringkat kelas untuk pengurutan rekap: VII, VIII, IX, lalu SEMUA. */
+function peringkatKelasExcel_(kelas) {
+  return { VII: 1, VIII: 2, IX: 3 }[String(kelas || '').toUpperCase()] || 4;
+}
+
+/** Rekap jumlah soal per mapel + kelas (sebaran tipe, status, dan total poin). */
+function rekapExcelBankSoal_(rows) {
+  var peta = {};
+  (rows || []).forEach(function(question) {
+    var mapel = String(question.mapel || '(tanpa mapel)').trim() || '(tanpa mapel)';
+    var kelas = tingkatDariNilai_(question.tingkat);
+    var kunci = mapel.toLowerCase() + '|' + kelas;
+    var item = peta[kunci];
+    if (!item) item = peta[kunci] = { mapel: mapel, kelas: kelas, jumlah: 0, tipe: {}, aktif: 0, nonaktif: 0, poin: 0 };
+    item.jumlah++;
+    var tipe = String(question.tipe || '').toUpperCase();
+    item.tipe[tipe] = (item.tipe[tipe] || 0) + 1;
+    if (question.aktif) item.aktif++; else item.nonaktif++;
+    item.poin += angkaPoinExcel_(question.poin);
+  });
+  return Object.keys(peta).map(function(kunci) { return peta[kunci]; }).sort(function(a, b) {
+    var nama = String(a.mapel).localeCompare(String(b.mapel), 'id');
+    if (nama !== 0) return nama;
+    return peringkatKelasExcel_(a.kelas) - peringkatKelasExcel_(b.kelas);
+  });
+}
+
+/** Satu baris lembar REKAP dari satu kelompok mapel + kelas. */
+function barisRekapExcel_(item) {
+  var tipe = item.tipe || {};
+  return [
+    item.mapel, item.kelas, item.jumlah,
+    tipe.PG || 0, tipe.PGK || 0, tipe.PGK_MCMA || 0, tipe.MENJODOHKAN || 0, tipe.ISIAN || 0, tipe.URAIAN || 0,
+    item.aktif, item.nonaktif, item.poin
+  ];
+}
+
+/** Kode tipe soal untuk pewarnaan (label tabel -> kode penyimpanan). */
+function kodeTipeExcel_(question) {
+  var tipe = String((question && question.tipe) || '').toUpperCase();
+  return { PG: 'PG', PGK: 'PGK', PGK_MCMA: 'PGK_MCMA', MENJODOHKAN: 'MENJODOHKAN', ISIAN: 'ISIAN', URAIAN: 'URAIAN' }[tipe] || '';
+}
+
+/* ------------------- SUMBER DATA & FILTER ------------------- */
+
+/**
+ * Membaca bank soal terbaru dari server. Bila permintaan gagal (mis. koneksi
+ * terputus), dipakai data yang sudah termuat di panel supaya export tidak
+ * mentok; kegagalan sesi tetap dilempar agar pengguna diminta login ulang.
+ */
+async function muatBankSoalUntukExport_() {
+  try {
+    var hasil = await adminApi('getAllSoal', {});
+    if (hasil && (hasil.success === false || hasil.adminSessionInvalid)) {
+      throw new Error((hasil && hasil.message) || 'Server menolak permintaan bank soal.');
+    }
+    var daftar = (hasil && (hasil.soal || hasil.data)) || [];
+    if (Array.isArray(daftar)) return daftar;
+  } catch (galat) {
+    if (isAdminSessionInvalidMessage_((galat && galat.message) || '')) throw galat;
+  }
+  return (DATA_MENTAH.soal && DATA_MENTAH.soal.length) ? DATA_MENTAH.soal : (ADMIN.questions || []);
+}
+
+/** Nilai filter Bank Soal yang sedang aktif beserta deskripsinya. */
+function infoFilterBankSoal_() {
+  var mapel = nilaiFilter_('filterSoalMapel');
+  var tingkat = nilaiFilter_('filterSoalTingkat');
+  var tipe = nilaiFilter_('filterSoalTipe');
+  var status = nilaiFilter_('filterSoalStatus');
+  var kueri = kueriFilter_('cariSoal');
+  var bagian = [];
+  if (mapel) bagian.push('Mapel: ' + mapel);
+  if (tingkat) bagian.push('Kelas: ' + (tingkat === 'SEMUA' ? 'Semua Kelas (SEMUA)' : tingkat));
+  if (tipe) bagian.push('Tipe: ' + labelTipeBankSoal_(tipe));
+  if (status) bagian.push('Status: ' + (status === 'aktif' ? 'Aktif' : 'Nonaktif'));
+  if (kueri) bagian.push('Pencarian: "' + kueri + '"');
+  return {
+    mapel: mapel, tingkat: tingkat, tipe: tipe, status: status, kueri: kueri,
+    adaFilter: bagian.length > 0,
+    deskripsi: bagian.join(' • '),
+    slug: [mapel, tingkat ? 'Kelas ' + tingkat : '', tipe, status ? 'status ' + status : '']
+      .filter(Boolean).join('-')
+  };
+}
+
+/** Menyaring bank soal sama seperti tabel Bank Soal (dipakai mode "sesuai filter"). */
+function barisTampilBankSoal_(daftar) {
+  var info = infoFilterBankSoal_();
+  var rows = (daftar || []).slice();
+  if (info.tipe) rows = rows.filter(function(q) { return String(q.tipe || '') === info.tipe; });
+  if (info.status) rows = rows.filter(function(q) { return info.status === 'aktif' ? !!q.aktif : !q.aktif; });
+  if (info.tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === info.tingkat; });
+  if (info.mapel) rows = rows.filter(function(q) { return cocokFilterMapel_(q.mapel, info.mapel); });
+  rows = saringKata_(rows, info.kueri, function(q) {
+    return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q),
+      q.stimulus_deskripsi, tingkatDariNilai_(q.tingkat)].join(' ');
+  });
+  return rows;
+}
+
+/* ------------------- PENYUSUN BERKAS EXCEL ------------------- */
+
+/** Perkiraan tinggi baris agar seluruh teks terbaca (batas Excel 409 pt). */
+function tinggiBarisExcelBankSoal_(data, lebarKolom, tinggiMin) {
+  var barisMaks = 1;
+  (data || []).forEach(function(nilai, index) {
+    var lebar = lebarKolom[index] || 20;
+    var muat = Math.max(6, Math.floor(lebar - 1));
+    var jumlah = 0;
+    String(nilai === undefined || nilai === null ? '' : nilai).split('\n').forEach(function(potongan) {
+      jumlah += Math.max(1, Math.ceil(potongan.length / muat));
+    });
+    if (jumlah > barisMaks) barisMaks = jumlah;
+  });
+  return Math.max(tinggiMin || 20, Math.min(409, barisMaks * 13.2 + 5));
+}
+
+/**
+ * Menambahkan satu lembar tabel bergaya dokumen resmi: baris 1 judul berwarna,
+ * baris 2 keterangan, baris 4 header (diulang saat dicetak), baris data
+ * bergaris dengan teks terbalut (wrap), lalu ringkasan dan catatan kaki.
+ */
+function tambahSheetTabelExcelBankSoal_(workbook, opsi) {
+  var jumlahKolom = opsi.header.length;
+  var kolomAkhir = nomorKolomExcel_(jumlahKolom);
+  var sheet = workbook.addWorksheet(opsi.nama, {
+    properties: { defaultRowHeight: 18 },
+    pageSetup: {
+      orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      printTitlesRow: '1:4',
+      margins: { left: 0.25, right: 0.25, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 }
+    },
+    views: [{ state: 'frozen', ySplit: 4, showGridLines: false }]
+  });
+  sheet.columns = opsi.lebar.map(function(lebar) { return { width: lebar }; });
+
+  sheet.mergeCells(1, 1, 1, jumlahKolom);
+  sheet.mergeCells(2, 1, 2, jumlahKolom);
+  var selJudul = sheet.getCell(1, 1);
+  selJudul.value = opsi.judul;
+  selJudul.font = { name: 'Aptos Display', size: 15, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+  selJudul.fill = warnaPolaExcel_(opsi.warna);
+  selJudul.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+  sheet.getRow(1).height = 32;
+
+  var selInfo = sheet.getCell(2, 1);
+  selInfo.value = opsi.info;
+  selInfo.font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  selInfo.fill = warnaPolaExcel_(opsi.aksen);
+  selInfo.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  sheet.getRow(2).height = 24;
+  sheet.getRow(3).height = 8;
+
+  var barisHeader = sheet.getRow(4);
+  opsi.header.forEach(function(judul, index) { barisHeader.getCell(index + 1).value = judul; });
+  barisHeader.height = 30;
+  barisHeader.eachCell(function(sel) {
+    sel.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.putih } };
+    sel.fill = warnaPolaExcel_(opsi.warna);
+    sel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    sel.border = garisExcel_(opsi.warna);
+  });
+
+  var data = opsi.baris || [];
+  data.forEach(function(nilai, indeks) {
+    var baris = sheet.addRow(nilai);
+    baris.height = tinggiBarisExcelBankSoal_(nilai, opsi.lebar, opsi.tinggiMin);
+    for (var kolom = 1; kolom <= jumlahKolom; kolom++) {
+      var sel = baris.getCell(kolom);
+      var rata = (opsi.rata || [])[kolom - 1];
+      sel.font = { name: 'Aptos', size: 10, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+      sel.alignment = { horizontal: rata === 'kiri' ? 'left' : 'center', vertical: 'top', wrapText: true };
+      sel.border = garisExcel_(GAYA_EXCEL_LAPORAN.garisLembut);
+      if (indeks % 2 === 1) sel.fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+    }
+    if (opsi.hias) opsi.hias(baris, nilai, indeks);
+  });
+
+  if (data.length) {
+    sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + data.length, column: jumlahKolom } };
+  } else {
+    var barisKosong = sheet.addRow(['Belum ada soal pada cakupan ini.']);
+    sheet.mergeCells(5, 1, 5, jumlahKolom);
+    barisKosong.height = 26;
+    barisKosong.getCell(1).font = { name: 'Aptos', size: 10, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+    barisKosong.getCell(1).fill = warnaPolaExcel_(GAYA_EXCEL_LAPORAN.abuMuda);
+    barisKosong.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    barisKosong.getCell(1).border = garisExcel_();
+  }
+
+  if (opsi.ringkasan) {
+    var barisRingkasan = sheet.addRow([opsi.ringkasan]);
+    sheet.mergeCells(barisRingkasan.number, 1, barisRingkasan.number, jumlahKolom);
+    barisRingkasan.height = 26;
+    var selRingkasan = barisRingkasan.getCell(1);
+    selRingkasan.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+    selRingkasan.fill = warnaPolaExcel_(opsi.aksen);
+    selRingkasan.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    selRingkasan.border = garisExcel_(opsi.warna);
+  }
+
+  var barisCatatan = sheet.addRow([opsi.catatan || 'Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online']);
+  sheet.mergeCells(barisCatatan.number, 1, barisCatatan.number, jumlahKolom);
+  barisCatatan.height = 20;
+  barisCatatan.getCell(1).font = { name: 'Aptos', size: 9, italic: true, color: { argb: GAYA_EXCEL_LAPORAN.teksSekunder } };
+  barisCatatan.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+
+  sheet.pageSetup.printArea = 'A1:' + kolomAkhir + barisCatatan.number;
+  sheet.headerFooter.oddFooter = '&L' + opsi.nama + '&C&D &T&R Halaman &P dari &N';
+  return sheet;
+}
+
+/** Warna label tipe soal dan status agar mudah dibaca sekilas. */
+function hiasTipeStatusExcel_(baris, kolomTipe, kolomStatus, kodeTipe, aktif) {
+  var warnaTipe = {
+    PG: { isi: 'FFE7F0FB', teks: 'FF1F4E78' },
+    PGK: { isi: 'FFEAF3EA', teks: 'FF1B5E20' },
+    PGK_MCMA: { isi: 'FFF3EBFA', teks: 'FF5B2C86' },
+    MENJODOHKAN: { isi: 'FFFDEEE3', teks: 'FF9A4A00' },
+    ISIAN: { isi: 'FFE8F4F2', teks: 'FF0B6E69' },
+    URAIAN: { isi: 'FFFFF6E0', teks: 'FF9A6700' }
+  }[String(kodeTipe || '').toUpperCase()];
+  if (warnaTipe && kolomTipe) {
+    var selTipe = baris.getCell(kolomTipe);
+    selTipe.fill = warnaPolaExcel_(warnaTipe.isi);
+    selTipe.font = { name: 'Aptos', size: 10, bold: true, color: { argb: warnaTipe.teks } };
+  }
+  if (kolomStatus) {
+    var selStatus = baris.getCell(kolomStatus);
+    selStatus.fill = warnaPolaExcel_(aktif ? GAYA_EXCEL_LAPORAN.hijau : GAYA_EXCEL_LAPORAN.merah);
+    selStatus.font = { name: 'Aptos', size: 10, bold: true, color: { argb: aktif ? GAYA_EXCEL_LAPORAN.teksHijau : GAYA_EXCEL_LAPORAN.teksMerah } };
+  }
+}
+
+/** Stempel tanggal-waktu ringkas untuk baris informasi ("02 Okt 2026 07.55"). */
+function stempelWaktuExcel_() {
+  var sekarang = new Date();
+  var tanggal = sekarang.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  var pad = function(n) { return String(n).padStart(2, '0'); };
+  return tanggal + ' ' + pad(sekarang.getHours()) + '.' + pad(sekarang.getMinutes());
+}
+
+/** Nama berkas: Bank-Soal-<cakupan>-<YYYYMMDD-HHMM>.xlsx */
+function namaBerkasExcelBankSoal_(slug) {
+  var sekarang = new Date();
+  var pad = function(n) { return String(n).padStart(2, '0'); };
+  var stempel = sekarang.getFullYear() + pad(sekarang.getMonth() + 1) + pad(sekarang.getDate()) + '-' +
+    pad(sekarang.getHours()) + pad(sekarang.getMinutes());
+  var bersih = String(slug || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return 'Bank-Soal-' + (bersih ? bersih + '-' : '') + stempel + '.xlsx';
+}
+
+/**
+ * Membangun berkas Excel bank soal (tiga lembar) memakai ExcelJS.
+ * opsi: { seluruh, tampil, info, mode }
+ *   seluruh — seluruh bank soal (dipakai menghitung nomor soal per mapel+kelas)
+ *   tampil  — baris yang diexport (boleh subset dari seluruh)
+ */
+async function buatExcelBankSoal_(opsi) {
+  if (!window.ExcelJS || !window.ExcelJS.Workbook) {
+    throw new Error('Pustaka Excel belum termuat pada perangkat ini. Pastikan berkas exceljs.min.js terunggah bersama admin.html, lalu muat ulang panel.');
+  }
+  var ExcelJS = window.ExcelJS;
+  var sekolah = String((ADMIN.settings && ADMIN.settings.sekolah) || 'SMP LABSCHOOL UNTAD PALU').trim();
+  var penyusun = String(ADMIN.nama || ADMIN.username || '').trim();
+  var peran = ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel';
+  var selTerpilih = opsi.tampil || [];
+  var petaNomor = petaNomorSoal_((opsi.seluruh && opsi.seluruh.length) ? opsi.seluruh : selTerpilih);
+  var baris = urutkanSoalMenurutNomor_(selTerpilih, petaNomor);
+
+  var workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIADO — Sistem Informasi Asesmen Digitalisasi Online';
+  workbook.lastModifiedBy = penyusun || 'SIADO';
+  workbook.created = new Date();
+  workbook.modified = new Date();
+  workbook.properties.title = 'Bank Soal ' + sekolah;
+  workbook.properties.subject = (opsi.info && opsi.info.adaFilter && opsi.mode === 'tampil') ? opsi.info.deskripsi : 'Seluruh bank soal';
+  workbook.properties.description = 'Export bank soal dari panel SIADO (menu Kelola Soal / Export Laporan).';
+  workbook.properties.company = sekolah;
+
+  var cakupan = (opsi.info && opsi.info.adaFilter && opsi.mode === 'tampil') ? opsi.info.deskripsi : 'Seluruh bank soal';
+  var aktif = baris.filter(function(q) { return !!q.aktif; }).length;
+  var totalPoin = baris.reduce(function(jumlah, q) { return jumlah + angkaPoinExcel_(q.poin); }, 0);
+  var infoUmum = sekolah + ' • ' + cakupan + ' • ' + baris.length + ' soal (aktif ' + aktif + ', nonaktif ' +
+    (baris.length - aktif) + ') • Total poin ' + totalPoin + ' • Dicetak oleh ' + (penyusun || '-') + ' (' + peran + ') • ' + stempelWaktuExcel_();
+
+  /* ---- Lembar 1: BANK SOAL (urutan kolom sama dengan tabel panel) ---- */
+  tambahSheetTabelExcelBankSoal_(workbook, {
+    nama: 'Bank Soal',
+    judul: 'BANK SOAL — ' + sekolah,
+    info: infoUmum,
+    header: EXCEL_BANK_SOAL_HEADER_,
+    lebar: EXCEL_BANK_SOAL_LEBAR_,
+    rata: EXCEL_BANK_SOAL_RATA_,
+    warna: 'FF1F4E78',
+    aksen: 'FFD9EAF7',
+    baris: baris.map(function(question) {
+      return barisExcelBankSoal_(question, petaNomor[String(question.id_soal)]);
+    }),
+    hias: function(gayaBaris, nilai, indeks) {
+      var question = baris[indeks] || {};
+      hiasTipeStatusExcel_(gayaBaris, 3, 10, kodeTipeExcel_(question), !!question.aktif);
+      gayaBaris.getCell(9).numFmt = '0.##';
+      gayaBaris.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF102A43' } };
+      gayaBaris.getCell(2).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF1F4E78' } };
+    },
+    ringkasan: 'Jumlah soal: ' + baris.length + '  •  Aktif: ' + aktif + '  •  Nonaktif: ' + (baris.length - aktif) +
+      '  •  Total poin: ' + totalPoin + '  •  Cakupan: ' + cakupan,
+    catatan: 'Dokumen dibuat otomatis oleh SIADO • Sistem Informasi Asesmen Digitalisasi Online — ' + stempelWaktuExcel_()
+  });
+
+  /* ---- Lembar 2: RINCIAN & KUNCI (teks penuh, kolom terpisah) ---- */
+  tambahSheetTabelExcelBankSoal_(workbook, {
+    nama: 'Rincian & Kunci',
+    judul: 'RINCIAN BUTIR SOAL & KUNCI JAWABAN — ' + sekolah,
+    info: infoUmum,
+    header: EXCEL_BANK_RINCIAN_HEADER_,
+    lebar: EXCEL_BANK_RINCIAN_LEBAR_,
+    rata: EXCEL_BANK_RINCIAN_RATA_,
+    warna: 'FF0B6E69',
+    aksen: 'FFD8F0EC',
+    tinggiMin: 24,
+    baris: baris.map(function(question, index) {
+      return barisRincianBankSoal_(question, petaNomor[String(question.id_soal)], index + 1);
+    }),
+    hias: function(gayaBaris, nilai, indeks) {
+      var question = baris[indeks] || {};
+      hiasTipeStatusExcel_(gayaBaris, 4, 8, kodeTipeExcel_(question), !!question.aktif);
+      gayaBaris.getCell(7).numFmt = '0.##';
+      gayaBaris.getCell(2).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF102A43' } };
+      gayaBaris.getCell(11).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF1B5E20' } };
+    },
+    ringkasan: 'Jumlah butir: ' + baris.length + '  •  Aktif: ' + aktif + '  •  Nonaktif: ' + (baris.length - aktif) +
+      '  •  Total poin: ' + totalPoin + '  •  Cakupan: ' + cakupan,
+    catatan: 'Kolom Pertanyaan, Opsi, dan Kunci Jawaban memuat teks LENGKAP tanpa pemotongan. Dokumen dibuat otomatis oleh SIADO.'
+  });
+
+  /* ---- Lembar 3: REKAP per mapel + kelas ---- */
+  var rekap = rekapExcelBankSoal_(baris);
+  var barisRekap = rekap.map(barisRekapExcel_);
+  var totalUmum = EXCEL_BANK_REKAP_HEADER_.map(function() { return 0; });
+  barisRekap.forEach(function(nilai) {
+    for (var kolom = 2; kolom < nilai.length; kolom++) totalUmum[kolom] += Number(nilai[kolom] || 0);
+  });
+  if (barisRekap.length) barisRekap.push(['TOTAL', ''].concat(totalUmum.slice(2)));
+
+  tambahSheetTabelExcelBankSoal_(workbook, {
+    nama: 'Rekap',
+    judul: 'REKAP BANK SOAL PER MAPEL & KELAS — ' + sekolah,
+    info: infoUmum,
+    header: EXCEL_BANK_REKAP_HEADER_,
+    lebar: EXCEL_BANK_REKAP_LEBAR_,
+    rata: EXCEL_BANK_REKAP_RATA_,
+    warna: 'FF1B5E20',
+    aksen: 'FFE4F1E6',
+    baris: barisRekap,
+    hias: function(gayaBaris, nilai, indeks) {
+      var terakhir = indeks === barisRekap.length - 1;
+      [3, 4, 5, 6, 7, 8, 9, 10, 11].forEach(function(kolom) { gayaBaris.getCell(kolom).numFmt = '0'; });
+      gayaBaris.getCell(12).numFmt = '0.##';
+      if (terakhir) {
+        gayaBaris.height = 24;
+        for (var kolom = 1; kolom <= EXCEL_BANK_REKAP_HEADER_.length; kolom++) {
+          var sel = gayaBaris.getCell(kolom);
+          sel.font = { name: 'Aptos', size: 10, bold: true, color: { argb: GAYA_EXCEL_LAPORAN.teks } };
+          sel.fill = warnaPolaExcel_('FFE4F1E6');
+          sel.alignment = { horizontal: kolom <= 2 ? 'left' : 'center', vertical: 'middle', wrapText: true };
+          sel.border = garisExcel_('FF1B5E20');
+        }
+      } else {
+        gayaBaris.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FF102A43' } };
+      }
+    },
+    ringkasan: 'Kelompok mapel & kelas: ' + rekap.length + '  •  Jumlah soal: ' + baris.length +
+      '  •  Aktif: ' + aktif + '  •  Nonaktif: ' + (baris.length - aktif) + '  •  Total poin: ' + totalPoin,
+    catatan: 'Nomor soal dimulai dari 1 pada setiap pasangan mapel + kelas sasaran. Dokumen dibuat otomatis oleh SIADO.'
+  });
+
+  return workbook.xlsx.writeBuffer().then(function(buffer) {
+    return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  });
+}
+
+/* ------------------- AKSI TOMBOL ------------------- */
+
+/** Menulis status proses export ke kotak status pada kartu Bank Soal/Export. */
+function statusExportBankSoal_(html) {
+  ['exportBankSoalStatus', 'bankSoalExportStatus'].forEach(function(id) {
+    var kotak = document.getElementById(id);
+    if (kotak) kotak.innerHTML = html || '';
+  });
+}
+
+/** Baris CSV cadangan (dipakai bila pustaka ExcelJS belum termuat). */
+function csvCadanganBankSoal_(baris) {
+  var petaNomor = petaNomorSoal_(baris);
+  var urut = urutkanSoalMenurutNomor_(baris, petaNomor);
+  return [EXCEL_BANK_SOAL_HEADER_].concat(urut.map(function(question) {
+    return barisExcelBankSoal_(question, petaNomor[String(question.id_soal)]);
+  }));
+}
+
+/**
+ * Mengekspor bank soal ke Excel.
+ * mode 'tampil' = mengikuti filter Bank Soal yang sedang aktif;
+ * mode 'semua'  = seluruh bank soal (sesuai hak akses akun).
+ */
+async function exportBankSoalExcel(mode) {
+  if (ADMIN.operationBusy.exportBankSoal) return;
+  var sesuaiFilter = String(mode) === 'tampil';
+  var tombol = ['exportBankSoalExcel', 'exportBankSoalSemua', 'exportBankSoalFilter']
+    .map(function(id) { return document.getElementById(id); }).filter(Boolean);
+  ADMIN.operationBusy.exportBankSoal = true;
+  tombol.forEach(function(el) { el.disabled = true; });
+  statusExportBankSoal_('<i class="fa-solid fa-circle-notch fa-spin"></i> Menyiapkan berkas Excel bank soal...');
+  try {
+    var seluruh = await muatBankSoalUntukExport_();
+    var info = infoFilterBankSoal_();
+    var tampil = sesuaiFilter ? barisTampilBankSoal_(seluruh) : seluruh.slice();
+    if (sesuaiFilter && !info.adaFilter) {
+      // Belum ada filter aktif: hasilnya sama dengan seluruh bank soal.
+      tampil = seluruh.slice();
+    }
+
+    if (!seluruh.length) {
+      statusExportBankSoal_('');
+      await hasilInfo_('Bank Soal Masih Kosong',
+        'Belum ada soal tersimpan pada akun ini. Tambahkan soal lewat Import Soal atau form Tambah Soal Baru, lalu ulangi export.',
+        [{ label: 'Peran akun', nilai: ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel' }]);
+      return;
+    }
+    if (!tampil.length) {
+      statusExportBankSoal_('');
+      await hasilInfo_('Tidak Ada Soal yang Cocok',
+        'Filter Bank Soal yang aktif tidak menghasilkan satu soal pun. Kosongkan sebagian filter (atau tekan Unduh Semua Soal), lalu ulangi export.',
+        [{ label: 'Filter aktif', nilai: info.deskripsi || '-' },
+         { label: 'Soal tersimpan', nilai: String(seluruh.length) }]);
+      return;
+    }
+
+    var berkas = namaBerkasExcelBankSoal_((sesuaiFilter && info.adaFilter) ? info.slug : '');
+    var pakaiCsv = false;
+    try {
+      var blob = await buatExcelBankSoal_({
+        seluruh: seluruh, tampil: tampil, info: info,
+        mode: (sesuaiFilter && info.adaFilter) ? 'tampil' : 'semua'
+      });
+      unduhBlob_(blob, berkas);
+    } catch (galatExcel) {
+      pakaiCsv = true;
+      berkas = berkas.replace(/\.xlsx$/i, '.csv');
+      unduhCsv_(csvCadanganBankSoal_(tampil), berkas);
+    }
+
+    var aktif = tampil.filter(function(q) { return !!q.aktif; }).length;
+    var mapel = {};
+    tampil.forEach(function(q) { mapel[String(q.mapel || '(tanpa mapel)')] = true; });
+    statusExportBankSoal_('');
+    await (pakaiCsv ? hasilInfo_ : hasilSukses_)(
+      pakaiCsv ? 'Bank Soal Diunduh (CSV cadangan)' : 'Bank Soal Berhasil Diexport',
+      (pakaiCsv
+        ? 'Pustaka Excel (exceljs.min.js) belum termuat pada perangkat ini sehingga bank soal diunduh sebagai CSV dengan kolom yang sama seperti tabel Bank Soal. Unggah exceljs.min.js ke hosting agar berkas .xlsx berformat rapi dapat dibuat.'
+        : 'Berkas .xlsx berisi tiga lembar: Bank Soal (tabel rapi sesuai tampilan menu Kelola Soal), Rincian & Kunci (pertanyaan, opsi, dan kunci lengkap tanpa pemotongan), serta Rekap per mapel dan kelas.') +
+      ' Berkas tersimpan di folder Unduhan perangkat Anda.',
+      [{ label: 'Nama berkas', nilai: berkas },
+       { label: 'Jumlah soal', nilai: String(tampil.length) + ' butir' },
+       { label: 'Aktif / nonaktif', nilai: aktif + ' / ' + (tampil.length - aktif) },
+       { label: 'Mapel tercakup', nilai: String(Object.keys(mapel).length) + ' mapel' },
+       { label: 'Cakupan', nilai: (sesuaiFilter && info.adaFilter) ? info.deskripsi : 'Seluruh bank soal' },
+       { label: 'Diproses sebagai', nilai: (ADMIN.isAdmin ? 'Proktor/Admin' : 'Guru Mapel') + (ADMIN.nama ? ' — ' + ADMIN.nama : '') }]);
+  } catch (galat) {
+    statusExportBankSoal_('');
+    if (isAdminSessionInvalidMessage_((galat && galat.message) || '')) return;
+    await hasilGagal_('Export Bank Soal Gagal',
+      (galat && galat.message) || 'Berkas Excel bank soal tidak dapat dibuat. Muat ulang panel lalu coba lagi.');
+  } finally {
+    ADMIN.operationBusy.exportBankSoal = false;
+    tombol.forEach(function(el) { el.disabled = false; });
+  }
 }
 
 function unduhCsv_(rows, fileName) {

@@ -1495,12 +1495,21 @@ function renderAnswerInput(question, value) {
     return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>' + escapeHtml(labelJodohKanan) + '</th></tr></thead><tbody>' +
       options.map(function(option, index) {
         var terpilih = String(jodoh[option.id] || '');
-        var daftar = pilihan.map(function(teks) {
-          return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(teks) + '</option>';
+        /* REVISI 2026-10-02: daftar pilihan memakai penomoran huruf A, B, C,
+           … sama seperti pratinjau di panel. Nilai (value) tetap teks asli
+           supaya penilaian tidak berubah; hanya label yang dirapikan dan
+           rumus LaTeX ditulis sebagai teks matematika biasa (dropdown tidak
+           bisa menampilkan rumus ter-render). */
+        var daftar = pilihan.map(function(teks, pi) {
+          var label = hurufPilihanJodoh_(pi + 1) + '. ' + SRich.texKeTeks_(teks);
+          return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
         }).join('');
         var kiriHtml = String(option.text || '').trim()
           ? formatTextInline(option.text) : '<em>(gambar saja)</em>';
-        return '<tr><td><strong>' + (index + 1) + '.</strong> ' + kiriHtml +
+        /* Nomor pernyataan ditaruh di kolomnya sendiri agar teks panjang
+           tidak melewati penomoran (sama seperti pratinjau panel). */
+        return '<tr><td><div class="jodoh-sel"><span class="jodoh-no">' + (index + 1) + '.</span>' +
+          '<div class="jodoh-teks">' + kiriHtml + '</div></div>' +
           SRich.lampiranSlotHtml_(option.gambar, option.gambarJenis, option.alt || ('Lampiran pernyataan ' + (index + 1))) + '</td>' +
           '<td><select class="pgk-select jodoh-select" data-answer-input="true" data-jodoh="' + escapeHtml(option.id) + '">' +
           '<option value="">Pilih pasangan</option>' + daftar + '</select>' +
@@ -3411,6 +3420,18 @@ function escapeHtml(value) {
 // deskripsi stimulus & pernyataan menjodohkan ter-render seperti pada soal.
 function formatText(value) { return window.SRich ? SRich.mathifyPlainText(value) : escapeHtml(value).replace(/\n/g, '<br>'); }
 function formatTextInline(value) { return window.SRich ? SRich.mathifyPlainText(value) : escapeHtml(value).replace(/\n/g, '<br>'); }
+
+/** Penomoran huruf pilihan pasangan (A, B, C, … 27=AA) — sama seperti panel. */
+function hurufPilihanJodoh_(nomor) {
+  if (window.SRich && typeof SRich.hurufPilihan_ === 'function') return SRich.hurufPilihan_(nomor);
+  var n = Math.max(1, parseInt(nomor, 10) || 1), hasil = '';
+  while (n > 0) {
+    var sisa = (n - 1) % 26;
+    hasil = String.fromCharCode(65 + sisa) + hasil;
+    n = Math.floor((n - 1) / 26);
+  }
+  return hasil;
+}
 function safeMediaUrl(value) { return /^https:\/\//i.test(String(value || '')) ? String(value) : ''; }
 function safeImageUrl(value) { return safeMediaUrl(value); }
 

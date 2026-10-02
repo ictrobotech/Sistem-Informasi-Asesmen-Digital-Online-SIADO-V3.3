@@ -363,9 +363,14 @@ body.konten-disamarkan .privacy-veil{display:flex}
 .rich-content blockquote{border-left:4px solid #bcd8fb;margin:8px 0;padding:6px 12px;background:#f5faff;color:#3c5c80}
 .rich-content pre{background:#f2f6fa;border:1px solid #dbe6f0;border-radius:8px;padding:8px 10px;overflow:auto;font-size:.9em}
 .rich-content code,.srte-area code{background:#f2f6fa;border:1px solid #dbe6f0;border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;color:#0f5132;white-space:pre-wrap}
-.siado-tex{display:inline-block;padding:0 3px}
+.siado-tex{display:inline-block;padding:0 3px;max-width:100%}
 .siado-tex-fallback{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f2f6fa;border:1px solid #dbe6f0;border-radius:6px;padding:1px 6px;font-size:.88em;color:#174f90}
 .siado-tex .katex{font-size:1.06em}
+.katex{max-width:100%}
+/* Rumus panjang (mis. hasil copy AI) bisa digeser mendatar di dalam
+   kotaknya sendiri, tidak menembus tepi tabel/halaman. */
+.katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0;margin:6px 0}
+.siado-tex-fallback{overflow-wrap:anywhere;white-space:normal}
 
 /* ---- editor rich text panel ---- */
 .srte{border:1.5px solid #cedbe8;border-radius:11px;background:#fff;overflow:visible;position:relative}
@@ -497,6 +502,29 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 
 /* --- Pratinjau Menjodohkan & pernyataan bergambar (revisi 10) --- */
 .pratinjau-kosong{margin:6px 0;font-size:12px;color:#8fa3b7}
+/* Menjodohkan: judul kolom rata tengah, isi rata kiri-kanan (teks panjang),
+   dan huruf pasangan A/B/C pada kolom kanan (revisi 13). */
+/* ---- REVISI 2026-10-02: kerapian nomor + teks panjang (rumus/tautan) ----
+   Nomor (1.) dan huruf (A.) punya kolom sendiri, teks mengalir di kolom
+   teks seperti indentasi menggantung: teks panjang tidak pernah melewati
+   penomoran dan rumus/tautan panjang tidak meluber keluar sel. */
+.jodoh-sel{display:flex;align-items:flex-start;gap:8px}
+.jodoh-no{flex:0 0 auto;min-width:1.45em;font-weight:800;text-align:right;white-space:nowrap}
+.pgk-select.tiruan.jodoh-sel{display:inline-flex;align-items:flex-start}
+.jodoh-teks{flex:1 1 auto;min-width:0;text-align:justify;text-justify:inter-word;overflow-wrap:anywhere}
+.jodoh-teks>p{margin:0 0 6px}
+.jodoh-teks>*:last-child{margin-bottom:0}
+.pgk-table td,.pgk-cat-table td{overflow-wrap:anywhere}
+.pgk-table td p,.pgk-cat-table td p{margin:0 0 6px}
+.pgk-table td p:last-child,.pgk-cat-table td p:last-child{margin-bottom:0}
+.pgk-table td ul,.pgk-table td ol,.pgk-cat-table td ul,.pgk-cat-table td ol{margin:4px 0;padding-left:1.25em}
+.pgk-table td li,.pgk-cat-table td li{margin:2px 0}
+.pgk-table td img,.pgk-table td svg,.pgk-cat-table td img{max-width:100%;height:auto}
+.pgk-table td table,.pgk-cat-table td table{max-width:100%}
+.jodoh-table th{text-align:center}
+.jodoh-table td{text-align:justify;text-justify:inter-word}
+.jodoh-table td .pgk-select.tiruan{text-align:justify;max-width:100%}
+.jodoh-huruf{font-weight:800;color:#1f6feb;margin-right:2px}
 .jodoh-kunci-panel{margin-top:11px;border-top:1px dashed #c7d7e6;padding-top:9px}
 .jodoh-kunci-panel>strong{display:block;font-size:12px;color:#7a4b00;margin-bottom:6px}
 .jodoh-kunci-list{margin:0;padding-left:19px;font-size:12.5px;color:#243b53;line-height:1.8}

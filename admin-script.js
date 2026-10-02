@@ -1546,6 +1546,20 @@ function pasangLabelKolomKiri_(prefix) {
   }
 }
 
+/** Penomoran kolom pasangan Menjodohkan: A, B, C, … Z, AA, AB, … */
+function hurufPasanganJodoh_(nomor) {
+  /* Satu sumber penomoran huruf di siado-richtext.js (hurufPilihan_). */
+  if (window.SRich && typeof SRich.hurufPilihan_ === 'function') return SRich.hurufPilihan_(nomor);
+  var n = Math.max(1, parseInt(nomor, 10) || 1);
+  var hasil = '';
+  while (n > 0) {
+    var sisa = (n - 1) % 26;
+    hasil = String.fromCharCode(65 + sisa) + hasil;
+    n = Math.floor((n - 1) / 26);
+  }
+  return hasil;
+}
+
 /** Label kolom tabel Menjodohkan yang bisa diganti guru (bawaan dipertahankan). */
 function labelJodoh_(prefix) {
   var elKiri = document.getElementById(prefix + 'JodohLabelKiri');
@@ -1556,8 +1570,9 @@ function labelJodoh_(prefix) {
 }
 
 /**
- * Pratinjau tabel Menjodohkan persis seperti tampilan peserta
- * (kolom kiri & pasangan, lengkap dengan gambar bila ada).
+ * Pratinjau tabel Menjodohkan: kolom kiri bernomor 1, 2, 3 … dan kolom
+ * pasangan berhuruf A, B, C … (kunci hanya tampak di panel), lengkap dengan
+ * gambar/teks lampiran bila ada.
  */
 function perbaruiPratinjauJodoh_(prefix) {
   var prev = document.getElementById(prefix + 'JodohPreview');
@@ -1580,10 +1595,20 @@ function perbaruiPratinjauJodoh_(prefix) {
     SRich.escapeHtml(label.kiri) + '</th><th>' + SRich.escapeHtml(label.kanan) + '</th></tr></thead><tbody>' +
     baris.map(function(r, i) {
       var kiri = String(r.text || '').trim() ? SRich.renderRich(r.text) : '<em>(gambar saja)</em>';
-      var kanan = String(r.pasangan || '').trim() ? SRich.escapeHtml(r.pasangan) : 'Pilih pasangan';
-      return '<tr><td><strong>' + (i + 1) + '.</strong> ' + kiri +
+      var teksKanan = String(r.pasangan || '').trim();
+      /* Kolom pasangan memakai penomoran A, B, C, … supaya kuncinya mudah dibaca. */
+      var kanan = teksKanan
+        ? '<span class="jodoh-no jodoh-huruf">' + hurufPasanganJodoh_(i + 1) + '.</span>' +
+          '<span class="jodoh-teks">' + SRich.renderRich(teksKanan) + '</span>'
+        : '<span class="jodoh-teks">Pilih pasangan</span>';
+      /* REVISI 2026-10-02: nomor/huruf ditaruh pada kolomnya sendiri
+         (.jodoh-no) dan teks pada kolom teks (.jodoh-teks) sehingga teks
+         panjang — termasuk rumus — tidak melewati penomoran dan tidak
+         meluber keluar sel. */
+      return '<tr><td><div class="jodoh-sel"><span class="jodoh-no">' + (i + 1) + '.</span>' +
+        '<div class="jodoh-teks">' + kiri + '</div></div>' +
         SRich.lampiranSlotHtml_(r.gambar, r.gambarJenis, r.alt || ('Lampiran kolom kiri ' + (i + 1))) + '</td>' +
-        '<td><span class="pgk-select tiruan">' + kanan + '</span>' +
+        '<td><span class="pgk-select tiruan jodoh-sel">' + kanan + '</span>' +
         SRich.lampiranSlotHtml_(r.pasanganGambar, r.pasanganJenis, r.pasanganAlt || ('Lampiran kolom kanan ' + (i + 1))) + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   /* 2) Kunci pasangan — sengaja hanya ada di panel, tidak pernah sampai ke peserta. */
@@ -1592,12 +1617,16 @@ function perbaruiPratinjauJodoh_(prefix) {
       : (String(r.gambar || '').trim() ? '(gambar/lampiran kolom kiri)' : '(kosong)');
     var kanan = String(r.pasangan || '').trim() ? SRich.stripHtml(r.pasangan)
       : (String(r.pasanganGambar || '').trim() ? '(gambar/lampiran kolom kanan)' : '(kosong)');
+    var hurufKunci = String(r.pasangan || '').trim() ? hurufPasanganJodoh_(i + 1) + '. ' : '';
     return '<li><span class="jodoh-kunci-kiri">' + SRich.escapeHtml(kiri) + '</span>' +
-      ' <span class="jodoh-kunci-sama">=</span> <b>' + SRich.escapeHtml(kanan) + '</b></li>';
+      ' <span class="jodoh-kunci-sama">=</span> <b>' + SRich.escapeHtml(hurufKunci + kanan) + '</b></li>';
   }).join('');
   prev.innerHTML = tampilan +
     '<div class="jodoh-kunci-panel"><strong><i class="fa-solid fa-key"></i> Kunci pasangan (hanya tampak di panel):</strong>' +
     '<ol class="jodoh-kunci-list">' + daftarKunci + '</ol></div>';
+  /* Rumus di pernyataan/pasangan ikut dirender KaTeX (dulu hanya PGK yang
+     melakukannya, sehingga rumus Menjodohkan tampil sebagai kode LaTeX). */
+  SRich.typesetMath(prev);
 }
 
 /**

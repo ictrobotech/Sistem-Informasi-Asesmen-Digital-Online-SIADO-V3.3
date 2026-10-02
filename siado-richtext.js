@@ -113,6 +113,11 @@
   function sanitizeHtml(input) {
     var s = String(input === undefined || input === null ? '' : input);
     if (!s.trim()) return '';
+    /* Rumus dari Word (OMML), MathML/MathJax (hasil kopi dari AI/web),
+       dikonversi lebih dulu supaya tidak tersisa sebagai tumpukan tag/teks. */
+    if (typeof document !== 'undefined' && hasMathMarkup(s)) {
+      try { s = mathifyHtml(s).html; } catch (e0) { /* biarkan apa adanya */ }
+    }
     if (!/<[a-zA-Z][^>]*>/.test(s)) {
       // Teks polos: tetap aman (escape), tapi rumus LaTeX yang ditempel
       // dari AI/Word ikut dibungkus [data-tex] agar ter-render rapi.
@@ -211,7 +216,7 @@
 
     var html = out.join('');
     // kerapian: buang paragraf/list kosong sisa tempelan, rapatkan <br> berlebih
-    html = html
+    html = rapikanRumusHtml_(html)
       .replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '')
       .replace(/<ul[^>]*>(?:\s|<br\s*\/?>)*<\/ul>/gi, '')
       .replace(/<ol[^>]*>(?:\s|<br\s*\/?>)*<\/ol>/gi, '')
@@ -236,7 +241,187 @@
   }
 
   /** Render aman untuk ditampilkan (sanitize + siap typeset rumus). */
+  /**
+   * Render aman untuk ditampilkan (sanitize + siap typeset rumus).
+   *
+   * REVISI RUMUS 2026-10-02: konversi rumus kini juga dilakukan SAAT
+   * MENAMPILKAN, bukan hanya saat menempel. Jadi soal/kolom lama yang
+   * menyimpan rumus Word (OMML) atau MathML/MathJax (hasil kopi dari
+   * Word/AI) tetap tampil sebagai rumus rapi — bukan tumpukan karakter.
+   */
   function renderRich(input) { return sanitizeHtml(input); }
+
+  /** Rapikan rumus yang tersisa sebagai teks polos di dalam HTML: bungkus
+   *  [data-tex] supaya bisa dirender KaTeX (hanya pola rumus yang dikenali). */
+  function rapikanRumusHtml_(html) {
+    if (!html || typeof document === 'undefined' || !/[\\$]/.test(html)) return html;
+    try {
+      var baki = document.createElement('div');
+      baki.innerHTML = html;
+      autoMathTextNodes(baki);
+      return baki.innerHTML;
+    } catch (e) { return html; }
+  }
+
+  /** Penomoran huruf: 1->A, 2->B, … 26->Z, 27->AA (opsi & pasangan). */
+  function hurufPilihan_(nomor) {
+    var n = Math.max(1, parseInt(nomor, 10) || 1);
+    var hasil = '';
+    while (n > 0) {
+      var sisa = (n - 1) % 26;
+      hasil = String.fromCharCode(65 + sisa) + hasil;
+      n = Math.floor((n - 1) / 26);
+    }
+    return hasil;
+  }
+
+  /* ------------- LaTeX -> TEKS BIASA (kolom yang tak bisa render) -------------
+   * Dipakai untuk tempat yang tidak bisa menampilkan HTML/KaTeX, misalnya
+   * daftar pilihan <select> pada soal Menjodohkan dan sel Excel. Hasilnya
+   * teks matematika yang enak dibaca:
+   *   \frac{1}{2} -> 1/2      x^{2} -> x²      \sqrt{16} -> √16
+   *   \times -> ×             \pi r^{2} -> πr²
+   */
+  var TEX_SIMBOL = {
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε',
+    zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ',
+    mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', upsilon: 'υ',
+    phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ',
+    Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
+    times: '×', div: '÷', cdot: '·', ast: '∗', star: '⋆', pm: '±', mp: '∓',
+    le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈', equiv: '≡',
+    sim: '∼', simeq: '≃', propto: '∝', infty: '∞', partial: '∂', nabla: '∇',
+    sum: '∑', prod: '∏', int: '∫', iint: '∬', oint: '∮', lim: 'lim',
+    angle: '∠', perp: '⊥', parallel: '∥', triangle: '△', square: '□',
+    rightarrow: '→', to: '→', leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒',
+    in: '∈', notin: '∉', subset: '⊂', subseteq: '⊆', supset: '⊃', cup: '∪', cap: '∩',
+    forall: '∀', exists: '∃', therefore: '∴', because: '∵', degree: '°', circ: '∘',
+    ldots: '…', cdots: '⋯', dots: '…', quad: ' ', qquad: '  ', '%': '%', '&': '&'
+  };
+  var TEX_SUP = {
+    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+    '+': '⁺', '-': '⁻', '(': '⁽', ')': '⁾', '=': '⁼', n: 'ⁿ', i: 'ⁱ'
+  };
+  var TEX_SUB = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+    '+': '₊', '-': '₋', '(': '₍', ')': '₎', '=': '₌', a: 'ₐ', e: 'ₑ', i: 'ᵢ', j: 'ⱼ', o: 'ₒ', x: 'ₓ'
+  };
+
+  function texKeTeksInti_(tex) {
+    var s = String(tex === undefined || tex === null ? '' : tex);
+    var out = '';
+    var i = 0;
+    function grub(start) {
+      var depth = 0, j = start;
+      while (j < s.length) {
+        if (s.charAt(j) === '{') depth += 1;
+        else if (s.charAt(j) === '}') { depth -= 1; if (!depth) return { isi: s.slice(start + 1, j), akhir: j + 1 }; }
+        j += 1;
+      }
+      return { isi: s.slice(start + 1), akhir: s.length };
+    }
+    function bungkus(x) { return /^[\w.,]+$/.test(x) ? x : '(' + x + ')'; }
+    function lewatiSpasiDari(pos) { while (pos < s.length && /\s/.test(s.charAt(pos))) pos += 1; return pos; }
+    while (i < s.length) {
+      var c = s.charAt(i);
+      if (c === '{') { var g = grub(i); out += texKeTeksInti_(g.isi); i = g.akhir; continue; }
+      if (c === '}') { i += 1; continue; }
+      if (c === '\\') {
+        var m = /^\\([A-Za-z]+|\s|.)/.exec(s.slice(i));
+        if (!m) { i += 1; continue; }
+        var cmd = m[1];
+        i += m[0].length;
+        if (cmd === '\\' || cmd === 'cr' || cmd === 'newline') { out += '\n'; continue; }
+        if (cmd === 'frac' || cmd === 'dfrac' || cmd === 'tfrac' || cmd === 'cfrac') {
+          var a = '', b = '';
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '{') { var g1 = grub(i); a = texKeTeksInti_(g1.isi); i = g1.akhir; }
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '{') { var g2 = grub(i); b = texKeTeksInti_(g2.isi); i = g2.akhir; }
+          out += bungkus(a) + '/' + bungkus(b);
+          continue;
+        }
+        if (cmd === 'sqrt') {
+          var idx = '', akar = '';
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '[') {
+            var tutup = s.indexOf(']', i);
+            if (tutup !== -1) { idx = texKeTeksInti_(s.slice(i + 1, tutup)); i = tutup + 1; }
+          }
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '{') { var g3 = grub(i); akar = texKeTeksInti_(g3.isi); i = g3.akhir; }
+          var idxTeks = '', idxPangkat = idx.length > 0;
+          for (var qi = 0; qi < idx.length; qi++) {
+            var gg = TEX_SUP[idx.charAt(qi)];
+            if (gg === undefined) { idxPangkat = false; break; }
+            idxTeks += gg;
+          }
+          out += (idxPangkat ? idxTeks : idx) + '√' + bungkus(akar);
+          continue;
+        }
+        if (cmd === 'text' || cmd === 'mathrm' || cmd === 'operatorname' || cmd === 'mathit' ||
+            cmd === 'mathbf' || cmd === 'textbf' || cmd === 'textrm' || cmd === 'mbox') {
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '{') { var g4 = grub(i); out += texKeTeksInti_(g4.isi); i = g4.akhir; }
+          continue;
+        }
+        if (cmd === 'begin' || cmd === 'end') {
+          // lingkungan (matrix, cases, …): kurung kurawalnya dibuang, isinya dibaca
+          i = lewatiSpasiDari(i);
+          if (s.charAt(i) === '{') { var g5 = grub(i); i = g5.akhir; }
+          if (cmd === 'begin') out += (out && !/\s$/.test(out) ? ' ' : '');
+          continue;
+        }
+        if (cmd === 'left' || cmd === 'right' || cmd === 'displaystyle' || cmd === 'textstyle' ||
+            cmd === 'limits' || cmd === 'nolimits' || cmd === 'thinspace' || cmd === 'mathbf ' ) continue;
+        if (cmd === ',' || cmd === ';' || cmd === ':' || cmd === '!' || cmd === ' ') { out += (TEX_SIMBOL[cmd] || ' '); continue; }
+        if (TEX_SIMBOL.hasOwnProperty(cmd)) { out += TEX_SIMBOL[cmd]; continue; }
+        out += cmd; // komando asing: tampilkan namanya tanpa backslash
+        continue;
+      }
+      if (c === '^' || c === '_') {
+        var peta = c === '^' ? TEX_SUP : TEX_SUB;
+        i += 1;
+        i = lewatiSpasiDari(i);
+        var isi = '';
+        if (s.charAt(i) === '{') { var g6 = grub(i); isi = texKeTeksInti_(g6.isi); i = g6.akhir; }
+        else if (i < s.length) { isi = s.charAt(i); i += 1; }
+        var naik = '', semuaAda = isi.length > 0;
+        for (var k = 0; k < isi.length; k++) {
+          var ganti = peta[isi.charAt(k)];
+          if (ganti === undefined) { semuaAda = false; break; }
+          naik += ganti;
+        }
+        out += semuaAda ? naik : (c === '^' ? '^{' + isi + '}' : '_{' + isi + '}');
+        continue;
+      }
+      if (c === '&') { out += ' '; i += 1; continue; }
+      if (c === '~') { out += ' '; i += 1; continue; }
+      out += c;
+      i += 1;
+    }
+    return out.replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
+  /**
+   * Ubah semua rumus di dalam teks menjadi teks matematika biasa.
+   * Teks yang bukan rumus dibiarkan apa adanya.
+   */
+  function texKeTeks_(input) {
+    var s = String(input === undefined || input === null ? '' : input);
+    if (!s) return '';
+    var segs = detectMathSegments(s);
+    if (!segs.length) return s;
+    var out = [], pos = 0;
+    segs.forEach(function (sg) {
+      if (sg.s > pos) out.push(s.slice(pos, sg.s));
+      out.push(texKeTeksInti_(sg.latex));
+      pos = sg.e;
+    });
+    if (pos < s.length) out.push(s.slice(pos));
+    return out.join('').replace(/[ \t]{2,}/g, ' ').trim();
+  }
 
   /* ------------------------- RUMUS ------------------------- */
   function texSpan(latex) {
@@ -250,14 +435,41 @@
    * diketik $x^2$ atau ditempel dari AI tanpa diproses) otomatis dibungkus
    * menjadi [data-tex] juga, sehingga ter-render tanpa perlu menyimpan ulang.
    */
+  /**
+   * KaTeX hanya boleh merender bila berkas CSS-nya benar-benar termuat.
+   * Tanpa CSS, keluaran KaTeX (tumpukan span) justru saling menumpuk dan
+   * tampak berantakan/berhamburan. Dalam keadaan itu rumus ditampilkan
+   * sebagai teks LaTeX rapi (chip) supaya tetap terbaca.
+   */
+  var katexProbe = null;
+  function katexSiap_() {
+    if (typeof katexProbe === 'function') return !!katexProbe();
+    if (!w.katex || !w.katex.render) return false;
+    if (!w.document || !w.getComputedStyle || !document.createElement) return true;
+    var induk = document.body || document.documentElement;
+    if (!induk) return true;
+    var el = document.createElement('span');
+    el.className = 'katex';
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    el.style.visibility = 'hidden';
+    induk.appendChild(el);
+    var famili = '';
+    try { famili = String(w.getComputedStyle(el).fontFamily || ''); } catch (e) { famili = ''; }
+    if (el.parentNode) el.parentNode.removeChild(el);
+    return /katex/i.test(famili);
+  }
+
   function typesetMath(root) {
     if (!root || !root.querySelectorAll) return;
     autoMathTextNodes(root);
     var nodes = root.querySelectorAll('[data-tex]');
+    var bisaRender = katexSiap_();
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       var tex = el.getAttribute('data-tex') || '';
-      if (w.katex && w.katex.render) {
+      if (el.querySelector && el.querySelector('.katex')) continue; // sudah ter-render
+      if (bisaRender) {
         try {
           w.katex.render(tex, el, { throwOnError: false, output: 'html' });
           el.classList.add('siado-tex-rendered');
@@ -279,7 +491,7 @@
    */
   // Komando LaTeX yang sah berdiri sendiri tanpa kurung {...} — sering
   // muncul pada hasil copy AI tanpa delimiter (mis. "... + \sum L sisi").
-  var BARE_CMD_OK = { sum: 1, prod: 1, int: 1, oint: 1, lim: 1, pi: 1, theta: 1, alpha: 1, beta: 1, gamma: 1, delta: 1, epsilon: 1, lambda: 1, mu: 1, sigma: 1, phi: 1, omega: 1, rho: 1, infty: 1, pm: 1, mp: 1, times: 1, div: 1, cdot: 1, leq: 1, geq: 1, neq: 1, approx: 1, sim: 1, propto: 1, sin: 1, cos: 1, tan: 1, cot: 1, log: 1, ln: 1, exp: 1, min: 1, max: 1, det: 1 };
+  var BARE_CMD_OK = { sum: 1, prod: 1, int: 1, iint: 1, iiint: 1, oint: 1, lim: 1, pi: 1, theta: 1, alpha: 1, beta: 1, gamma: 1, delta: 1, epsilon: 1, varepsilon: 1, lambda: 1, mu: 1, sigma: 1, phi: 1, varphi: 1, omega: 1, rho: 1, tau: 1, eta: 1, nu: 1, xi: 1, psi: 1, chi: 1, kappa: 1, iota: 1, zeta: 1, Delta: 1, Gamma: 1, Theta: 1, Lambda: 1, Sigma: 1, Phi: 1, Psi: 1, Omega: 1, Pi: 1, Xi: 1, infty: 1, pm: 1, mp: 1, times: 1, div: 1, cdot: 1, ast: 1, star: 1, leq: 1, geq: 1, neq: 1, le: 1, ge: 1, ne: 1, approx: 1, equiv: 1, sim: 1, simeq: 1, propto: 1, partial: 1, nabla: 1, to: 1, rightarrow: 1, leftarrow: 1, leftrightarrow: 1, Rightarrow: 1, in: 1, notin: 1, subset: 1, subseteq: 1, supset: 1, cup: 1, cap: 1, forall: 1, exists: 1, therefore: 1, because: 1, angle: 1, perp: 1, parallel: 1, triangle: 1, square: 1, degree: 1, circ: 1, ldots: 1, cdots: 1, dots: 1, quad: 1, qquad: 1, sin: 1, cos: 1, tan: 1, cot: 1, sec: 1, csc: 1, sinh: 1, cosh: 1, tanh: 1, log: 1, ln: 1, exp: 1, min: 1, max: 1, det: 1, gcd: 1, arg: 1 };
 
   function isMathy(content) {
     var c = String(content == null ? '' : content).trim();
@@ -352,6 +564,16 @@
               break;
             }
             if (ck === '\\' && /[A-Za-z]/.test(t.charAt(k + 1) || '')) { k += 1; continue; }
+            if (ck === '[') {
+              // argumen opsional, mis. \\sqrt[3]{27} — boleh ada isinya
+              var kb = k + 1, db = 1;
+              while (kb < n && db > 0 && t.charAt(kb) !== '\n') {
+                if (t.charAt(kb) === '[') db += 1;
+                else if (t.charAt(kb) === ']') db -= 1;
+                kb += 1;
+              }
+              if (db === 0) { k = kb; hasBrace = true; continue; }
+            }
             break;
           }
           if (!bad && (hasBrace || BARE_CMD_OK[mCmd[1]]) && k - i <= 500) { push(i, k, t.slice(i, k)); jump = k; }
@@ -362,6 +584,17 @@
         // "file_1" atau "v1.2_3" tidak berubah menjadi rumus.
         var nxt = t.charAt(i + 1) || '';
         var prevOK = !prev || !/[A-Za-z0-9.\-]/.test(prev);
+        var awalBasis = i;
+        if (!prevOK && (nxt === '^' || nxt === '_') && t.charAt(i + 2) === '{') {
+          // Pangkat/kaki dengan kurung kurawal — mis. 10^{-5}, cm^{2},
+          // a_{ij} — dianggap rumus walau basisnya beberapa huruf/angka.
+          // Kurung kurawal adalah tanda khas LaTeX, jadi teks biasa seperti
+          // "snake_case" (tanpa kurung) tetap tidak tersentuh.
+          var b = i;
+          while (b > 0 && /[A-Za-z0-9]/.test(t.charAt(b - 1))) b -= 1;
+          var sebelum = b > 0 ? t.charAt(b - 1) : '';
+          if (!sebelum || !/[A-Za-z0-9.\-]/.test(sebelum)) { awalBasis = b; prevOK = true; }
+        }
         if ((nxt === '^' || nxt === '_') && prevOK) {
           var p = i + 2, end = -1;
           var t2 = t.charAt(p) || '';
@@ -380,7 +613,7 @@
           } else if (/[A-Za-z]/.test(t2)) {
             end = p + 1;
           }
-          if (end > 0 && end - i <= 40) { push(i, end, t.slice(i, end)); jump = end; }
+          if (end > 0 && end - awalBasis <= 40) { push(awalBasis, end, t.slice(awalBasis, end)); jump = end; }
         }
       }
       i = jump ? jump : i + 1;
@@ -1555,6 +1788,11 @@
     stripHtml: stripHtml,
     renderRich: renderRich,
     typesetMath: typesetMath,
+    katexSiap_: katexSiap_,
+    setKatexProbe_: function (fn) { katexProbe = typeof fn === 'function' ? fn : null; },
+    hurufPilihan_: hurufPilihan_,
+    texKeTeks_: texKeTeks_,
+    texKeTeksInti_: texKeTeksInti_,
     texSpan: texSpan,
     detectMathSegments: detectMathSegments,
     mathifyPlainText: mathifyPlainText,

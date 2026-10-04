@@ -545,3 +545,81 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 #fKunciGambar .gambar-opsi-baris .gambar-opsi-teks small{color:#6b8299}
 .kunci-gambar-mini{width:96px;height:68px;object-fit:cover;border:1px solid #cfdce9;border-radius:8px;background:#fff;margin-top:5px}
 .tabel-kunci-gambar img{display:block;margin-top:6px;max-width:220px;max-height:160px;border:1px solid #cfdce9;border-radius:8px;background:#fff;padding:2px}
+/* UI polish: dropdown ujian peserta dan tata letak teks soal */
+#ujianPeserta {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#ujianHint {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+/* Teks soal tidak melewati kartu, nomor, atau area opsi. */
+.question-card,
+.question-content,
+.question-content p,
+.question-content div,
+.question-content span,
+.question-content li,
+.choice-option,
+.choice-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.question-content {
+  overflow: hidden;
+}
+.question-content img,
+.question-content video,
+.question-content iframe,
+.question-content svg {
+  max-width: 100%;
+  height: auto;
+}
+.question-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.choice-option {
+  align-items: flex-start;
+}
+.choice-mark,
+.choice-letter {
+  flex: 0 0 auto;
+}
+.choice-text {
+  flex: 1 1 auto;
+  line-height: 1.6;
+  overflow: hidden;
+}
+.choice-text p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .question-card {
+    padding: 16px;
+  }
+  .question-content {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .choice-option {
+    gap: 9px;
+    padding: 11px 10px;
+  }
+  .choice-text {
+    font-size: 13.5px;
+  }
+}

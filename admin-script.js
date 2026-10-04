@@ -1433,7 +1433,13 @@ async function loadAdminBootstrap() {
       throw resultError;
     }
     applyDashboardSummary(result.summary);
-    ADMIN.questions = result.soal || [];
+    // Backend lama/baru dapat mengembalikan bank soal pada kunci `soal`
+    // atau `data`. Jangan menganggap `soal` selalu tersedia pada bootstrap;
+    // bila tidak ada, panel guru akan tampak kosong walaupun RPC
+    // siado.list_soal() sebenarnya mengembalikan data.
+    ADMIN.questions = (Array.isArray(result.soal) && result.soal.length)
+      ? result.soal
+      : (Array.isArray(result.data) ? result.data : (Array.isArray(result.soal) ? result.soal : []));
     DATA_MENTAH.soal = ADMIN.questions;
     terapkanFilterSoal_();
     applySettingsData(result.pengaturan);

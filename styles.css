@@ -623,3 +623,52 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
     font-size: 13.5px;
   }
 }
+
+/* REVISI UI 2026-10-04: paragraf soal rata kiri-kanan dan opsi memakai hanging indent. */
+.question-content {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+}
+.question-content p,
+.question-content li {
+  text-align: justify;
+}
+.question-content table,
+.question-content pre,
+.question-content code,
+.question-content img,
+.question-content video,
+.question-content svg {
+  text-align: left;
+}
+
+/* Huruf A/B/C/D tetap menjadi kolom sendiri; baris lanjutan dimulai
+   sejajar dengan teks opsi, bukan kembali di bawah huruf. */
+.choice-text {
+  padding-left: 24px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.choice-letter {
+  display: inline-block;
+  min-width: 24px;
+  margin-left: -24px;
+  vertical-align: top;
+}
+.choice-text p,
+.choice-text div,
+.choice-text li {
+  text-align: left;
+}
+
+/* PGK Kategori: pernyataan panjang tetap rapi di kolomnya. */
+.pgk-cat-table td.pgk-statement,
+.pgk-cat-table td.pgk-statement .rich-content,
+.pgk-cat-table td.pgk-statement p {
+  text-align: justify;
+  text-justify: inter-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

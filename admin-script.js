@@ -1238,7 +1238,25 @@ async function loginAdminPanel(event) {
   }
 }
 
+async function resetFilterStateSaatLogout_() {
+  // Jangan membawa pencarian/filter akun guru ke akun admin atau akun guru
+  // berikutnya pada browser yang sama.
+  [
+    'cariSoal','cariKartuSoal','cariMonitor','cariPelanggaran','cariPeserta',
+    'cariUraian','cariHasil','cariRekap','cariGuru','filterUraianKelas',
+    'filterHasilKelas','filterHasilMapel','exportKelas','filterPesertaRombel',
+    'filterPesertaKehadiran','filterSoalTipe','filterSoalStatus',
+    'filterSoalTingkat','filterSoalMapel','cariKartuSoal'
+  ].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.value = '';
+    el.removeAttribute('data-last-value');
+  });
+}
+
 async function adminLogout() {
+  resetFilterStateSaatLogout_();
   try { if (ADMIN.token) await adminApi('logoutAdmin', {}); } catch (error) {}
   if (ADMIN.autoRefreshId) clearInterval(ADMIN.autoRefreshId);
   ADMIN.token = '';

@@ -8069,7 +8069,11 @@ async function simpanTokenGuruUI_() {
   try {
     var r = await adminApi('simpanTokenGuru', p);
     if (!r || !r.success) throw new Error((r && r.message) || 'Token gagal disimpan.');
-    if(out) out.textContent = 'Token berhasil disimpan: ' + (r.token || '');
+    // Jangan menampilkan token yang baru dibuat pada pesan hasil. Selain
+    // lebih aman, ini mencegah token terlihat seperti riwayat ketikan/
+    // saran autocomplete browser. Token tetap dikembalikan server untuk
+    // kebutuhan proses internal, tetapi tidak dirender ke halaman.
+    if(out) out.textContent = 'Token berhasil disimpan. Bagikan token melalui kanal yang aman.';
     kosongkanTokenGuruForm_();
     await muatTokenGuruUI_();
   } catch(e) { if(out) out.textContent=e.message || 'Token gagal disimpan.'; }
@@ -8352,7 +8356,7 @@ async function resetTeacherPassword(username) {
     await hasilSukses_('Password Direset',
       'Sampaikan password baru kepada guru yang bersangkutan. Sesi panel lamanya otomatis diputus.', [
         { label: 'Akun', nilai: username },
-        { label: 'Password baru', nilai: password }
+        { label: 'Password', nilai: 'Berhasil diubah — sampaikan secara aman kepada guru.' }
       ]);
   } catch (error) {
     await hasilGagal_('Password Gagal Direset', error.message || 'Password guru gagal direset.');
@@ -8492,7 +8496,7 @@ async function gantiTokenRombel_(nama) {
     await hasilSukses_('Token Diperbarui',
       'Bagikan token baru kepada peserta rombel tersebut sebelum ujian dimulai.', [
         { label: 'Rombel', nilai: nama },
-        { label: 'Token baru', nilai: token }
+        { label: 'Token', nilai: 'Berhasil diperbarui — bagikan melalui kanal yang aman.' }
       ]);
   } catch (error) {
     await hasilGagal_('Token Gagal Diubah', error.message || 'Token rombel gagal diubah.');

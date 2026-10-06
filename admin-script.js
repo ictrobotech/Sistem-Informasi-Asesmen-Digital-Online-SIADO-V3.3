@@ -150,7 +150,32 @@ function adminApi(action, payload) {
   });
 }
 
+function matikanRiwayatInputPanel_() {
+  var ids = [
+    'cariSoal','cariMonitor','cariPelanggaran','cariPeserta','cariUraian',
+    'cariHasil','cariRekap','cariGuru','filterUraianKelas','filterHasilKelas',
+    'filterExportKelas','gNama','gUsername','gMapel1','gMapel2','egNama',
+    'egUsername','egMapel1','egMapel2','epNama','epUsername','epNis',
+    'sTahunAjaran','sGuruMapel','sEmail','sUsernamePeserta','sPasswordPeserta'
+  ];
+  ids.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'none');
+    el.setAttribute('spellcheck', 'false');
+    el.setAttribute('data-lpignore', 'true');
+    el.setAttribute('data-1p-ignore', 'true');
+  });
+  ['gPassword','egPassword','sPasswordCadangan'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.setAttribute('autocomplete', 'new-password');
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  matikanRiwayatInputPanel_();
   // Terapkan tema tersimpan secepatnya agar panel tidak berkedip; server
   // menegaskan tema resmi lewat getBootstrapAdmin.
   try {
@@ -3493,7 +3518,7 @@ function terapkanFilterMonitor_() {
 }
 
 function renderMonitor(rows) {
-  if (!rows.length) { setTableMessage('monitorTable', 'Tidak ada peserta aktif saat ini.', 'fa-user-clock'); return; }
+  if (!rows.length) { setTableMessage('monitorTable', 'Tidak Ada Peserta Aktif Saat Ini.', 'fa-user-clock'); return; }
   var html = '<table class="admin-table"><thead><tr><th>Peserta</th><th>Kelas</th><th>Mapel</th><th>Status</th><th>Sisa Waktu</th><th>Pelanggaran / Tab</th><th>Terakhir Aktif</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(row) {
     html += '<tr><td><strong>' + escapeAdmin(row.nama) + '</strong><br><span style="color:#71879c;font-size:11px">' + escapeAdmin(row.username) + '</span></td>' +
@@ -8425,7 +8450,7 @@ function isiPilihanRombelAdmin_(rombel) {
     return '<option value="' + escapeAdmin(item.rombel) + '">' + escapeAdmin(item.rombel) + '</option>';
   }).join('');
   pilihan.innerHTML = '<option value="">Pilih rombel</option>' + opsi;
-  filter.innerHTML = '<option value="">Semua rombel</option>' + opsi;
+  filter.innerHTML = '<option value="">Semua Rombel</option>' + opsi;
   pilihan.value = nilaiPilihan;
   filter.value = nilaiFilter;
 }
@@ -8682,7 +8707,7 @@ async function muatDaftarPesertaDurasi_() {
     if (!guardAdminResult(result)) return;
     var sesi = result.data || [];
     if (!sesi.length) {
-      pilih.innerHTML = '<option value="">Tidak ada peserta aktif</option>';
+      pilih.innerHTML = '<option value="">Tidak Ada Peserta Aktif</option>';
       return;
     }
     pilih.innerHTML = '<option value="">Semua peserta aktif</option>' + sesi.map(function(s) {

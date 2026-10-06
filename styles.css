@@ -808,3 +808,22 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   min-width: 24px;
   margin-left: -24px;
 }
+
+/* Fallback visual label: pastikan setiap opsi client selalu memiliki
+   A/B/C/D walaupun data opsi lama tidak memiliki field label yang benar. */
+.choice-list{counter-reset: siado-opsi}
+.choice-option{counter-increment: siado-opsi}
+.choice-text>.choice-letter{display:none!important}
+.choice-text>.choice-body:before{
+  content:counter(siado-opsi, upper-alpha) ". ";
+  color:#1f5eae!important;
+  font-weight:800!important;
+  display:inline-block;
+  min-width:24px;
+}
+.choice-text>.choice-body,
+.choice-text>.choice-body *{
+  color:#233d59!important;
+  font-weight:400!important;
+  -webkit-text-fill-color:#233d59!important;
+}

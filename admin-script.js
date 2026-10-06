@@ -156,7 +156,7 @@ function matikanRiwayatInputPanel_() {
     'cariHasil','cariRekap','cariGuru','filterUraianKelas','filterHasilKelas',
     'filterExportKelas','gNama','gUsername','gMapel1','gMapel2','egNama',
     'egUsername','egMapel1','egMapel2','epNama','epUsername','epNis',
-    'rNama','rWali','sTahunAjaran','sGuruMapel','sEmail','sUsernamePeserta','sPasswordPeserta'
+    'rNama','rWali','pNama','pUsername','pNis','sTahunAjaran','sGuruMapel','sEmail','sUserPeserta','sPasswordPeserta'
   ];
   ids.forEach(function(id) {
     var el = document.getElementById(id);

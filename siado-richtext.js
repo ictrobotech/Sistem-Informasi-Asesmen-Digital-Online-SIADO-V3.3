@@ -44,14 +44,15 @@
 
   // Tag yang diizinkan beserta atribut yang boleh lolos.
   var ALLOWED = {
-    p: {}, br: {}, b: {}, strong: {}, i: {}, em: {}, u: {}, s: {}, strike: {}, del: {},
-    sub: {}, sup: {}, code: {}, ul: {}, ol: { start: 1 }, li: {}, blockquote: {}, pre: {}, hr: {},
-    table: {}, thead: {}, tbody: {}, tfoot: {}, tr: {}, td: { colspan: 1, rowspan: 1 }, th: { colspan: 1, rowspan: 1 }, caption: {},
+    p: { dir: 1 }, br: {}, b: {}, strong: {}, i: {}, em: {}, u: {}, s: {}, strike: {}, del: {},
+    sub: {}, sup: {}, code: {}, ul: {}, ol: { start: 1 }, li: {}, blockquote: { dir: 1 }, pre: {}, hr: {},
+    table: {}, thead: {}, tbody: {}, tfoot: {}, tr: {}, td: { colspan: 1, rowspan: 1, dir: 1 }, th: { colspan: 1, rowspan: 1, dir: 1 }, caption: {},
+
     img: { src: 1, alt: 1, width: 1, height: 1 },
-    span: { 'class': 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1,
+    span: { 'class': 1, dir: 1, 'data-tex': 1, 'data-siado-pgk-kategori': 1,
             'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1,
             'data-siado-kunci-gambar': 1, 'data-siado-kunci-alt': 1, hidden: 1 },
-    div: { 'data-siado-pgk-kategori': 1, 'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1,
+    div: { dir: 1, 'data-siado-pgk-kategori': 1, 'data-siado-pgk-gambar': 1, 'data-siado-pgk-label': 1,
            'data-siado-kunci-gambar': 1, 'data-siado-kunci-alt': 1, hidden: 1 },
     svg: { xmlns: 1, viewbox: 1, width: 1, height: 1, role: 1, 'aria-label': 1 },
     g: {}, rect: { x: 1, y: 1, width: 1, height: 1, rx: 1, ry: 1, fill: 1, stroke: 1, 'stroke-width': 1 },
@@ -81,6 +82,7 @@
     if (/^(d)$/.test(name)) return /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+\-()]+$/.test(v) ? v : '';
     if (/^(class)$/.test(name)) return /\bsiado-tex\b/.test(v) ? 'siado-tex' : '';
     if (/^(data-tex|data-siado-pgk-kategori|data-siado-pgk-gambar|data-siado-pgk-label|data-siado-kunci-gambar|data-siado-kunci-alt)$/.test(name)) return v.slice(0, 4000);
+    if (/^(dir)$/.test(name)) return /^(rtl|ltr|auto)$/i.test(v.trim()) ? v.trim().toLowerCase() : '';
     if (/^(xmlns|role|text-anchor|dominant-baseline|font-weight)$/.test(name)) return v.slice(0, 60);
     if (/^(aria-label)$/.test(name)) return v.slice(0, 300);
     if (name === 'hidden') return 'hidden';

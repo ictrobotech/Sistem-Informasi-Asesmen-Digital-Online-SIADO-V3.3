@@ -691,3 +691,42 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
 #participantTable table td:last-child {
   text-align: center;
 }
+
+/* Dukungan tulisan Arab/ayat Al-Qur'an dari Word atau AI. */
+.question-content,
+.choice-text,
+.pgk-cat-table td.pgk-statement,
+.jodoh-table td,
+.srte-area,
+.admin-input,
+.rich-content {
+  unicode-bidi: plaintext;
+  direction: auto;
+}
+.question-content,
+.choice-text,
+.pgk-cat-table td.pgk-statement,
+.jodoh-table td,
+.srte-area {
+  font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", "Traditional Arabic", "Segoe UI", Arial, sans-serif;
+}
+.srte-area:lang(ar),
+.question-content:lang(ar),
+.choice-text:lang(ar),
+.pgk-cat-table td.pgk-statement:lang(ar) {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Kartu Soal: dukungan Arab/ayat Al-Qur'an pada metadata pembelajaran. */
+#ksCapaian,
+#ksTujuan,
+#ksKompetensi,
+#ksIndikator {
+  direction: auto;
+  unicode-bidi: plaintext;
+  text-align: start;
+  font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", "Traditional Arabic", "Segoe UI", Arial, sans-serif;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

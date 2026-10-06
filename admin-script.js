@@ -1097,6 +1097,10 @@ function openAdminPanel_() {
   document.getElementById('adminLoginPage').style.display = 'none';
   document.getElementById('adminShell').classList.add('show');
   setAdminLoginMessage('', '');
+  // Muat ulang tab yang sedang terbuka setelah pergantian akun. Tanpa ini,
+  // DOM masih menampilkan data peserta/filter akun sebelumnya sampai tombol
+  // Refresh ditekan manual.
+  switchAdminTab(ADMIN.activeTab || 'soal');
   startAdminAutoRefresh();
   loadNotifications();
 }

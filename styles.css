@@ -777,3 +777,21 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   text-align: left !important;
   font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", "Traditional Arabic", "Segoe UI", Arial, sans-serif;
 }
+
+/* Opsi client: teks isi normal hitam. Huruf A/B/C/D tetap menjadi penanda
+   berwarna biru, tetapi isi opsi termasuk teks Arab tidak ikut tebal/biru. */
+.choice-text,
+.choice-text > *:not(.choice-letter),
+.choice-text b,
+.choice-text strong,
+.choice-text i,
+.choice-text em,
+.choice-text u,
+.choice-text span:not(.choice-letter) {
+  color: #233d59 !important;
+  font-weight: 400 !important;
+}
+.choice-text .choice-letter {
+  color: #1f5eae !important;
+  font-weight: 800 !important;
+}

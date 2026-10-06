@@ -768,3 +768,12 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   text-align: left !important;
   font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", "Traditional Arabic", "Segoe UI", Arial, sans-serif;
 }
+
+/* Kunci jawaban / rubrik: teks Arab tetap dimulai dari kiri. */
+#fKunci,
+#eKunci {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  text-align: left !important;
+  font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", "Traditional Arabic", "Segoe UI", Arial, sans-serif;
+}

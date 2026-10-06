@@ -672,3 +672,22 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Data Peserta: header dan kolom ringkas rata tengah; nama siswa rata kiri. */
+#participantTable table th,
+#participantTable table td {
+  text-align: center;
+  vertical-align: middle;
+}
+#participantTable table th:first-child,
+#participantTable table td:first-child {
+  text-align: left;
+}
+#participantTable table td:first-child strong {
+  display: block;
+  text-align: left;
+}
+#participantTable table th:last-child,
+#participantTable table td:last-child {
+  text-align: center;
+}

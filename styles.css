@@ -841,3 +841,14 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   unicode-bidi:isolate!important;
   float:none!important;
 }
+
+/* Penegasan akhir label opsi client. */
+.choice-text>.choice-body:before{
+  color:#1f5eae!important;
+  -webkit-text-fill-color:#1f5eae!important;
+  font-weight:800!important;
+  margin-left:-30px;
+  margin-right:6px;
+  min-width:24px;
+  text-align:right;
+}

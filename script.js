@@ -671,8 +671,9 @@ function perbaruiHintUjian_() {
     return String(x.pemilik) === String(select.value);
   })[0];
   if (!item) return;
-  var dasar = 'Ujian tersedia: ' + item.mapel +
-    (item.durasiMenit ? ' — ' + item.durasiMenit + ' menit' : '');
+  var dasar = 'Ujian tersedia: ' + String(item.mapel || 'Mata Pelajaran') +
+    (item.guru ? ' — ' + String(item.guru) : '') +
+    (item.durasiMenit ? ' · ' + item.durasiMenit + ' menit' : '');
   if (!item.jumlahSoalPerTingkat) {
     hint.textContent = dasar + (item.jumlahSoal ? ', ' + item.jumlahSoal + ' soal.' : '.');
     return;
@@ -804,9 +805,17 @@ function isiPilihanUjian_(list, selected) {
   var options = [];
   if (tampil.length !== 1) options.push('<option value="">Pilih ujian yang akan dikerjakan</option>');
   tampil.forEach(function(item) {
-    var label = String(item.mapel || 'Mata Pelajaran');
-    if (item.guru) label += ' — ' + item.guru;
+    var mapelLengkap = String(item.mapel || 'Mata Pelajaran').trim();
+    var guruLengkap = String(item.guru || '').trim();
+    // Label dropdown dibuat ringkas agar mapel/guru panjang tidak memenuhi
+    // layar ponsel. Nilai lengkap tetap dipakai di data ujian dan tampil
+    // pada hint setelah pilihan dibuat.
+    var mapelLabel = mapelLengkap.length > 34 ? mapelLengkap.slice(0, 31) + '…' : mapelLengkap;
+    var guruLabel = guruLengkap.length > 24 ? guruLengkap.slice(0, 21) + '…' : guruLengkap;
+    var label = mapelLabel + (guruLabel ? ' — ' + guruLabel : '');
+    var title = mapelLengkap + (guruLengkap ? ' — ' + guruLengkap : '');
     options.push('<option value="' + escapeHtml(String(item.pemilik)) + '"' +
+      ' title="' + escapeHtml(title) + '"' +
       (String(item.pemilik) === String(selected) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
   });
   if (!tampil.length) {
@@ -1443,8 +1452,8 @@ function renderAnswerInput(question, value) {
       var checked = type === 'PG' ? selected === label : selected.indexOf(label) !== -1;
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
-        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span> ' +
-        SRich.renderRich(option.text) + SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar opsi ' + label)) + '</span></label>';
+        '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span><span class="choice-body"> ' +
+        SRich.renderRich(option.text) + SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar opsi ' + label)) + '</span></span></label>';
     }).join('') + '</div>';
   }
   if (type === 'PGK') {

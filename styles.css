@@ -795,3 +795,16 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   color: #1f5eae !important;
   font-weight: 800 !important;
 }
+
+.choice-text .choice-body,
+.choice-text .choice-body * {
+  color: #233d59 !important;
+  font-weight: 400 !important;
+}
+.choice-text > .choice-letter {
+  display: inline-block;
+  color: #1f5eae !important;
+  font-weight: 800 !important;
+  min-width: 24px;
+  margin-left: -24px;
+}

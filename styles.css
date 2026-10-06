@@ -730,3 +730,21 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Revisi tampilan Arab: tetap mendukung Unicode/RTL, tetapi perataan visual
+   mengikuti layout aplikasi, yaitu rata kiri. */
+.question-content,
+.question-content p,
+.choice-text,
+.choice-text p,
+.pgk-cat-table td.pgk-statement,
+.pgk-cat-table td.pgk-statement .rich-content,
+.pgk-cat-table td.pgk-statement p,
+.jodoh-table td,
+.srte-area,
+#ksCapaian,
+#ksTujuan,
+#ksKompetensi,
+#ksIndikator {
+  text-align: left !important;
+}

@@ -1447,13 +1447,22 @@ function renderAnswerInput(question, value) {
   var options = Array.isArray(question.opsi) ? question.opsi : [];
   if (type === 'PG' || type === 'PGK_MCMA') {
     var selected = type === 'PG' ? String(value || '') : (Array.isArray(value) ? value : []);
-    return '<div class="choice-list">' + options.map(function(option) {
-      var label = String(option.label || '');
-      var checked = type === 'PG' ? selected === label : selected.indexOf(label) !== -1;
+    return '<div class="choice-list">' + options.map(function(option, optionIndex) {
+      var rawLabel = String(option.label || '').trim();
+      var isLetter = /^[A-H]$/i.test(rawLabel);
+      var label = isLetter ? rawLabel.toUpperCase() : String.fromCharCode(65 + optionIndex);
+      var checked = type === 'PG'
+        ? (selected === label || selected === rawLabel)
+        : (selected.indexOf(label) !== -1 || selected.indexOf(rawLabel) !== -1);
+      // Data lama kadang menyimpan teks opsi Arab pada field label. Jika
+      // field teks kosong, pindahkan label lama menjadi isi opsi dan tetap
+      // tampilkan label standar A/B/C/D.
+      var optionText = String(option.text || '');
+      if (!optionText && rawLabel && !isLetter) optionText = rawLabel;
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
         '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span><span class="choice-body"> ' +
-        SRich.renderRich(option.text) + SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar opsi ' + label)) + '</span></span></label>';
+        SRich.renderRich(optionText) + SRich.lampiranGambarHtml_(option.gambar, option.alt || ('Gambar opsi ' + label)) + '</span></span></label>';
     }).join('') + '</div>';
   }
   if (type === 'PGK') {

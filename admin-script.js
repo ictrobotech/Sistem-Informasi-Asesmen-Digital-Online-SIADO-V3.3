@@ -152,9 +152,9 @@ function adminApi(action, payload) {
 
 function matikanRiwayatInputPanel_() {
   var ids = [
-    'cariSoal','cariMonitor','cariPelanggaran','cariPeserta','cariUraian',
+    'cariSoal','cariKartuSoal','cariMonitor','cariPelanggaran','cariPeserta','cariUraian',
     'cariHasil','cariRekap','cariGuru','filterUraianKelas','filterHasilKelas',
-    'filterExportKelas','gNama','gUsername','gMapel1','gMapel2','egNama',
+    'exportKelas','gNama','gUsername','gMapel1','gMapel2','egNama',
     'egUsername','egMapel1','egMapel2','epNama','epUsername','epNis',
     'rNama','rWali','pNama','pUsername','pNis','sTahunAjaran','sGuruMapel','sEmail','sUserPeserta','sPasswordPeserta'
   ];
@@ -2268,7 +2268,7 @@ function renderKunciGambar_(prefix) {
       '</span></div>';
   });
   html += '<div style="margin-top:10px"><button class="admin-secondary" type="button" data-tambah-kunci-gambar="true">' +
-    '<i class="fa-solid fa-plus"></i> Tambah gambar kunci / rubrik</button></div>';
+    '<i class="fa-solid fa-plus"></i> Tambah Gambar Kunci / Rubrik</button></div>';
   wrap.innerHTML = html;
 
   wrap.querySelector('[data-tambah-kunci-gambar]').addEventListener('click', async function() {

@@ -9523,7 +9523,11 @@ function renderEditorDaftar_(div, teks) {
  * daftar dengan rata kiri agar penanda dan indentasinya konsisten.
  */
 function aturPerataanEditor_(div) {
-  div.style.textAlign = div.querySelector('ol') ? 'left' : 'justify';
+  // Metadata Kartu Soal selalu dimulai dari kiri, termasuk saat isi diawali
+  // huruf Arab. Direction ltr mencegah browser menaruh run Arab di sisi kanan.
+  div.style.direction = 'ltr';
+  div.style.unicodeBidi = 'isolate';
+  div.style.textAlign = 'left';
 }
 
 /** Membaca isi editor kembali menjadi teks polos bernomor. */

@@ -827,3 +827,17 @@ input[type="text"],input[type="password"],input[type="number"],input[type="searc
   font-weight:400!important;
   -webkit-text-fill-color:#233d59!important;
 }
+
+/* Label harus berada di kiri sebelum isi Arab; isolasi bidi mencegah
+   karakter Arab memindahkan pseudo-label ke ujung kanan. */
+.choice-text>.choice-body{
+  direction:ltr!important;
+  unicode-bidi:isolate!important;
+  text-align:left!important;
+  display:inline-block;
+}
+.choice-text>.choice-body:before{
+  direction:ltr!important;
+  unicode-bidi:isolate!important;
+  float:none!important;
+}

@@ -114,6 +114,10 @@
    */
   function sanitizeHtml(input) {
     var s = String(input === undefined || input === null ? '' : input);
+    // Word/Google Docs/Browser sering menyisipkan marker clipboard literal.
+    // Marker ini bukan isi pertanyaan dan harus dibuang sebelum disimpan.
+    s = s.replace(/<!--\\s*(?:Start|End)Fragment\\s*-->/gi, '');
+    s = s.replace(/<\\/?(?:Start|End)Fragment\\s*>/gi, '');
     if (!s.trim()) return '';
     /* Rumus dari Word (OMML), MathML/MathJax (hasil kopi dari AI/web),
        dikonversi lebih dulu supaya tidak tersisa sebagai tumpukan tag/teks. */

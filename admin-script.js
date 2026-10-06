@@ -2347,12 +2347,16 @@ function renderOpsiGambar_(prefix) {
   var baris = opsiTeksBaris_(prefix);
   var state = GAMBAR_OPSI_STATE[prefix] || (GAMBAR_OPSI_STATE[prefix] = []);
   var kosong = !baris.length;
-  if (kosong) baris = ['', '', '', ''];   // baris bawaan A–D agar tombol terlihat
+  // Setelah soal berhasil disimpan/form dikosongkan, jangan tampilkan baris
+  // A-D kosong. Panel gambar baru muncul setelah opsi benar-benar diketik.
+  if (kosong) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+    return;
+  }
   var html = '<h5><i class="fa-regular fa-image"></i> Gambar pada opsi / pernyataan (opsional)</h5>' +
     '<p>Setiap opsi boleh diberi gambar — misalnya pilihan jawaban berupa gambar. Tekan <b>Upload gambar</b> ' +
-    'pada baris opsi yang dituju (boleh unggah dari komputer, Google Drive, atau tautan URL).</p>' +
-    (kosong ? '<div class="gambar-opsi-kosong">Belum ada opsi diketik. Baris A–D di bawah ini mengikuti urutan ' +
-      'opsi yang akan Anda tulis pada kolom di atas.</div>' : '');
+    'pada baris opsi yang dituju (boleh unggah dari komputer, Google Drive, atau tautan URL).</p>';
   baris.forEach(function(teks, i) {
     var gambar = state[i] || {};
     html += '<div class="gambar-opsi-baris' + (kosong ? ' bawaan' : '') + '">' +
@@ -2985,6 +2989,9 @@ function clearQuestionForm(prefix) {
   var deskripsi = document.getElementById(prefix + 'DeskripsiStimulus');
   if (deskripsi) deskripsi.value = '';
   document.getElementById(prefix + 'Opsi').value = '';
+  // Opsi dikosongkan setelah soal tersimpan; sinkronkan panel gambar agar
+  // baris Upload gambar lama tidak tertinggal di form baru.
+  renderOpsiGambar_(prefix);
   document.getElementById(prefix + 'Kunci').value = '';
   document.getElementById(prefix + 'ImageAlt').value = '';
   document.getElementById(prefix + 'VideoAlt').value = '';

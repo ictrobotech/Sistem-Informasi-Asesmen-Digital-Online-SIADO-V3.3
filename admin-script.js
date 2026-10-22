@@ -10084,7 +10084,7 @@ async function simpanKartuSoal_(event) {
     }
     if (opsiAsal.length < 2 || opsiAsal.length > 8) {
       await hasilInfo_('Jumlah Opsi PG Tidak Sesuai',
-        'Tipe PG harus memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu ubah tipe di Kartu Soal kembali.');
+        'Tipe PG harus memiliki minimal 2 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu ubah tipe di Kartu Soal kembali.');
       return;
     }
   }
@@ -10135,8 +10135,8 @@ async function simpanKartuSoal_(event) {
     ]);
   } catch (error) {
     var pesanSimpan = error.message || 'Kartu soal gagal disimpan.';
-    if (/PG harus memiliki 2 sampai 8 opsi/i.test(pesanSimpan)) {
-      pesanSimpan = 'Soal PG wajib memiliki 2 sampai 8 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu coba simpan Kartu Soal kembali.';
+    if (/PG harus memiliki (?:2 sampai 8|minimal 2) opsi/i.test(pesanSimpan)) {
+      pesanSimpan = 'Soal PG wajib memiliki minimal 2 opsi. Lengkapi opsi di menu Kelola Soal, simpan soal, lalu coba simpan Kartu Soal kembali.';
     } else if (/tipe soal tidak valid/i.test(pesanSimpan)) {
       pesanSimpan = 'Tipe soal tidak valid. Pilih ulang salah satu tipe pada Kartu Soal. Jika tetap gagal, muat ulang panel agar daftar tipe terbaru diterapkan.';
     } else if (/kunci pgk|kunci pg|minimal satu opsi|tidak cocok/i.test(pesanSimpan)) {

@@ -5164,18 +5164,13 @@ async function unduhTemplateSoal() {
     var blob = await buatTemplateExcelSoal_();
     if (!blob) throw new Error('Pustaka ExcelJS belum termuat.');
     unduhBlob_(blob, 'template-import-soal.xlsx');
-    await hasilSukses_('Template Soal Diunduh (Excel)',
-      'Berkas <b>template-import-soal.xlsx</b> tersimpan di folder unduhan perangkat Anda. Isi sesuai panduan pada sheet <b>PETUNJUK</b>, simpan, lalu tekan <b>Import Sekarang</b> pada kartu Import Soal.',
-      [{ label: 'Nama berkas', nilai: 'template-import-soal.xlsx' }].concat(rincian));
+    await hasilSukses_('Template Soal Diunduh (Excel)', '', []);
   } catch (error) {
     var rows = [SOAL_TEMPLATE_HEADERS_].concat(SOAL_TEMPLATE_CONTOH_.map(function(b) {
       return b.map(function(nilai) { return String(nilai === null ? '' : nilai); });
     }));
     unduhCsv_(rows, 'template-import-soal.csv');
-    await hasilInfo_('Template Diunduh (CSV cadangan)',
-      'Pustaka Excel belum termuat pada perangkat ini, sehingga template diunduh sebagai CSV. ' +
-      (error && error.message ? error.message : ''),
-      [{ label: 'Nama berkas', nilai: 'template-import-soal.csv' }].concat(rincian));
+    await hasilInfo_('Template Diunduh (CSV cadangan)', '', []);
   }
 }
 

@@ -4134,13 +4134,19 @@ async function saveSettings() {
     resetPasswordVisibility('sPassPeserta', 'toggleParticipantNewPassword', 'password peserta');
     await loadSettings();
     await hasilSukses_('Pengaturan Tersimpan', result.message || 'Pengaturan ujian berhasil disimpan.', [
-      { label: 'Mapel aktif', nilai: mapelBaru || 'Belum diisi' },
-      { label: 'Berlaku untuk', nilai: 'Akun ' + (ADMIN.username || '-') + ' saja' },
-      { label: 'Judul besar ujian', nilai: nilaiInput_('sJudulUjian') || 'Belum terbentuk' },
-      { label: 'Status ujian', nilai: (document.getElementById('sUjianAktif') || {}).checked
-        ? 'Dibuka — peserta dapat memilihnya saat login' : 'Ditutup — belum tampil bagi peserta' },
-      { label: 'Durasi ujian', nilai: durasiBaru ? (durasiBaru + ' menit') : 'Belum diisi (memakai 40 menit)' },
-      { label: 'Peserta aktif', nilai: document.getElementById('sApplyActive').checked ? 'Ikut disesuaikan' : 'Tidak diubah' }
+      { label: 'Mapel Aktif', nilai: (function() {
+          var m = mapelBaru || 'Belum diisi';
+          return m === 'Koding Dan Kecerdasan Artifisial' ? m + ' (KKA)' : m;
+        })() },
+      { label: 'Berlaku Untuk', nilai: (function() {
+          var u = String(ADMIN.username || '-').trim();
+          return u ? u.charAt(0).toUpperCase() + u.slice(1) : '-';
+        })() },
+      { label: 'Bentuk Ujian', nilai: nilaiInput_('sJudulUjian') || 'Belum terbentuk' },
+      { label: 'Status Ujian', nilai: (document.getElementById('sUjianAktif') || {}).checked
+        ? 'Aktif' : 'Tidak Aktif' },
+      { label: 'Durasi Asesmen', nilai: durasiBaru ? (durasiBaru + ' Menit') : 'Belum diisi (memakai 40 Menit)' },
+      { label: 'Peserta Aktif', nilai: document.getElementById('sApplyActive').checked ? 'Ikut Disesuaikan' : 'Tidak Diubah' }
     ]);
   } catch (error) {
     await hasilGagal_('Pengaturan Gagal Disimpan', error.message || 'Pengaturan gagal disimpan.');

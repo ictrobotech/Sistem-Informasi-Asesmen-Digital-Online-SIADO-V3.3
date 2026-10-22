@@ -5076,67 +5076,69 @@ async function buatTemplateExcelSoal_() {
   var ExcelJS = window.ExcelJS;
   if (!ExcelJS || !ExcelJS.Workbook) return null;
   var workbook = new ExcelJS.Workbook();
-  workbook.creator = 'SIADO — Sistem Informasi Asesmen Digitalisasi Online';
+  workbook.creator = 'SIADO';
   workbook.lastModifiedBy = 'SIADO';
   workbook.properties.title = 'Template Import Soal SIADO';
-  workbook.properties.description = 'Format panduan import soal: sheet SOAL (data) + PETUNJUK (panduan isi).';
+  workbook.properties.description = 'Template import per tipe soal.';
 
-  var sheet = workbook.addWorksheet('SOAL', { views: [{ state: 'frozen', ySplit: 1 }] });
-  sheet.columns = SOAL_TEMPLATE_HEADERS_.map(function(h, i) {
-    return { header: h, key: h, width: SOAL_TEMPLATE_LEBAR_[i] };
-  });
-  sheet.getRow(1).eachCell(function(cell) {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-  });
-  SOAL_TEMPLATE_CONTOH_.forEach(function(baris, i) {
-    var row = sheet.getRow(2 + i);
-    baris.forEach(function(nilai, j) {
-      row.getCell(j + 1).value = (nilai === '' ? null : nilai);
+  var specs = [
+    { name: 'PG', headers: ['nomor','pertanyaan','opsi_A','opsi_B','opsi_C','opsi_D','kunci_jawaban','poin','tingkat','aktif'], widths: [9,55,24,24,24,24,18,9,12,10] },
+    { name: 'PGK', headers: ['nomor','pertanyaan'].concat((function(){var a=[];for(var i=1;i<=10;i++){a.push('pernyataan_'+i,'kunci_'+i);}return a;})()).concat(['poin','tingkat','aktif']), widths: [9,55].concat((function(){var a=[];for(var i=1;i<=10;i++)a.push(30,18);return a;})()).concat([9,12,10]) },
+    { name: 'PGK_MCMA', headers: ['nomor','pertanyaan','opsi_A','opsi_B','opsi_C','opsi_D','opsi_E','opsi_F','opsi_G','opsi_H','opsi_I','opsi_J','kunci_jawaban','poin','tingkat','aktif'], widths: [9,55,20,20,20,20,20,20,20,20,20,20,18,9,12,10] },
+    { name: 'MENJODOHKAN', headers: ['nomor','pertanyaan'].concat((function(){var a=[];for(var i=1;i<=10;i++)a.push('pasangan_'+i);return a;})()).concat(['poin','tingkat','aktif']), widths: [9,55].concat(Array(10).fill(34)).concat([9,12,10]) },
+    { name: 'ISIAN', headers: ['nomor','pertanyaan','kunci_jawaban','poin','tingkat','aktif'], widths: [9,55,45,9,12,10] },
+    { name: 'URAIAN', headers: ['nomor','pertanyaan','kunci_jawaban','poin','tingkat','aktif'], widths: [9,55,60,9,12,10] }
+  ];
+  specs.forEach(function(spec) {
+    var sheet = workbook.addWorksheet(spec.name, { views: [{ state: 'frozen', ySplit: 1 }] });
+    sheet.columns = spec.headers.map(function(h, i) { return { header: h, key: h, width: spec.widths[i] || 18 }; });
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 101, column: spec.headers.length } };
+    sheet.getRow(1).height = 30;
+    sheet.getRow(1).eachCell(function(cell) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     });
-    row.eachCell({ includeEmpty: false }, function(cell) {
-      var wrap = ['pertanyaan', 'opsi', 'kunci_jawaban'].indexOf(SOAL_TEMPLATE_HEADERS_[cell.col - 1]) !== -1;
-      cell.alignment = { vertical: 'top', wrapText: wrap };
-    });
-  });
-  sheet.dataValidations.add('B2:B200', {
-    type: 'whole', operator: 'greaterThanOrEqual', formula1: '1', formula2: '99999',
-    allowBlank: true, showErrorMessage: true, errorStyle: 'warning',
-    errorTitle: 'Nomor soal', error: 'Nomor soal sebaiknya berupa angka positif.'
-  });
-  sheet.dataValidations.add('C2:C200', {
-    type: 'list', allowBlank: true, showErrorMessage: true,
-    formula1: '"PG,PGK,PGK_MCMA,MENJODOHKAN,ISIAN,URAIAN"',
-    errorTitle: 'Tipe soal', error: 'Pilih salah satu tipe: PG, PGK, PGK_MCMA, MENJODOHKAN, ISIAN, URAIAN.'
-  });
-  sheet.dataValidations.add('H2:H200', {
-    type: 'list', allowBlank: true, showErrorMessage: true,
-    formula1: '"SEMUA,VII,VIII,IX"',
-    errorTitle: 'Tingkat', error: 'Pilih SEMUA, VII, VIII, atau IX.'
-  });
-  sheet.dataValidations.add('I2:I200', {
-    type: 'list', allowBlank: true, showErrorMessage: true,
-    formula1: '"YA,TIDAK"',
-    errorTitle: 'Status', error: 'Pilih YA atau TIDAK.'
+    for (var r = 2; r <= 101; r++) {
+      sheet.getRow(r).height = 34;
+      sheet.getRow(r).eachCell(function(cell) {
+        cell.alignment = { vertical: 'top', wrapText: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FBFF' } };
+      });
+    }
+    var tipeFormula = '"' + spec.name + '"';
+    if (spec.headers.indexOf('tingkat') >= 0) sheet.dataValidations.add('' + String.fromCharCode(65 + spec.headers.indexOf('tingkat')) + '2:' + String.fromCharCode(65 + spec.headers.indexOf('tingkat')) + '101', { type: 'list', allowBlank: true, formula1: '"SEMUA,VII,VIII,IX"' });
+    if (spec.headers.indexOf('aktif') >= 0) sheet.dataValidations.add('' + String.fromCharCode(65 + spec.headers.indexOf('aktif')) + '2:' + String.fromCharCode(65 + spec.headers.indexOf('aktif')) + '101', { type: 'list', allowBlank: true, formula1: '"YA,TIDAK"' });
+    sheet.getCell('A2').note = 'Isi satu soal per baris. Nomor boleh dikosongkan bila ingin memakai urutan baris.';
+    if (spec.headers.indexOf('poin') >= 0) sheet.getCell(1, spec.headers.indexOf('poin') + 1).note = 'Angka nilai soal. Kosong berarti 10.';
+    if (spec.name === 'PG') sheet.getCell('C1').note = 'Isi opsi A, B, C, D pada kolom terpisah. Kunci hanya satu huruf.';
+    if (spec.name === 'PGK') sheet.getCell('C1').note = 'Isi pernyataan dan kuncinya berpasangan. Contoh kunci: BENAR atau nama kategori.';
+    if (spec.name === 'PGK_MCMA') sheet.getCell('C1').note = 'Isi opsi pada kolom terpisah. Kunci dapat berupa A,C,F.';
+    if (spec.name === 'MENJODOHKAN') sheet.getCell('C1').note = 'Format pasangan: pernyataan = jawaban.';
   });
 
   var petunjuk = workbook.addWorksheet('PETUNJUK', { views: [{ state: 'frozen', ySplit: 1 }] });
-  petunjuk.columns = [{ width: 6 }, { width: 110 }];
+  petunjuk.columns = [{ width: 6 }, { width: 115 }];
   petunjuk.mergeCells('A1:B1');
-  var judul = petunjuk.getRow(1).getCell(1);
-  judul.value = 'PETUNJUK ISI TEMPLATE IMPORT SOAL SIADO';
-  judul.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
-  judul.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
-  judul.alignment = { vertical: 'middle' };
-  SOAL_TEMPLATE_PETUNJUK_.forEach(function(teks, i) {
-    var row = petunjuk.getRow(2 + i);
-    row.getCell(1).value = i + 1;
-    row.getCell(2).value = teks;
-    row.getCell(2).alignment = { vertical: 'top', wrapText: true };
-    row.getCell(1).alignment = { vertical: 'top', horizontal: 'center' };
-  });
-
+  var title = petunjuk.getCell('A1');
+  title.value = 'PETUNJUK IMPORT SOAL SIADO';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+  title.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+  title.alignment = { vertical: 'middle' };
+  var guides = [
+    'Pilih sheet sesuai tipe soal. Isi satu soal pada satu baris dan jangan mengubah nama header.',
+    'Sheet PG: isi opsi A sampai D pada kolom terpisah; kunci_jawaban berisi satu huruf, misalnya A.',
+    'Sheet PGK: isi pernyataan_1 sampai pernyataan_10 dan kunci pasangannya pada kunci_1 sampai kunci_10.',
+    'Sheet PGK_MCMA: isi opsi A sampai J; kunci_jawaban dapat berisi beberapa huruf, misalnya A,C,F.',
+    'Sheet MENJODOHKAN: isi pasangan_1 sampai pasangan_10 dengan format pernyataan = jawaban.',
+    'Sheet ISIAN: isi kunci_jawaban sebagai jawaban singkat.',
+    'Sheet URAIAN: isi kunci_jawaban sebagai rubrik atau pedoman penilaian.',
+    'tingkat dapat diisi SEMUA, VII, VIII, atau IX. aktif dapat diisi YA atau TIDAK.',
+    'Simpan tetap sebagai .xlsx. Saat import, pilih mapel tujuan pada panel Admin.',
+    'Soal dari seluruh sheet tipe akan digabung dan otomatis masuk ke Bank Soal akun guru sesuai mapel tujuan.',
+    'Teks Arab, LaTeX, dan teks dari Word/AI tetap dapat ditempel pada pertanyaan, opsi, dan kunci.'
+  ];
+  guides.forEach(function(text, i) { petunjuk.getCell(2 + i, 1).value = i + 1; petunjuk.getCell(2 + i, 2).value = text; petunjuk.getCell(2 + i, 2).alignment = { vertical: 'top', wrapText: true }; });
   var buffer = await workbook.xlsx.writeBuffer();
   return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
@@ -6950,7 +6952,39 @@ async function barisDariBerkasSoal_(file) {
     if (!buku.SheetNames || !buku.SheetNames.length || !buku.Sheets[buku.SheetNames[0]]) {
       throw new Error('Berkas Excel tidak berisi sheet apa pun.');
     }
-    return window.XLSX.utils.sheet_to_json(buku.Sheets[buku.SheetNames[0]], { header: 1, defval: '' });
+    var semua = [];
+    buku.SheetNames.forEach(function(namaSheet) {
+      if (String(namaSheet).toUpperCase() === 'PETUNJUK') return;
+      var rowsSheet = window.XLSX.utils.sheet_to_json(buku.Sheets[namaSheet], { header: 1, defval: '' });
+      if (!rowsSheet.length) return;
+      var tipeSheet = String(namaSheet || '').toUpperCase().replace(/[\s-]+/g, '_');
+      if (tipeSheet === 'SOAL') {
+        if (!semua.length) semua.push(rowsSheet[0]);
+        rowsSheet.slice(1).forEach(function(row) { if (row.some(function(c) { return String(c || '').trim() !== ''; })) semua.push(row); });
+        return;
+      }
+      var header = rowsSheet[0].map(function(c) { return String(c || '').trim().toLowerCase().replace(/\s+/g, '_'); });
+      var canonical = ['nomor','tipe','pertanyaan','opsi','kunci_jawaban','poin','tingkat','aktif'];
+      if (!semua.length) semua.push(canonical);
+      rowsSheet.slice(1).forEach(function(row) {
+        var obj = {}; header.forEach(function(k, i) { if (k) obj[k] = String(row[i] === undefined ? '' : row[i]).trim(); });
+        if (!Object.keys(obj).some(function(k) { return obj[k] !== ''; })) return;
+        var out = { nomor: obj.nomor || '', tipe: tipeSheet, pertanyaan: obj.pertanyaan || '', opsi: '', kunci_jawaban: obj.kunci_jawaban || '', poin: obj.poin || '', tingkat: obj.tingkat || '', aktif: obj.aktif || 'YA' };
+        var keys = Object.keys(obj);
+        if (tipeSheet === 'PG' || tipeSheet === 'PGK_MCMA') {
+          out.opsi = keys.filter(function(k) { return /^opsi_[a-j]$/.test(k); }).sort().map(function(k) { return obj[k]; }).filter(Boolean).join('|');
+        } else if (tipeSheet === 'PGK') {
+          var pernyataan = [], kunci = [];
+          for (var i = 1; i <= 10; i++) { if (obj['pernyataan_' + i]) { pernyataan.push(obj['pernyataan_' + i]); kunci.push(obj['kunci_' + i] || ''); } }
+          out.opsi = pernyataan.join('|'); out.kunci_jawaban = kunci.join(',');
+        } else if (tipeSheet === 'MENJODOHKAN') {
+          out.opsi = keys.filter(function(k) { return /^pasangan_[0-9]+$/.test(k); }).sort(function(a,b) { return parseInt(a.split('_')[1],10)-parseInt(b.split('_')[1],10); }).map(function(k) { return obj[k]; }).filter(Boolean).join('|');
+          out.kunci_jawaban = '';
+        }
+        semua.push(canonical.map(function(k) { return out[k] === undefined ? '' : out[k]; }));
+      });
+    });
+    return semua;
   }
   return parseCsv_(await bacaFileTeks_(file));
 }

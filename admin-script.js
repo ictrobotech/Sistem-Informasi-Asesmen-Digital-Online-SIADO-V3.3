@@ -63,6 +63,7 @@ var ADMIN = {
 var TAB_META = {
   soal:        { judul: 'Kelola Soal', sub: 'Bank soal, media stimulus, dan import soal' },
   kartusoal:   { judul: 'Kartu Soal', sub: 'Kisi-kisi butir soal untuk STS dan SAS' },
+  banksoal:    { judul: 'Bank Soal', sub: 'Import soal dan kelola bank soal' },
   monitor:     { judul: 'Monitor Peserta', sub: 'Pemantauan peserta ujian secara realtime' },
   pelanggaran: { judul: 'Pelanggaran', sub: 'Log kecurangan dan tindakan sistem' },
   uraian:      { judul: 'Nilai Uraian', sub: 'Penilaian manual jawaban uraian sebelum export' },
@@ -1317,6 +1318,7 @@ function switchAdminTab(tab) {
   document.getElementById('topbarSubtitle').textContent = meta.sub;
   try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { window.scrollTo(0, 0); }
   if (tab === 'soal') loadQuestions();
+  if (tab === 'banksoal') loadQuestions();
   if (tab === 'kartusoal') loadKartuSoal();
   if (tab === 'monitor') loadMonitor();
   if (tab === 'pelanggaran') { loadViolations(); loadDisqualified(); }

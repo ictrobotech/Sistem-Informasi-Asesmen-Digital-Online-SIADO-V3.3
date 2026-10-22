@@ -6999,6 +6999,19 @@ async function barisDariBerkasSoal_(file) {
  * - awalan nomor lama ("1. ...") dihilangkan dari teks pertanyaan agar
  *   kolom pertanyaan tetap bersih.
  */
+function opsiImportKeArray_(nilai) {
+  if (Array.isArray(nilai)) return nilai.map(function(x) { return String(x || '').trim(); }).filter(Boolean);
+  var teks = String(nilai || '').trim();
+  if (!teks) return [];
+  if (teks.charAt(0) === '[') {
+    try {
+      var parsed = JSON.parse(teks);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {}
+  }
+  return teks.split('|').map(function(x) { return String(x || '').trim(); }).filter(Boolean);
+}
+
 function susunPayloadImportSoal_(objects, mapelTujuan) {
   var mapel = String(mapelTujuan || '').trim();
   var diberiNomor = (objects || []).map(function(item, index) {
@@ -7037,7 +7050,7 @@ function susunPayloadImportSoal_(objects, mapelTujuan) {
     return {
       tipe: String(item.tipe || item.jenis || 'PG').toUpperCase().replace(/[\s-]+/g, '_'),
       pertanyaan: pertanyaan,
-      opsi: String(item.opsi || item.pilihan || '').trim(),
+      opsi: opsiImportKeArray_(item.opsi || item.pilihan || ''),
       kunci_jawaban: String(item.kunci_jawaban || item.kunci || '').trim(),
       poin: item.poin || item.skor || 10,
       // Mapel dari pengaturan akun, bukan dari berkas (lihat REVISI 4).

@@ -7067,9 +7067,14 @@ function susunPayloadImportSoal_(objects, mapelTujuan) {
 
 /** Pembaca nilai dropdown "Mapel tujuan" pada kartu Import Soal. */
 function nilaiMapelImport_() {
-  var el = document.getElementById('importSoalMapel');
-  if (el) return String(el.value || '').trim();
-  return mapelDiujikan_();
+  // Import selalu memakai mapel aktif pada Pengaturan, bukan pilihan di file.
+  var aktif = '';
+  try { aktif = String(mapelAktifTerpilih_() || '').trim(); } catch (e) {}
+  if (aktif) return aktif;
+  try {
+    aktif = String((ADMIN.settings && (ADMIN.settings.mapelAktif || ADMIN.settings.mapel)) || '').trim();
+  } catch (e) {}
+  return aktif || mapelDiujikan_();
 }
 
 /**
@@ -7117,15 +7122,12 @@ async function importSoalDariFile() {
     await hasilInfo_('Berkas Belum Dipilih', 'Pilih berkas Excel (.xlsx) hasil unduh template — atau CSV lama — lalu tekan Import Sekarang.');
     return;
   }
-  // Cadangan pengisian bila tab dibuka tanpa pemuatan bank soal (mis. sesi baru).
-  if (!document.getElementById('importSoalMapel') || !String(document.getElementById('importSoalMapel').value || '').trim()) {
-    isiPilihanMapelImport_();
-  }
+  // Mapel import selalu mengikuti Pengaturan > Mata pelajaran yang diujikan (mapel aktif).
   var mapelTujuan = nilaiMapelImport_();
   if (!mapelTujuan) {
-    setImportMessage_('importSoalResult', 'Pilih <b>mapel tujuan</b> pada dropdown di atas file terlebih dahulu.', 'err');
-    await hasilInfo_('Mapel Tujuan Belum Dipilih',
-      'Soal hasil import otomatis masuk ke bank soal akun ini sesuai mapel yang diampu. Bila dropdown masih kosong, tetapkan dulu mapel pada Pengaturan.', [
+    setImportMessage_('importSoalResult', 'Mapel aktif belum ditetapkan pada Pengaturan.', 'err');
+    await hasilInfo_('Mapel Aktif Belum Ditentukan',
+      'Tetapkan dulu "Mata pelajaran yang diujikan (mapel aktif)" pada menu Pengaturan, lalu ulangi import.', [
         { label: 'Berkas dipilih', nilai: file.name }
       ]);
     return;

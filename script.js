@@ -794,6 +794,16 @@ function perbaruiRombelMenurutUjian_() {
   isiPilihanRombel_(boleh, masihBoleh ? sebelumnya : '');
 }
 
+function perbaruiLabelUjianPeserta_() {
+  var select = document.getElementById('ujianPeserta');
+  var label = document.getElementById('ujianPesertaLabel');
+  if (!select || !label) return;
+  var option = select.options[select.selectedIndex];
+  var teks = option ? String(option.textContent || option.text || '').trim() : '';
+  label.textContent = teks || 'Pilih ujian yang akan dikerjakan';
+  label.classList.toggle('placeholder', !select.value);
+}
+
 function isiPilihanUjian_(list, selected) {
   var select = document.getElementById('ujianPeserta');
   if (!select) return;
@@ -807,12 +817,9 @@ function isiPilihanUjian_(list, selected) {
   tampil.forEach(function(item) {
     var mapelLengkap = String(item.mapel || 'Mata Pelajaran').trim();
     var guruLengkap = String(item.guru || '').trim();
-    // Label dropdown dibuat ringkas agar mapel/guru panjang tidak memenuhi
-    // layar ponsel. Nilai lengkap tetap dipakai di data ujian dan tampil
-    // pada hint setelah pilihan dibuat.
-    var mapelLabel = mapelLengkap.length > 34 ? mapelLengkap.slice(0, 31) + '…' : mapelLengkap;
-    var guruLabel = guruLengkap.length > 24 ? guruLengkap.slice(0, 21) + '…' : guruLengkap;
-    var label = mapelLabel + (guruLabel ? ' — ' + guruLabel : '');
+    // Label lengkap ditampilkan pada kotak pilihan yang dapat membungkus
+    // beberapa baris, sehingga nama mapel dan guru tidak dipotong.
+    var label = mapelLengkap + (guruLengkap ? ' — ' + guruLengkap : '');
     var title = mapelLengkap + (guruLengkap ? ' — ' + guruLengkap : '');
     options.push('<option value="' + escapeHtml(String(item.pemilik)) + '"' +
       ' title="' + escapeHtml(title) + '"' +
@@ -825,6 +832,7 @@ function isiPilihanUjian_(list, selected) {
   if (tampil.length === 1) select.value = String(tampil[0].pemilik);
   else if (selected && tampil.some(function(x) { return String(x.pemilik) === String(selected); })) select.value = String(selected);
   else select.value = '';
+  perbaruiLabelUjianPeserta_();
 
   // Mapel/ujian sudah dipilih; sekarang batasi pilihan rombel sesuai
   // penetapan admin untuk pemilik dan mapel tersebut.
@@ -851,6 +859,7 @@ function isiPilihanUjian_(list, selected) {
   if (pilihUjian && !pilihUjian.dataset.saringRombelBound) {
     pilihUjian.dataset.saringRombelBound = '1';
     pilihUjian.addEventListener('change', function() {
+      perbaruiLabelUjianPeserta_();
       perbaruiRombelMenurutUjian_();
       perbaruiHintUjian_();
     });

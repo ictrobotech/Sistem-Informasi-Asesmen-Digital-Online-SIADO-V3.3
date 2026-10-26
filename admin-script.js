@@ -4170,6 +4170,9 @@ async function saveSettings() {
       usernamePeserta: document.getElementById('sUserPeserta').value,
       passwordPesertaBaru: document.getElementById('sPassPeserta').value,
       namaGuruMapel: document.getElementById('sGuruMapel').value,
+      // Backend menyimpan KKM guru dari field `kkm`; `kkmDefault` hanya
+      // untuk pengaturan global admin. Kirim keduanya agar kompatibel.
+      kkm: document.getElementById('sKkm').value,
       kkmDefault: document.getElementById('sKkm').value,
       petunjukUjian: nilaiInput_('sPetunjukUjian'),
       terapkanPesertaAktif: document.getElementById('sApplyActive').checked

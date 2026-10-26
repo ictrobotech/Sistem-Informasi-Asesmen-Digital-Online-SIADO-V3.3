@@ -1879,6 +1879,9 @@ function perbaruiKunciPgk_(prefix) {
   // apa pun (placeholder kolom memberi penjelas), sehingga kolom tidak pernah
   // muncul terisi otomatis sebelum guru memilih kunci.
   if (tipeEl && tipeEl.value !== 'PGK') return;
+  // Saat edit, jangan menimpa kunci yang tersimpan ketika editor dibuka,
+  // kategori/label diubah, atau baris pernyataan dirapikan.
+  if (prefix === 'e') return;
   keyField.value = state.rows.map(function(r) { return r.kunci || ''; }).filter(Boolean).join(' / ');
 }
 
@@ -2836,7 +2839,10 @@ async function buildQuestionPayload(prefix) {
   /* Gambar pada kunci/rubrik berlaku untuk semua tipe soal. */
   pertanyaanHtml = SRich.kunciMarkerEmbed(pertanyaanHtml, KUNCI_GAMBAR_STATE[prefix] || []);
   var kunci = document.getElementById(prefix + 'Kunci').value;
-  if (tipe === 'PGK') {
+  if (tipe === 'PGK' && prefix === 'f') {
+    // Form tambah membentuk kunci dari tabel PGK.
+    // Pada form edit, kunci yang tersimpan dipertahankan dan hanya berubah
+    // bila guru mengubah kolom kunci secara manual lalu menyimpan.
     kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
   }
   // REVISI 2026-09-26: kunci PG / PGK MCMA dinormalkan ke format baku

@@ -3425,6 +3425,9 @@ function petunjukTipe_(type) {
   if (t === 'PG') return 'Pilihlah SATU jawaban yang paling tepat dengan memberi tanda centang (✓) pada huruf A, B, C, atau D!';
   if (t === 'PGK') return 'Bacalah pernyataan dengan cermat, kemudian berilah tanda centang (✓) pada kolom kategori yang sesuai untuk SETIAP pernyataan!';
   if (t === 'PGK_MCMA') return 'Pilihlah SEMUA jawaban yang benar dengan memberi tanda centang (✓) pada kotak di depan huruf pilihan! Jawaban benar LEBIH DARI SATU.';
+  if (t === 'MENJODOHKAN') return 'Pasangkan setiap pernyataan dengan jawaban yang paling tepat pada kolom pasangan!';
+  if (t === 'ISIAN') return 'Tuliskan jawaban singkat yang paling tepat pada kolom jawaban!';
+  if (t === 'URAIAN') return 'Bacalah pertanyaan dengan cermat, kemudian tuliskan jawaban atau penjelasan secara lengkap pada kolom jawaban!';
   return '';
 }
 

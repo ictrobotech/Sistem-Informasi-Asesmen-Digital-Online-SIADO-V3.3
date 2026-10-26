@@ -2844,6 +2844,10 @@ async function buildQuestionPayload(prefix) {
     // Pada form edit, kunci yang tersimpan dipertahankan dan hanya berubah
     // bila guru mengubah kolom kunci secara manual lalu menyimpan.
     kunci = (PGK_STATE[prefix] || { rows: [] }).rows.map(function(r) { return r.kunci; }).join(',');
+  } else if (tipe === 'PGK' && prefix === 'e') {
+    // Tampilan editor memakai pemisah " / ", sedangkan database menerima
+    // daftar kunci PGK dengan pemisah koma. Nilainya tetap sama secara makna.
+    kunci = String(kunci || '').split(/\s*\/\s*/).map(function(x) { return x.trim(); }).filter(Boolean).join(',');
   }
   // REVISI 2026-09-26: kunci PG / PGK MCMA dinormalkan ke format baku
   // (mis. "a, c" atau "AC" -> "A,C"; "2" -> "B") agar validator server

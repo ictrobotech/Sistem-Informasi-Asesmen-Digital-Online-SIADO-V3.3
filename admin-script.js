@@ -1697,6 +1697,9 @@ function perbaruiKunciJodoh_(prefix) {
   var tipe = document.getElementById(prefix + 'Tipe');
   var keyField = document.getElementById(prefix + 'Kunci');
   if (!tipe || !keyField || tipe.value !== 'MENJODOHKAN') return;
+  // Pada editor edit, pertahankan kunci yang tersimpan. Guru harus mengubah
+  // kolom kunci secara manual bila memang ingin mengganti kunci.
+  if (prefix === 'e') return;
   var pasangan = optionsFromField(prefix);
   keyField.value = pasangan.length
     ? pasangan.map(function(item, index) {
@@ -2983,6 +2986,12 @@ function clearQuestionForm(prefix) {
   if (RTE_PERTANYAAN[prefix]) RTE_PERTANYAAN[prefix].setHtml('');
   resetPgkEditor(prefix, null);
   resetJodohEditor(prefix, null);
+  // Label kolom Menjodohkan hanya untuk input soal berikutnya; setelah
+  // tersimpan, kosongkan kembali kedua kolom agar tidak terbawa ke soal baru.
+  var labelKiri = document.getElementById(prefix + 'JodohLabelKiri');
+  var labelKanan = document.getElementById(prefix + 'JodohLabelKanan');
+  if (labelKiri) labelKiri.value = '';
+  if (labelKanan) labelKanan.value = '';
   bersihkanGambarOpsi_(prefix);
   bersihkanKunciGambar_(prefix);
   updateQuestionFormatHelp(prefix);
@@ -3414,6 +3423,12 @@ async function saveEditedQuestion() {
     var elMapelTujuan = document.getElementById('eMapel');
     var mapelTujuan = elMapelTujuan ? String(elMapelTujuan.value || '').trim() : '';
     var result = await apiWajib_('updateSoal', payload);
+    // Kolom label hanya dikosongkan dari form setelah penyimpanan berhasil;
+    // label yang sudah tersimpan pada soal tetap dipertahankan saat ditampilkan.
+    var labelKiriEdit = document.getElementById('eJodohLabelKiri');
+    var labelKananEdit = document.getElementById('eJodohLabelKanan');
+    if (labelKiriEdit) labelKiriEdit.value = '';
+    if (labelKananEdit) labelKananEdit.value = '';
     closeEditQuestion();
     await segarkanSenyap_([loadQuestions, loadDashboard]);
     // REVISI pindah mapel: pastikan server benar-benar menerapkan mapel baru.

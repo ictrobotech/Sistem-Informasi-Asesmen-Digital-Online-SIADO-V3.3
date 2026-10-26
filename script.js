@@ -1484,7 +1484,15 @@ function renderAnswerInput(question, value) {
   if (type === 'MENJODOHKAN') {
     // Peserta memilih jawaban dari daftar yang sudah diacak server.
     var jodoh = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    var pilihan = Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : [];
+    // Salin lalu acak pilihan pasangan hanya untuk tampilan peserta.
+    // Data kunci dan urutan pernyataan tetap tidak diubah.
+    var pilihan = (Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : []).slice();
+    for (var acak = pilihan.length - 1; acak > 0; acak--) {
+      var tukar = Math.floor(Math.random() * (acak + 1));
+      var sementara = pilihan[acak];
+      pilihan[acak] = pilihan[tukar];
+      pilihan[tukar] = sementara;
+    }
     /* Nama kolom bisa diganti guru; soal lama tetap memakai nama bawaan. */
     var labelJodoh = String((options[0] && options[0].labelKiri) || '').trim() || 'Pernyataan';
     var labelJodohKanan = String((options[0] && options[0].labelKanan) || '').trim() || 'Pasangan Jawaban';

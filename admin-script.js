@@ -2869,7 +2869,12 @@ async function buildQuestionPayload(prefix) {
     /* Kelas sasaran soal ini saja. Dikirim eksplisit setiap simpan supaya
        server tidak perlu menebak/mewarisi tingkat soal lain. */
     tingkat: tingkatDariNilai_(nilaiInput_(prefix + 'Tingkat')),
-    aktif: document.getElementById(prefix + 'Aktif').checked
+    aktif: document.getElementById(prefix + 'Aktif').checked,
+    // Jenis ujian mengikuti Pengaturan; saat Edit, nilai ini juga dapat
+    // mengategorikan soal lama yang sebelumnya belum memiliki jenis ujian.
+    jenis_ujian: normalisasiJenisUjianKlien_(
+      (ADMIN.settings && ADMIN.settings.jenisUjian) || nilaiInput_('sJenisUjian') || 'SUMATIF_HARIAN'
+    )
   };
   /* REVISI pindah mapel: kunci `mapel` hanya dikirim saat modal edit
      benar-benar mengubah mapel (payload tambah soal & edit-tanpa-ubah

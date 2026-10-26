@@ -1787,7 +1787,10 @@ function syncOnePgkSelect(sel, state, rowState) {
     var nama = namaKategori_(k);
     return '<option value="' + SRich.escapeHtml(nama) + '">' + SRich.escapeHtml(nama) + '</option>';
   }).join('');
-  if (state.kategori.indexOf(val) !== -1) sel.value = val;
+  var cocok = state.kategori.filter(function(k) {
+    return namaKategori_(k) === val;
+  })[0];
+  if (cocok) sel.value = namaKategori_(cocok);
   else { sel.value = ''; rowState.kunci = ''; }
 }
 function syncPgkRowSelects(prefix) {

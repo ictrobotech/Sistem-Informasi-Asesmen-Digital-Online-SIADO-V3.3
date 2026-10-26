@@ -3361,10 +3361,24 @@ function openEditQuestion(id) {
     var rowsData = (question.opsi || []).map(function(op, idx) {
       var k = '';
       if (kunciObj && typeof kunciObj === 'object' && !Array.isArray(kunciObj)) {
-        k = String(kunciObj[op.id !== undefined ? op.id : String(idx)] || '');
+        // Kunci PGK lama dapat memakai id S1/S2, indeks 0/1, atau key
+        // numerik lain. Coba semua bentuk sebelum memakai urutan nilai.
+        var kandidat = [op.id, 'S' + (idx + 1), String(idx), String(idx + 1)];
+        for (var ki = 0; ki < kandidat.length && !k; ki++) {
+          if (kandidat[ki] !== undefined && kandidat[ki] !== null) {
+            k = String(kunciObj[String(kandidat[ki])] || '').trim();
+          }
+        }
+        if (!k) {
+          var nilaiKunci = Object.keys(kunciObj).map(function(nama) { return String(kunciObj[nama] || '').trim(); });
+          k = String(nilaiKunci[idx] || '').trim();
+        }
       }
-      if (!k && typeof question.kunci_jawaban === 'string' && question.kunci_jawaban.indexOf(',') !== -1) {
-        k = String(question.kunci_jawaban.split(',')[idx] || '').trim();
+      if (!k && typeof question.kunci_jawaban === 'string') {
+        var daftarKunciEdit = question.kunci_jawaban.indexOf(',') !== -1
+          ? question.kunci_jawaban.split(',')
+          : question.kunci_jawaban.split(/\s*\/\s*/);
+        k = String(daftarKunciEdit[idx] || '').trim();
       }
       return { html: op.text || '', kunci: k };
     });

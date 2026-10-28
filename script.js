@@ -375,10 +375,17 @@ async function loginPeserta() {
       setLoginMessage('Ujian yang dipilih baru saja berubah atau belum tersinkron. Muat ulang daftar ujian lalu pilih kembali.', 'error');
       return;
     }
+    /* Menentukan ujian mana yang akan dikerjakan. `pemilikUjian` tetap
+     * dikirim (kompatibel dengan server lama), ditambah `mapelUjian` dan
+     * `kunciUjian` agar akun guru yang memegang 2 mapel tidak tertukar. */
+    var nilaiPilihanUjian = (document.getElementById('ujianPeserta') || {}).value || '';
+    var opsiUjian = ujianDariKunci_(nilaiPilihanUjian);
     var result = await apiPeserta('loginTerpadu', {
       nama: '', kelas: kelas, username: username, password: password,
-      // Menentukan ujian milik guru mana yang akan dikerjakan.
-      pemilikUjian: (document.getElementById('ujianPeserta') || {}).value || ''
+      pemilikUjian: opsiUjian ? String(opsiUjian.pemilik || '') : nilaiPilihanUjian,
+      mapelUjian: opsiUjian ? String(opsiUjian.mapel || '') : '',
+      jenisUjian: opsiUjian ? String(opsiUjian.jenis_ujian || opsiUjian.jenisUjian || '') : '',
+      kunciUjian: opsiUjian ? kunciUjian_(opsiUjian) : nilaiPilihanUjian
     });
 
     // Akun panel (guru mapel / proktor) langsung dibawa ke panel pengelolaan.
@@ -667,9 +674,7 @@ function perbaruiHintUjian_() {
   var hint = document.getElementById('ujianHint');
   var select = document.getElementById('ujianPeserta');
   if (!hint || !select) return;
-  var item = (UJIAN.daftarUjian || []).filter(function(x) {
-    return String(x.pemilik) === String(select.value);
-  })[0];
+  var item = ujianDariKunci_(select.value);
   if (!item) return;
   var dasar = 'Ujian tersedia: ' + String(item.mapel || 'Mata Pelajaran') +
     (item.guru ? ' — ' + String(item.guru) : '') +
@@ -727,14 +732,46 @@ async function tempelBatasKelasUjian_(daftar) {
     var hasil = await rpcBatasKelas_('batas_kelas_ujian', {});
     var peta = (hasil && hasil.success && hasil.data) || null;
     if (!peta) return;
+    // Peta dari server dapat berkunci "pemilik" (lama) atau
+    // "pemilik||mapel" / "pemilik::mapel" (perbaikan). Dahulukan yang
+    // paling spesifik supaya 2 mapel pada satu akun tidak saling menimpa.
+    var petaKecil = {};
+    Object.keys(peta).forEach(function(k) { petaKecil[String(k).trim().toLowerCase()] = peta[k]; });
     daftar.forEach(function(u) {
       if (!u || typeof u.rombelDiizinkan !== 'undefined') return;
-      var kunci = null;
-      var daftarKunci = Object.keys(peta);
-      for (var i = 0; i < daftarKunci.length; i++) {
-        if (daftarKunci[i].toLowerCase() === String(u.pemilik || '').toLowerCase()) { kunci = daftarKunci[i]; break; }
+      var pemilik = String(u.pemilik || '').trim().toLowerCase();
+      var mapel = String(u.mapel || '').trim().toLowerCase();
+      var jenis = String(u.jenis_ujian || u.jenisUjian || '').trim().toLowerCase();
+      var kandidat = [];
+      if (mapel) {
+        if (jenis) kandidat.push(pemilik + '||' + mapel + '||' + jenis);
+        kandidat.push(pemilik + '||' + mapel, pemilik + '::' + mapel);
       }
-      if (kunci) u.rombelDiizinkan = peta[kunci];
+      kandidat.push(pemilik);
+      for (var i = 0; i < kandidat.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(petaKecil, kandidat[i])) {
+          u.rombelDiizinkan = petaKecil[kandidat[i]];
+          return;
+        }
+      }
+      /* Cadangan: nama mapel di panel guru sering ditulis bervariasi
+       * ("Koding Dan Kecerdasan Artifisial" vs "... (KKA)", beda huruf
+       * besar/kecil). Cocokkan dengan bentuk yang dinormalkan agar batas
+       * rombel tidak hilang hanya karena beda penulisan. */
+      var norm = function(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+      var target = mapel ? norm(pemilik + mapel) : '';
+      if (target) {
+        var namaKunci = Object.keys(petaKecil);
+        for (var j = 0; j < namaKunci.length; j++) {
+          var dinorm = norm(namaKunci[j]);
+          if (!dinorm) continue;
+          if (dinorm === target ||
+              dinorm.indexOf(target) === 0 || target.indexOf(dinorm) === 0) {
+            u.rombelDiizinkan = petaKecil[namaKunci[j]];
+            return;
+          }
+        }
+      }
     });
   } catch (galat) { /* server lama: tampilkan semua seperti semula */ }
 }
@@ -763,10 +800,7 @@ function perbaruiRombelMenurutUjian_() {
   var semua = Array.isArray(UJIAN.semuaRombel)
     ? UJIAN.semuaRombel.slice()
     : (Array.isArray(UJIAN.daftarRombel) ? UJIAN.daftarRombel.slice() : []);
-  var pemilik = String(pilihUjian.value || '');
-  var ujian = (UJIAN.daftarUjian || []).filter(function(item) {
-    return String(item && item.pemilik || '') === pemilik;
-  })[0];
+  var ujian = ujianDariKunci_(pilihUjian.value);
 
   var boleh = semua;
   if (ujian && ujian.rombelDiizinkan !== undefined && ujian.rombelDiizinkan !== null && ujian.rombelDiizinkan !== '') {
@@ -804,6 +838,56 @@ function perbaruiLabelUjianPeserta_() {
   label.classList.toggle('placeholder', !select.value);
 }
 
+/* ==============================================================
+ * PERBAIKAN 2026-10-28 — IDENTITAS UJIAN = PEMILIK + MAPEL
+ *
+ * Sebelumnya nilai <option> pada pemilih ujian hanya berisi `pemilik`
+ * (username akun guru). Karena satu akun guru boleh memegang 2 mapel,
+ * dua ujian berbeda (mis. Informatika dan KKA) menghasilkan NILAI YANG
+ * SAMA. Akibatnya:
+ *   1. Peserta yang memilih "KKA" sebenarnya mengirim pemilik ujian
+ *      Informatika, sehingga server memeriksa sesi Informatika.
+ *   2. Sesi Informatika sudah SELESAI -> server menolak dengan pesan
+ *      "Anda telah selesai mengikuti ujian" padahal KKA belum pernah
+ *      dikerjakan.
+ *   3. Batas rombel (batas_kelas_ujian) juga hanya berkunci pemilik,
+ *      sehingga daftar kelas mapel ke-2 menimpa mapel ke-1.
+ *
+ * Kunci unik di bawah memisahkan setiap ujian menjadi
+ * "pemilik||mapel". Server tetap menerima `pemilikUjian` seperti biasa
+ * (kompatibel), dan kini juga menerima `mapelUjian` + `kunciUjian`.
+ * ============================================================== */
+function kunciUjian_(item) {
+  var pemilik = String((item && item.pemilik) || '').trim();
+  var mapel = String((item && item.mapel) || '').trim();
+  var jenis = String((item && (item.jenis_ujian || item.jenisUjian)) || '').trim();
+  var dasar = mapel ? (pemilik + '||' + mapel) : pemilik;
+  // Satu guru + satu mapel masih bisa punya beberapa JENIS ujian
+  // (mis. STS dan SUMATIF_HARIAN). Bila server menyertakan jenis ujian,
+  // ikutkan dalam kunci agar ujian tetap terbedakan.
+  return jenis ? (dasar + '||' + jenis) : dasar;
+}
+
+/** Mengembalikan data ujian dari kunci "pemilik||mapel" (atau pemilik lama). */
+function ujianDariKunci_(kunci) {
+  var cari = String(kunci || '').trim();
+  if (!cari) return null;
+  var daftar = UJIAN.daftarUjian || [];
+  var tepat = daftar.filter(function(item) { return kunciUjian_(item) === cari; })[0];
+  if (tepat) return tepat;
+  // Kompatibilitas: nilai lama "pemilik||mapel" (sebelum jenis ujian ikut).
+  var duaBagian = cari.split('||');
+  if (duaBagian.length === 2) {
+    var tanpaJenis = daftar.filter(function(item) {
+      return String(item.pemilik || '') === duaBagian[0] &&
+        String(item.mapel || '') === duaBagian[1];
+    })[0];
+    if (tanpaJenis) return tanpaJenis;
+  }
+  // Kompatibilitas: nilai lama berupa pemilik saja (mis. dari sesi tersimpan).
+  return daftar.filter(function(item) { return String(item.pemilik || '') === cari; })[0] || null;
+}
+
 function isiPilihanUjian_(list, selected) {
   var select = document.getElementById('ujianPeserta');
   if (!select) return;
@@ -819,19 +903,40 @@ function isiPilihanUjian_(list, selected) {
     var guruLengkap = String(item.guru || '').trim();
     // Label lengkap ditampilkan pada kotak pilihan yang dapat membungkus
     // beberapa baris, sehingga nama mapel dan guru tidak dipotong.
-    var label = mapelLengkap + (guruLengkap ? ' — ' + guruLengkap : '');
-    var title = mapelLengkap + (guruLengkap ? ' — ' + guruLengkap : '');
-    options.push('<option value="' + escapeHtml(String(item.pemilik)) + '"' +
+    // Bila satu guru+mapel punya beberapa jenis ujian (STS, SUMATIF_HARIAN),
+    // jenis ditampilkan agar peserta memilih ujian yang benar.
+    var jenisLengkap = String(item.jenis_ujian || item.jenisUjian || '').trim();
+    var jenisSama = daftar.filter(function(x) {
+      return String(x.pemilik || '') === String(item.pemilik || '') &&
+        String(x.mapel || '') === String(item.mapel || '');
+    }).length > 1;
+    var label = mapelLengkap +
+      (jenisLengkap && jenisSama ? ' [' + jenisLengkap + ']' : '') +
+      (guruLengkap ? ' — ' + guruLengkap : '');
+    var title = label;
+    var kunciOpsi = kunciUjian_(item);
+    options.push('<option value="' + escapeHtml(kunciOpsi) + '"' +
+      ' data-pemilik="' + escapeHtml(String(item.pemilik || '')) + '"' +
+      ' data-mapel="' + escapeHtml(String(item.mapel || '')) + '"' +
+      ' data-jenis="' + escapeHtml(jenisLengkap) + '"' +
       ' title="' + escapeHtml(title) + '"' +
-      (String(item.pemilik) === String(selected) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
+      (kunciOpsi === String(selected) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
   });
   if (!tampil.length) {
     options = ['<option value="">Belum ada ujian yang dibuka</option>'];
   }
   select.innerHTML = options.join('');
-  if (tampil.length === 1) select.value = String(tampil[0].pemilik);
-  else if (selected && tampil.some(function(x) { return String(x.pemilik) === String(selected); })) select.value = String(selected);
-  else select.value = '';
+  if (tampil.length === 1) {
+    select.value = kunciUjian_(tampil[0]);
+  } else if (selected) {
+    // Cocokkan per kunci unik; bila `selected` masih berupa pemilik (sesi
+    // lama), pakai ujian pertama milik pemilik tersebut.
+    var cocok = tampil.filter(function(x) { return kunciUjian_(x) === String(selected); })[0] ||
+      tampil.filter(function(x) { return String(x.pemilik || '') === String(selected); })[0];
+    select.value = cocok ? kunciUjian_(cocok) : '';
+  } else {
+    select.value = '';
+  }
   perbaruiLabelUjianPeserta_();
 
   // Mapel/ujian sudah dipilih; sekarang batasi pilihan rombel sesuai
@@ -979,7 +1084,15 @@ function mapelSoalSamaDenganUjian_(soal, mapelUjian) {
    * bank soal guru terisi dan server mengirim soalnya. */
   var m = String(soal && soal.mapel || '').trim();
   if (!m) return true;
-  return m.toLowerCase() === String(mapelUjian).trim().toLowerCase();
+  /* REVISI 2026-10-28: perbandingan dinormalkan (huruf kecil, hanya huruf/angka)
+   * agar variasi penulisan mapel di panel guru ("KKA", "kka", "K.K.A",
+   * "KKA 2026") tidak membuat seluruh soal terbuang oleh filter. */
+  var norm = function(v) {
+    return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  };
+  var a = norm(m), b = norm(mapelUjian);
+  if (!a || !b) return true;
+  return a === b || a.indexOf(b) === 0 || b.indexOf(a) === 0;
 }
 
 /**
@@ -988,11 +1101,28 @@ function mapelSoalSamaDenganUjian_(soal, mapelUjian) {
  * KKA tampil pada sesi Informatika bila backend lama masih mengirim seluruh
  * bank soal guru.
  */
+/* PENGAMAN DATA SOAL (2026-10-28): patch mapel ganda tidak memuat perintah
+ * apa pun yang menghapus/menimpa soal — fungsi ini hanya *menyaring apa yang
+ * ditampilkan*. Bila penyaringan ternyata membuang SEMUA soal padahal server
+ * mengirim soal, peserta dikembalikan ke login dengan penjelasan (perilaku
+ * bawaan, aman secara akademik). Ubah ke `true` bila sekolah memilih soal
+ * tetap ditampilkan apa adanya sementara panel guru dirapikan. */
+var SOAL_MAPEL_LINTAS_SAAT_KOSONG = false;
+
 function soalSesuaiMapelUjian_(daftar, mapelUjian) {
-  if (!Array.isArray(daftar) || !mapelUjian) return Array.isArray(daftar) ? daftar : [];
-  return daftar.filter(function(soal) {
+  if (!Array.isArray(daftar)) return [];
+  if (!mapelUjian) return daftar;
+  var hasil = daftar.filter(function(soal) {
     return mapelSoalSamaDenganUjian_(soal, mapelUjian);
   });
+  if (!hasil.length && daftar.length && SOAL_MAPEL_LINTAS_SAAT_KOSONG) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[SIADO] Filter mapel membuang semua soal; ' +
+        'SOAL_MAPEL_LINTAS_SAAT_KOSONG aktif sehingga soal tetap ditampilkan.');
+    }
+    return daftar;
+  }
+  return hasil;
 }
 
 /**

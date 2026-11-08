@@ -1383,6 +1383,14 @@ function applySettingsData(setting) {
   }
   setNilaiInput_('sJudulUjian', setting.judulUjian);
   setNilaiInput_('sPetunjukUjian', setting.petunjukUjian);
+  // FILTER BANK SOAL MENGIKUTI PENGATURAN: setiap pengaturan dimuat atau
+  // disimpan, dropdown Mapel/Jenis Ujian diselaraskan lagi ke mapel aktif +
+  // jenis ujian. Kartu ringkasan di atas TIDAK dihitung ulang di sini -
+  // angkanya tetap dari server (dashboard_summary).
+  ADMIN.__filterSoalTerselaraskan = false;
+  if ((DATA_MENTAH.soal || []).length && document.getElementById('filterSoalJenis')) {
+    terapkanFilterSoal_();
+  }
   // Nama sekolah di sidebar panel mengikuti pengaturan server, supaya tidak
   // lagi menjadi teks statis yang ketinggalan (sebelumnya "SMP LABSCHOOL UNTAD").
   var namaSekolah = document.getElementById('sidebarSchoolName');
@@ -3112,13 +3120,95 @@ function isiFilterJenisSoal_(rows) {
   var cocok = kunciAda.filter(function(k) { return k === sebelum; })[0];
   el.value = cocok || '';
   var ada = adaKolomJenisSoal_(rows);
-  el.disabled = !ada && !(rows || []).length ? false : false;
-  if (info) {
-    info.textContent = ada
-      ? 'Soal dari semua jenis ujian ditampilkan.'
-      : 'Kolom jenis ujian belum dikirim server — jalankan patch SQL jenis ujian pada bank soal.';
-    info.style.color = ada ? '#475569' : '#b42318';
+  ADMIN.__adaJenisSoal = ada;
+  el.disabled = false;
+  if (info && !(rows || []).length) {
+    info.textContent = 'Belum ada soal di bank soal.';
+    info.style.color = '#475569';
   }
+}
+
+/** Pencocokan nama mapel yang toleran: huruf besar/kecil, spasi, tanda baca,
+ *  serta ada/tidaknya akhiran seperti "(KKA)". */
+function cocokMapelLonggar_(a, b) {
+  function norm(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+  var x = norm(a), y = norm(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (y.length >= 6 && x.indexOf(y) === 0) return true;
+  if (x.length >= 6 && y.indexOf(x) === 0) return true;
+  if (y.length <= 5 && x.slice(-y.length) === y) return true;
+  if (x.length <= 5 && y.slice(-x.length) === x) return true;
+  return false;
+}
+
+/** Nilai <option> yang cocok longgar dengan nama acuan ('' bila tidak ada). */
+function opsiCocokLonggar_(id, acuan) {
+  var el = document.getElementById(id);
+  if (!el || !acuan) return '';
+  var hasil = '';
+  Array.prototype.slice.call(el.options || []).forEach(function(o) {
+    if (hasil || !o.value) return;
+    if (cocokMapelLonggar_(o.value, acuan)) hasil = o.value;
+  });
+  return hasil;
+}
+
+/**
+ * Menyelaraskan filter Bank Soal dengan PENGATURAN saat pertama kali dibuka:
+ *   Mapel -> mapel aktif (Pengaturan Ujian)
+ *   Jenis -> jenis ujian (Pengaturan Ujian)
+ * Setelah itu pilihan pengguna dibiarkan (tidak ditimpa) sampai pengaturan
+ * dimuat ulang. Kartu ringkasan di atas TIDAK dihitung ulang di sini: angkanya
+ * tetap dari server (dashboard_summary) sesuai pengaturan.
+ */
+function selaraskanFilterSoalDenganPengaturan_(paksa) {
+  if (!paksa && ADMIN.__filterSoalTerselaraskan) return;
+  // Hanya akun guru: admin/proktor tetap melihat seluruh bank soal apa adanya.
+  if (ADMIN.isAdmin) { ADMIN.__filterSoalTerselaraskan = true; return; }
+  var settings = ADMIN.settings || {};
+  var mapelAktif = String(settings.mapel || mapelAktifTerpilih_() || '').trim();
+  var jenisAktif = settings.jenisUjian ? normalisasiJenisUjianKlien_(settings.jenisUjian) : '';
+  var elMapel = document.getElementById('filterSoalMapel');
+  var elJenis = document.getElementById('filterSoalJenis');
+  if (elMapel && mapelAktif) {
+    var pilihMapel = opsiCocokLonggar_('filterSoalMapel', mapelAktif);
+    if (pilihMapel) elMapel.value = pilihMapel;
+  }
+  if (elJenis && jenisAktif) {
+    var adaOpsi = Array.prototype.slice.call(elJenis.options || []).some(function(o) {
+      return o.value === jenisAktif;
+    });
+    if (adaOpsi) elJenis.value = jenisAktif;
+  }
+  ADMIN.__filterSoalTerselaraskan = true;
+}
+
+/** Keterangan kecil di bawah dropdown Jenis Ujian (ikut pilihan pengguna). */
+function perbaruiInfoFilterSoal_() {
+  var info = document.getElementById('filterSoalJenisInfo');
+  if (!info) return;
+  if (!(DATA_MENTAH.soal || []).length) {
+    info.textContent = 'Belum ada soal di bank soal.';
+    info.style.color = '#475569';
+    return;
+  }
+  if (ADMIN.__adaJenisSoal === false) {
+    info.textContent = 'Kolom jenis ujian belum dikirim server - jalankan patch SQL jenis ujian pada bank soal.';
+    info.style.color = '#b42318';
+    return;
+  }
+  var mapel = nilaiFilter_('filterSoalMapel');
+  var jenis = nilaiFilter_('filterSoalJenis');
+  var bagian = [];
+  bagian.push(mapel ? 'mapel ' + mapel : 'semua mapel akun ini');
+  if (jenis) {
+    bagian.push(jenis === '(belum)' ? 'jenis belum diisi' : 'jenis ' + labelJenisUjian_(jenis));
+  } else {
+    bagian.push('semua jenis ujian');
+  }
+  info.textContent = 'Menampilkan ' + bagian.join(' | ') + '.';
+  info.style.color = '#475569';
 }
 
 /**
@@ -3152,6 +3242,8 @@ function terapkanFilterSoal_() {
   // REVISI jenis ujian: guru dengan satu mapel memakai filter Jenis Ujian.
   aturFilterMapelMenurutAkun_();
   isiFilterJenisSoal_(DATA_MENTAH.soal);
+  // Tampilan awal mengikuti Pengaturan (mapel aktif + jenis ujian).
+  selaraskanFilterSoalDenganPengaturan_();
   var mapel = nilaiFilter_('filterSoalMapel');
   var jenis = nilaiFilter_('filterSoalJenis');
   var rows = DATA_MENTAH.soal.slice();
@@ -3171,6 +3263,7 @@ function terapkanFilterSoal_() {
     return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
       tingkatDariNilai_(q.tingkat), jenisSoal_(q), labelSingkatJenis_(jenisSoal_(q))].join(' ');
   });
+  perbaruiInfoFilterSoal_();
   if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat, mapel, jenis)) {
     tampilTidakDitemukan_('questionTable', kueri, DATA_MENTAH.soal.length + ' soal tersimpan di bank soal.');
     return;

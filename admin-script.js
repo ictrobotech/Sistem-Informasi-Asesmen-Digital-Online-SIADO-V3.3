@@ -8904,15 +8904,57 @@ async function resetTeacherPassword(username) {
 }
 
 async function deleteTeacher(username) {
-  var setujuGuru = await konfirmasi_('Akun guru "' + username + '" akan dihapus. Guru tersebut langsung dikeluarkan dari panel.',
-    { judul: 'Hapus Akun Guru', nada: 'danger', teksOk: 'Ya, Hapus Akun' });
+  var NL = String.fromCharCode(10);   // pemisah baris, tanpa escape JS
+  var label = {
+    soal: 'Soal (bank & kartu soal)',
+    token_guru_mapel: 'Token mapel',
+    sesi_ujian: 'Sesi ujian',
+    hasil_ujian: 'Hasil ujian',
+    jawaban: 'Jawaban peserta',
+    pelanggaran: 'Pelanggaran',
+    diskualifikasi: 'Diskualifikasi',
+    notifikasi: 'Notifikasi',
+    pengaturan_guru: 'Pengaturan ujian',
+    admin_sesi: 'Sesi panel (login)',
+    profil_panel: 'Akun guru'
+  };
+  var urut = Object.keys(label);
+  var daftar = function(obj, akhiran) {
+    var g = [];
+    urut.forEach(function(k) {
+      if (obj[k] === undefined || obj[k] === null) return;
+      g.push('- ' + label[k] + ': ' + obj[k] + ' ' + akhiran);
+    });
+    return g;
+  };
+  // PRATINJAU dulu: fungsi hapus_guru mode PRATINJAU hanya MENGHITUNG, tidak menghapus.
+  var pratinjau = '';
+  try {
+    var pv = await apiWajib_('hapusGuru', { username: username, mode: 'PRATINJAU' });
+    var barisPv = daftar((pv && pv.rincian) || {}, 'baris');
+    if (barisPv.length) {
+      pratinjau = 'Yang akan ikut terhapus:' + NL + barisPv.join(NL) + NL + NL;
+    }
+  } catch (errorPv) {
+    pratinjau = '';   // pratinjau gagal bukan alasan menahan penghapusan
+  }
+  var setujuGuru = await konfirmasi_(
+    'Akun guru "' + username + '" akan dihapus PERMANEN beserta SELURUH datanya.'
+      + NL + NL + pratinjau
+      + 'Tidak ada yang tersisa dan tindakan ini tidak dapat dibatalkan. Lanjutkan?',
+    { judul: 'Hapus Akun Guru', nada: 'danger', teksOk: 'Ya, Hapus Permanen' });
   if (!setujuGuru) return;
   try {
     var result = await apiWajib_('hapusGuru', { username: username });
     await segarkanSenyap_([loadTeachers]);
-    await hasilSukses_('Akun Guru Dihapus', result.message || 'Akun guru berhasil dihapus.', [
-      { label: 'Akun', nilai: username }
-    ]);
+    var rincian = (result && result.rincian) || {};
+    var baris = [{ label: 'Akun', nilai: username }];
+    daftar(rincian, 'baris dihapus').forEach(function(t) {
+      var i = t.indexOf(': ');
+      baris.push({ label: t.slice(2, i), nilai: t.slice(i + 2) });
+    });
+    await hasilSukses_('Akun Guru Dihapus Permanen',
+      result.message || 'Akun guru beserta seluruh datanya berhasil dihapus.', baris);
   } catch (error) {
     await hasilGagal_('Akun Gagal Dihapus', error.message || 'Akun guru gagal dihapus.');
   }

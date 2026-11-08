@@ -427,6 +427,7 @@ function bindAdminInterface() {
   ikatFilter_('filterSoalTingkat', 'change', terapkanFilterSoal_, false);
   // REVISI 2 mapel: filter mapel pada Bank Soal, Monitor, dan Hasil.
   ikatFilter_('filterSoalMapel', 'change', terapkanFilterSoal_, false);
+  ikatFilter_('filterSoalJenis', 'change', terapkanFilterSoal_, false);
   ikatFilter_('filterMonitorMapel', 'change', terapkanFilterMonitor_, false);
   ikatFilter_('filterHasilMapel', 'change', terapkanFilterHasil_, false);
   ikatFilter_('cariMonitor', 'input', terapkanFilterMonitor_, true);
@@ -1252,7 +1253,7 @@ async function resetFilterStateSaatLogout_() {
     'cariUraian','cariHasil','cariRekap','cariGuru','filterUraianKelas',
     'filterHasilKelas','filterHasilMapel','exportKelas','filterPesertaRombel',
     'filterPesertaKehadiran','filterSoalTipe','filterSoalStatus',
-    'filterSoalTingkat','filterSoalMapel','cariKartuSoal'
+    'filterSoalTingkat','filterSoalMapel','filterSoalJenis','cariKartuSoal'
   ].forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -3052,7 +3053,95 @@ async function loadQuestions() {
   } finally { ADMIN.refreshBusy.questions = false; }
 }
 
-/** Menyaring bank soal berdasarkan kata kunci, tipe, kelas sasaran, dan status. */
+/** Jenis ujian satu soal ('' bila belum diisi). */
+function jenisSoal_(question) {
+  return String((question && (question.jenis_ujian || question.jenisUjian)) || '').trim();
+}
+
+/** Label singkat jenis ujian untuk kolom tabel. */
+function labelSingkatJenis_(nilai) {
+  var teks = String(nilai || '').trim();
+  if (!teks) return 'BELUM DIISI';
+  var j = normalisasiJenisUjianKlien_(teks);
+  if (j === 'STS') return 'STS';
+  if (j === 'SAS') return 'SAS';
+  if (j === 'UAS') return 'UAS';
+  return 'SUM HARIAN';
+}
+
+/** Pengaturan filter Mapel pada akun guru:
+ *   'auto'   -> disembunyikan hanya bila akun hanya memegang 1 mapel (bawaan)
+ *   'selalu' -> selalu diganti filter Jenis Ujian untuk semua akun guru
+ */
+var FILTER_MAPEL_GURU_ = 'auto';
+
+/** true bila server mengirim kolom jenis ujian pada bank soal. */
+function adaKolomJenisSoal_(rows) {
+  return (rows || []).some(function(q) { return !!jenisSoal_(q); });
+}
+
+/**
+ * Mengisi dropdown "Jenis Ujian" dari bank soal yang termuat.
+ * Menampilkan jumlah soal tiap jenis, mis. "Sumatif Tengah Semester (STS) (20)".
+ * Bila server belum mengirim kolom jenis_ujian, dropdown dinonaktifkan dan
+ * keterangan ditampilkan (tidak menampilkan data palsu).
+ */
+function isiFilterJenisSoal_(rows) {
+  var el = document.getElementById('filterSoalJenis');
+  if (!el) return;
+  var info = document.getElementById('filterSoalJenisInfo');
+  var sebelum = String(el.value || '');
+  var hitung = {};
+  (rows || []).forEach(function(q) {
+    var teks = jenisSoal_(q);
+    var kunci = teks ? normalisasiJenisUjianKlien_(teks) : '(belum)';
+    hitung[kunci] = (hitung[kunci] || 0) + 1;
+  });
+  var urut = ['STS', 'SAS', 'UAS', 'SUMATIF_HARIAN', '(belum)'];
+  var kunciAda = Object.keys(hitung).sort(function(a, b) {
+    var ia = urut.indexOf(a), ib = urut.indexOf(b);
+    if (ia < 0) ia = 99;
+    if (ib < 0) ib = 99;
+    return ia - ib;
+  });
+  el.innerHTML = '<option value="">Semua Jenis Ujian</option>' + kunciAda.map(function(k) {
+    var label = k === '(belum)' ? 'Belum diisi' : labelJenisUjian_(k);
+    return '<option value="' + escapeAdmin(k) + '">' + escapeAdmin(label) +
+      ' (' + hitung[k] + ')</option>';
+  }).join('');
+  var cocok = kunciAda.filter(function(k) { return k === sebelum; })[0];
+  el.value = cocok || '';
+  var ada = adaKolomJenisSoal_(rows);
+  el.disabled = !ada && !(rows || []).length ? false : false;
+  if (info) {
+    info.textContent = ada
+      ? 'Soal dari semua jenis ujian ditampilkan.'
+      : 'Kolom jenis ujian belum dikirim server — jalankan patch SQL jenis ujian pada bank soal.';
+    info.style.color = ada ? '#475569' : '#b42318';
+  }
+}
+
+/**
+ * Untuk akun guru dengan SATU mapel, filter Mapel tidak berguna (isinya tetap
+ * sama), sehingga disembunyikan dan diganti filter Jenis Ujian.
+ * Akun dengan 2-4 mapel tetap memakai keduanya.
+ */
+function aturFilterMapelMenurutAkun_() {
+  var bungkus = document.getElementById('filterSoalMapelWrap');
+  if (!bungkus) return;
+  var mapelAkun = pecahMapelGuru_(String(
+    (ADMIN.infoMapelGuru_ && ADMIN.infoMapelGuru_.mapelAkun) ||
+    (ADMIN.settings && ADMIN.settings.mapel) || ''));
+  var sembunyikan = !ADMIN.isAdmin &&
+    (FILTER_MAPEL_GURU_ === 'selalu' || mapelAkun.length <= 1);
+  bungkus.style.display = sembunyikan ? 'none' : '';
+  if (sembunyikan) {
+    var el = document.getElementById('filterSoalMapel');
+    if (el) el.value = '';
+  }
+}
+
+/** Menyaring bank soal berdasarkan kata kunci, tipe, kelas sasaran, status, mapel, dan jenis ujian. */
 function terapkanFilterSoal_() {
   var kueri = kueriFilter_('cariSoal');
   var tipe = nilaiFilter_('filterSoalTipe');
@@ -3060,18 +3149,29 @@ function terapkanFilterSoal_() {
   var tingkat = nilaiFilter_('filterSoalTingkat');
   // REVISI 2 mapel: pilihan filter mapel dibangun dari bank soal termuat.
   isiFilterMapel_('filterSoalMapel', DATA_MENTAH.soal, function(q) { return q.mapel; });
+  // REVISI jenis ujian: guru dengan satu mapel memakai filter Jenis Ujian.
+  aturFilterMapelMenurutAkun_();
+  isiFilterJenisSoal_(DATA_MENTAH.soal);
   var mapel = nilaiFilter_('filterSoalMapel');
+  var jenis = nilaiFilter_('filterSoalJenis');
   var rows = DATA_MENTAH.soal.slice();
   if (tipe) rows = rows.filter(function(q) { return String(q.tipe || '') === tipe; });
   if (status) rows = rows.filter(function(q) { return status === 'aktif' ? !!q.aktif : !q.aktif; });
   // Filter kelas sasaran bersifat per soal: soal tanpa tingkat dianggap SEMUA.
   if (tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === tingkat; });
   if (mapel) rows = rows.filter(function(q) { return cocokFilterMapel_(q.mapel, mapel); });
+  if (jenis) {
+    rows = rows.filter(function(q) {
+      var teks = jenisSoal_(q);
+      var kunci = teks ? normalisasiJenisUjianKlien_(teks) : '(belum)';
+      return kunci === jenis;
+    });
+  }
   rows = saringKata_(rows, kueri, function(q) {
     return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q), q.stimulus_deskripsi,
-      tingkatDariNilai_(q.tingkat)].join(' ');
+      tingkatDariNilai_(q.tingkat), jenisSoal_(q), labelSingkatJenis_(jenisSoal_(q))].join(' ');
   });
-  if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat, mapel)) {
+  if (!rows.length && adaFilterAktif_(kueri, tipe, status, tingkat, mapel, jenis)) {
     tampilTidakDitemukan_('questionTable', kueri, DATA_MENTAH.soal.length + ' soal tersimpan di bank soal.');
     return;
   }
@@ -3113,7 +3213,13 @@ function bandingIdSoal_(a, b) {
 function kunciMapelNomor_(question) {
   var mapel = String((question && question.mapel) || '').trim().toLowerCase();
   var tingkat = tingkatDariNilai_(question && question.tingkat);
-  return mapel + '|' + tingkat;
+  // REVISI jenis ujian: nomor urut dihitung per mapel + kelas + JENIS UJIAN,
+  // karena ujian dibuka per jenis. Tanpa ini, soal STS dan Sumatif pada mapel
+  // yang sama akan berbagi nomor (1,2,3 bercampur) sehingga nomor di bank soal
+  // tidak sama dengan urutan soal yang dilihat peserta.
+  var teksJenis = jenisSoal_(question);
+  var jenis = teksJenis ? normalisasiJenisUjianKlien_(teksJenis) : '(belum)';
+  return mapel + '|' + tingkat + '|' + jenis;
 }
 
 /** Nama mapel dari kunci grup penomoran. */
@@ -3308,9 +3414,9 @@ function renderQuestionTable(rows) {
   rows = urutkanSoalMenurutNomor_(rows, petaNomor);
   var html = '<table class="admin-table bank-soal-rapi"><colgroup>' +
     '<col class="bs-c-id"><col class="bs-c-nomor"><col class="bs-c-tipe"><col class="bs-c-mapel"><col class="bs-c-tanya">' +
-    '<col class="bs-c-kelas"><col class="bs-c-opsi"><col class="bs-c-stimulus"><col class="bs-c-poin"><col class="bs-c-status"><col class="bs-c-aksi">' +
+    '<col class="bs-c-jenis"><col class="bs-c-kelas"><col class="bs-c-opsi"><col class="bs-c-stimulus"><col class="bs-c-poin"><col class="bs-c-status"><col class="bs-c-aksi">' +
     '</colgroup><thead><tr><th>ID</th><th>Nomor</th><th>Tipe</th><th>Mapel</th><th>Pertanyaan</th><th>Kelas</th>' +
-    '<th>Opsi/Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
+    '<th>Jenis</th><th>Opsi/Kunci</th><th>Stimulus</th><th>Poin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>';
   rows.forEach(function(question) {
     var nomorSoal = petaNomor[String(question.id_soal)];
     var id = escapeAdmin(question.id_soal);
@@ -3322,6 +3428,8 @@ function renderQuestionTable(rows) {
       '<td class="bs-tengah">' + escapeAdmin(question.mapel || '-') + '</td>' +
       '<td class="bs-teks">' + escapeAdmin(truncate(SRich.stripHtml(question.pertanyaan), 150)) + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(tingkatDariNilai_(question.tingkat)) + '</td>' +
+      '<td class="bs-tengah" title="' + escapeAdmin(jenisSoal_(question) ? labelJenisUjian_(jenisSoal_(question)) : 'Jenis ujian belum diisi') + '">' +
+        escapeAdmin(labelSingkatJenis_(jenisSoal_(question))) + '</td>' +
       '<td class="bs-teks">' + selOpsiKunciBankSoal_(question) + '</td>' +
       '<td class="bs-tengah">' + selStimulusBankSoal_(question) + '</td>' +
       '<td class="bs-tengah">' + escapeAdmin(question.poin) + '</td>' +
@@ -6071,18 +6179,21 @@ function infoFilterBankSoal_() {
   var tingkat = nilaiFilter_('filterSoalTingkat');
   var tipe = nilaiFilter_('filterSoalTipe');
   var status = nilaiFilter_('filterSoalStatus');
+  var jenis = nilaiFilter_('filterSoalJenis');
   var kueri = kueriFilter_('cariSoal');
   var bagian = [];
   if (mapel) bagian.push('Mapel: ' + mapel);
+  if (jenis) bagian.push('Jenis ujian: ' + (jenis === '(belum)' ? 'Belum diisi' : labelJenisUjian_(jenis)));
   if (tingkat) bagian.push('Kelas: ' + (tingkat === 'SEMUA' ? 'Semua Kelas (SEMUA)' : tingkat));
   if (tipe) bagian.push('Tipe: ' + labelTipeBankSoal_(tipe));
   if (status) bagian.push('Status: ' + (status === 'aktif' ? 'Aktif' : 'Nonaktif'));
   if (kueri) bagian.push('Pencarian: "' + kueri + '"');
   return {
-    mapel: mapel, tingkat: tingkat, tipe: tipe, status: status, kueri: kueri,
+    mapel: mapel, tingkat: tingkat, tipe: tipe, status: status, jenis: jenis, kueri: kueri,
     adaFilter: bagian.length > 0,
     deskripsi: bagian.join(' • '),
-    slug: [mapel, tingkat ? 'Kelas ' + tingkat : '', tipe, status ? 'status ' + status : '']
+    slug: [mapel, jenis === '(belum)' ? 'jenis-belum-diisi' : (jenis || ''),
+           tingkat ? 'Kelas ' + tingkat : '', tipe, status ? 'status ' + status : '']
       .filter(Boolean).join('-')
   };
 }
@@ -6095,6 +6206,13 @@ function barisTampilBankSoal_(daftar) {
   if (info.status) rows = rows.filter(function(q) { return info.status === 'aktif' ? !!q.aktif : !q.aktif; });
   if (info.tingkat) rows = rows.filter(function(q) { return tingkatDariNilai_(q.tingkat) === info.tingkat; });
   if (info.mapel) rows = rows.filter(function(q) { return cocokFilterMapel_(q.mapel, info.mapel); });
+  if (info.jenis) {
+    rows = rows.filter(function(q) {
+      var teks = jenisSoal_(q);
+      var kunci = teks ? normalisasiJenisUjianKlien_(teks) : '(belum)';
+      return kunci === info.jenis;
+    });
+  }
   rows = saringKata_(rows, info.kueri, function(q) {
     return [q.id_soal, q.tipe, SRich.stripHtml(q.pertanyaan), q.mapel, readableKey(q), optionSummary(q),
       q.stimulus_deskripsi, tingkatDariNilai_(q.tingkat)].join(' ');

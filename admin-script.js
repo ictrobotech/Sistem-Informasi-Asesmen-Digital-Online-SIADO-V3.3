@@ -3099,8 +3099,14 @@ function isiFilterJenisSoal_(rows) {
   if (!el) return;
   var info = document.getElementById('filterSoalJenisInfo');
   var sebelum = String(el.value || '');
+  // KASKADE: pilihan Jenis Ujian hanya diambil dari soal pada MAPEL terpilih.
+  // Tanpa ini, memilih mapel IPS tetap menampilkan STS/Sumatif milik mapel lain.
+  var mapelKini = nilaiFilter_('filterSoalMapel');
+  var dasar = (rows || []).filter(function(q) {
+    return !mapelKini || cocokFilterMapel_(q.mapel, mapelKini);
+  });
   var hitung = {};
-  (rows || []).forEach(function(q) {
+  dasar.forEach(function(q) {
     var teks = jenisSoal_(q);
     var kunci = teks ? normalisasiJenisUjianKlien_(teks) : '(belum)';
     hitung[kunci] = (hitung[kunci] || 0) + 1;
@@ -3113,13 +3119,18 @@ function isiFilterJenisSoal_(rows) {
     return ia - ib;
   });
   el.innerHTML = '<option value="">Semua Jenis Ujian</option>' + kunciAda.map(function(k) {
-    var label = k === '(belum)' ? 'Belum diisi' : labelJenisUjian_(k);
+    var label = k === '(belum)' ? 'Jenis belum diisi' : labelJenisUjian_(k);
     return '<option value="' + escapeAdmin(k) + '">' + escapeAdmin(label) +
       ' (' + hitung[k] + ')</option>';
   }).join('');
+  // Pertahankan pilihan pengguna bila jenis itu masih ada di mapel terpilih;
+  // bila tidak ada (mis. pindah dari KKA ke IPS), kembali ke "Semua Jenis Ujian".
   var cocok = kunciAda.filter(function(k) { return k === sebelum; })[0];
+  var diminta = ADMIN.__jenisSoalDiminta;
+  if (diminta && kunciAda.indexOf(diminta) >= 0) cocok = diminta;
   el.value = cocok || '';
-  var ada = adaKolomJenisSoal_(rows);
+  ADMIN.__jenisSoalDiminta = '';
+  var ada = adaKolomJenisSoal_(dasar);
   ADMIN.__adaJenisSoal = ada;
   el.disabled = false;
   if (info && !(rows || []).length) {
@@ -3176,6 +3187,9 @@ function selaraskanFilterSoalDenganPengaturan_(paksa) {
     if (pilihMapel) elMapel.value = pilihMapel;
   }
   if (elJenis && jenisAktif) {
+    // Jenis yang diminta Pengaturan disimpan; isiFilterJenisSoal_ yang
+    // memutuskan (opsi jenis dibangun dari mapel terpilih, sesudah ini).
+    ADMIN.__jenisSoalDiminta = jenisAktif;
     var adaOpsi = Array.prototype.slice.call(elJenis.options || []).some(function(o) {
       return o.value === jenisAktif;
     });
@@ -3241,9 +3255,11 @@ function terapkanFilterSoal_() {
   isiFilterMapel_('filterSoalMapel', DATA_MENTAH.soal, function(q) { return q.mapel; });
   // REVISI jenis ujian: guru dengan satu mapel memakai filter Jenis Ujian.
   aturFilterMapelMenurutAkun_();
-  isiFilterJenisSoal_(DATA_MENTAH.soal);
-  // Tampilan awal mengikuti Pengaturan (mapel aktif + jenis ujian).
+  // Tampilan awal mengikuti Pengaturan (mapel aktif + jenis ujian). Harus
+  // dijalankan SEBELUM dropdown jenis dibangun, karena daftar jenis mengikuti
+  // mapel yang sedang terpilih.
   selaraskanFilterSoalDenganPengaturan_();
+  isiFilterJenisSoal_(DATA_MENTAH.soal);
   var mapel = nilaiFilter_('filterSoalMapel');
   var jenis = nilaiFilter_('filterSoalJenis');
   var rows = DATA_MENTAH.soal.slice();

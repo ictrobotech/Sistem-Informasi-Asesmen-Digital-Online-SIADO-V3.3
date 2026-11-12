@@ -1493,11 +1493,7 @@ function renderAnswerInput(question, value) {
   if (type === 'MENJODOHKAN') {
     // Peserta memilih jawaban dari daftar yang sudah diacak server.
     var jodoh = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    var pernyataanOptions = options.filter(function(option) {
-      // Kompatibel dengan data lama: distraktor juga dikenali dari text
-      // kosong meskipun penanda distraktor belum ikut dikirim backend.
-      return !option.distraktor && String(option.text || '').trim() !== '';
-    });
+    var pernyataanOptions = options;
     // Salin lalu acak pilihan pasangan hanya untuk tampilan peserta.
     // Data kunci dan urutan pernyataan tetap tidak diubah.
     var pilihan = (Array.isArray(question.pilihan_jodoh) ? question.pilihan_jodoh : []).slice();
@@ -1541,13 +1537,8 @@ function renderAnswerInput(question, value) {
            rumus LaTeX ditulis sebagai teks matematika biasa (dropdown tidak
            bisa menampilkan rumus ter-render). */
         var daftar = pilihan.map(function(teks, pi) {
-          var teksLengkap = SRich.texKeTeks_(teks).trim();
-          // Dropdown native tidak mendukung teks panjang multi-baris dengan
-          // rapi. Tampilkan inti pasangan, tetapi nilai lengkap tetap dikirim
-          // sebagai value untuk penilaian dan ditaruh pada title.
-          var inti = teksLengkap.split(/,\s+/)[0].trim() || teksLengkap;
-          var label = hurufPilihanJodoh_(pi + 1) + '. ' + inti;
-          return '<option value="' + escapeHtml(teks) + '" title="' + escapeHtml(teksLengkap) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+          var label = hurufPilihanJodoh_(pi + 1) + '. ' + SRich.texKeTeks_(teks);
+          return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
         }).join('');
         var kiriHtml = String(option.text || '').trim()
           ? formatTextInline(option.text) : '<em>(gambar saja)</em>';
@@ -1724,10 +1715,7 @@ function jawabanTerisi(question, value) {
   if (type === 'MENJODOHKAN') {
     // Dianggap terjawab hanya bila SEMUA pernyataan sudah dipasangkan.
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    var daftarOpsi = (Array.isArray(question.opsi) ? question.opsi : [])
-      .filter(function(option) {
-        return !option.distraktor && String(option.text || '').trim() !== '';
-      });
+    var daftarOpsi = Array.isArray(question.opsi) ? question.opsi : [];
     if (!daftarOpsi.length) return false;
     return daftarOpsi.every(function(option) {
       return String(value[option.id] || '').trim().length > 0;

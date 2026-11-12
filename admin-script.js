@@ -2443,11 +2443,7 @@ function optionsFromField(prefix) {
             item.pasanganJenis = r.pasanganJenis || 'gambar';
           }
           return item;
-        }).concat((function() {
-          var el = document.getElementById(prefix + 'JodohDistraktor');
-          var daftar = el ? el.value.split(/\r?\n/).map(function(x) { return x.trim(); }).filter(Boolean) : [];
-          return daftar.map(function(text) { return { text: '', pasangan: text, distraktor: true }; });
-        })());
+        });
     }
   }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)

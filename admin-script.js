@@ -1651,9 +1651,14 @@ function perbaruiPratinjauJodoh_(prefix) {
   if (!prev) return;
   if (!state) { prev.innerHTML = ''; return; }
   var label = labelJodoh_(prefix);
+  /* Baris tabel = pernyataan saja. Pengecoh tampil di daftar PILIHAN. */
   var baris = state.rows.filter(function(r) {
+    if (r.distraktor) return false;
     return String(r.text || '').trim() || String(r.pasangan || '').trim() ||
       String(r.gambar || '').trim() || String(r.pasanganGambar || '').trim();
+  });
+  var pengecoh = state.rows.filter(function(r) {
+    return r.distraktor && String(r.pasangan || '').trim();
   });
   if (!baris.length) {
     prev.innerHTML = '<p class="pratinjau-kosong">Belum ada pasangan. Tulis pernyataan dan pasangannya, lalu pratinjau tampil di sini.</p>' +
@@ -1692,9 +1697,17 @@ function perbaruiPratinjauJodoh_(prefix) {
     return '<li><span class="jodoh-kunci-kiri">' + SRich.escapeHtml(kiri) + '</span>' +
       ' <span class="jodoh-kunci-sama">=</span> <b>' + SRich.escapeHtml(hurufKunci + kanan) + '</b></li>';
   }).join('');
+  var infoPengecoh = pengecoh.length
+    ? '<div class="jodoh-pengecoh-info"><strong><i class="fa-solid fa-shuffle"></i> Pasangan pengecoh</strong> '
+      + '(' + pengecoh.length + '): hanya menambah PILIHAN jawaban peserta, tidak pernah menjadi kunci.'
+      + '<ul class="jodoh-kunci-list">' + pengecoh.map(function(r) {
+        return '<li><span class="jodoh-kunci-kiri">(tanpa pernyataan)</span> '
+          + '<span class="jodoh-kunci-sama">+</span> <b>' + SRich.escapeHtml(SRich.stripHtml(r.pasangan)) + '</b></li>';
+      }).join('') + '</ul></div>'
+    : '';
   prev.innerHTML = tampilan +
     '<div class="jodoh-kunci-panel"><strong><i class="fa-solid fa-key"></i> Kunci Pasangan (Hanya Tampak Di Panel):</strong>' +
-    '<ol class="jodoh-kunci-list">' + daftarKunci + '</ol></div>';
+    '<ol class="jodoh-kunci-list">' + daftarKunci + '</ol></div>' + infoPengecoh;
   /* Rumus di pernyataan/pasangan ikut dirender KaTeX (dulu hanya PGK yang
      melakukannya, sehingga rumus Menjodohkan tampil sebagai kode LaTeX). */
   SRich.typesetMath(prev);
@@ -1711,7 +1724,8 @@ function perbaruiKunciJodoh_(prefix) {
   // Pada editor edit, pertahankan kunci yang tersimpan. Guru harus mengubah
   // kolom kunci secara manual bila memang ingin mengganti kunci.
   if (prefix === 'e') return;
-  var pasangan = optionsFromField(prefix);
+  // Pengecoh TIDAK menjadi kunci: hanya pasangan nyata yang dipetakan.
+  var pasangan = optionsFromField(prefix).filter(function(item) { return !item.distraktor; });
   keyField.value = pasangan.length
     ? pasangan.map(function(item, index) {
         return (index + 1) + '. ' + item.text + ' = ' + item.pasangan;
@@ -1934,11 +1948,20 @@ function jodohAddRow(prefix, text, pasangan) {
   var selKiri = document.createElement('div'); selKiri.className = 'jodoh-sel';
   var selKanan = document.createElement('div'); selKanan.className = 'jodoh-pasangan';
   selKiri.appendChild(i1); selKanan.appendChild(i2);
+  /* PENGECOH: pasangan tanpa pernyataan — menambah pilihan jawaban peserta. */
+  var cekPengecoh = document.createElement('label');
+  cekPengecoh.className = 'jodoh-pengecoh';
+  cekPengecoh.title = 'Tandai baris ini sebagai pasangan pengecoh (tanpa pernyataan)';
+  var cekPengecohBox = document.createElement('input');
+  cekPengecohBox.type = 'checkbox';
+  cekPengecoh.appendChild(cekPengecohBox);
+  cekPengecoh.appendChild(document.createTextNode(' Pengecoh'));
   var del = document.createElement('button');
   del.type = 'button'; del.className = 'pgk-del';
   del.title = 'Hapus pasangan';
   del.innerHTML = '<i class="fa-solid fa-trash"></i>';
-  row.appendChild(no); row.appendChild(selKiri); row.appendChild(eq); row.appendChild(selKanan); row.appendChild(del);
+  row.appendChild(no); row.appendChild(selKiri); row.appendChild(eq); row.appendChild(selKanan);
+  row.appendChild(cekPengecoh); row.appendChild(del);
   wrap.appendChild(row);
 
   /**
@@ -1970,6 +1993,15 @@ function jodohAddRow(prefix, text, pasangan) {
     pasanganGambar: '', pasanganJenis: 'gambar', pasanganAlt: ''
   };
   state.rows.push(rowState);
+  cekPengecohBox.addEventListener('change', function() {
+    rowState.distraktor = cekPengecohBox.checked;
+    i1.disabled = cekPengecohBox.checked;
+    if (cekPengecohBox.checked) i1.value = '';
+    i1.placeholder = cekPengecohBox.checked ? '(pengecoh — tanpa pernyataan)' : 'Pernyataan (kolom kiri)';
+    row.classList.toggle('jodoh-pengecoh-aktif', cekPengecohBox.checked);
+    perbaruiKunciJodoh_(prefix);
+    perbaruiPratinjauJodoh_(prefix);
+  });
 
   function segarkanSlot(slot, nilai, jenis, alt) {
     var ada = String(nilai || '').trim().length > 0;
@@ -2440,11 +2472,17 @@ function optionsFromField(prefix) {
       /* Setiap kolom boleh berisi TEKS saja, GAMBAR saja, atau keduanya. */
       return jd.rows
         .filter(function(r) {
-          return (String(r.text || '').trim() || String(r.gambar || '').trim()) &&
-            (String(r.pasangan || '').trim() || String(r.pasanganGambar || '').trim());
+          var kananAda = String(r.pasangan || '').trim() || String(r.pasanganGambar || '').trim();
+          /* Pengecoh: cukup kolom kanan, kolom kiri sengaja kosong. */
+          if (r.distraktor) return !!kananAda;
+          return (String(r.text || '').trim() || String(r.gambar || '').trim()) && !!kananAda;
         })
         .map(function(r) {
-          var item = { text: String(r.text || '').trim(), pasangan: String(r.pasangan || '').trim() };
+          var item = {
+            text: r.distraktor ? '' : String(r.text || '').trim(),
+            pasangan: String(r.pasangan || '').trim()
+          };
+          if (r.distraktor) item.distraktor = true;
           if (r.gambar) { item.gambar = r.gambar; item.alt = r.alt || ''; item.gambarJenis = r.gambarJenis || 'gambar'; }
           if (r.pasanganGambar) {
             item.pasanganGambar = r.pasanganGambar; item.pasanganAlt = r.pasanganAlt || '';

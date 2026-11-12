@@ -1632,13 +1632,17 @@ function renderAnswerInput(question, value) {
       pilihan[acak] = pilihan[tukar];
       pilihan[tukar] = sementara;
     }
+    /* PENGECOH: opsi bertanda `distraktor` hanya menambah PILIHAN jawaban,
+       tidak menjadi baris pernyataan. Dibuang dari daftar baris di bawah. */
+    var opsiJodoh = options.filter(function(o) { return !(o && o.distraktor); });
+    if (!opsiJodoh.length) opsiJodoh = options;
     /* Nama kolom bisa diganti guru; soal lama tetap memakai nama bawaan. */
-    var labelJodoh = String((options[0] && options[0].labelKiri) || '').trim() || 'Pernyataan';
-    var labelJodohKanan = String((options[0] && options[0].labelKanan) || '').trim() || 'Pasangan Jawaban';
+    var labelJodoh = String((opsiJodoh[0] && opsiJodoh[0].labelKiri) || '').trim() || 'Pernyataan';
+    var labelJodohKanan = String((opsiJodoh[0] && opsiJodoh[0].labelKanan) || '').trim() || 'Pasangan Jawaban';
     /* Peta teks pasangan -> gambar pasangan (server mengacak urutan pilihan). */
     var gambarPasangan = {};
     var pasanganBergambar = false;
-    options.forEach(function(option) {
+    opsiJodoh.forEach(function(option) {
       var teksPasangan = String(option.pasangan || '');
       if (option.pasanganGambar && option.pasanganJenis !== 'teks') {
         gambarPasangan[teksPasangan || ('pasangan-' + option.id)] = { url: option.pasanganGambar, alt: option.pasanganAlt || '' };
@@ -1653,12 +1657,12 @@ function renderAnswerInput(question, value) {
         }).join('') + '</div>'
       : '';
     var lampiranKanan = {};
-    options.forEach(function(option) {
+    opsiJodoh.forEach(function(option) {
       var teksPasangan = String(option.pasangan || '');
       if (option.pasanganGambar && option.pasanganJenis === 'teks' && teksPasangan) lampiranKanan[teksPasangan] = option.pasanganGambar;
     });
     return '<table class="pgk-table jodoh-table"><thead><tr><th>' + escapeHtml(labelJodoh) + '</th><th>' + escapeHtml(labelJodohKanan) + '</th></tr></thead><tbody>' +
-      options.map(function(option, index) {
+      opsiJodoh.map(function(option, index) {
         var terpilih = String(jodoh[option.id] || '');
         /* REVISI 2026-10-02: daftar pilihan memakai penomoran huruf A, B, C,
            … sama seperti pratinjau di panel. Nilai (value) tetap teks asli
@@ -1844,7 +1848,8 @@ function jawabanTerisi(question, value) {
   if (type === 'MENJODOHKAN') {
     // Dianggap terjawab hanya bila SEMUA pernyataan sudah dipasangkan.
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    var daftarOpsi = Array.isArray(question.opsi) ? question.opsi : [];
+    var daftarOpsi = (Array.isArray(question.opsi) ? question.opsi : [])
+      .filter(function(o) { return !(o && o.distraktor); });   // pengecoh tidak perlu dijawab
     if (!daftarOpsi.length) return false;
     return daftarOpsi.every(function(option) {
       return String(value[option.id] || '').trim().length > 0;

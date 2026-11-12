@@ -4893,8 +4893,8 @@ function perbaruiInfoBatasKelasGuru_() {
   }
   if (!daftar.length && Array.isArray(info.kelasAktif)) daftar = info.kelasAktif;
   daftar = daftar.filter(function(k) { return String(k || '').trim(); });
-  var html = '<strong>Mapel aktif:</strong> ' + escapeAdmin(dipilih || '-') +
-    '<br><strong>Kelas yang boleh mengikuti ujian:</strong> ' +
+  var html = '<strong>Mapel Aktif :</strong> ' + escapeAdmin(dipilih || '-') +
+    '<br><strong>Rombel Ujian :</strong> ' +
     escapeAdmin(daftar.length ? daftar.join(' / ') : 'Semua kelas');
   var tersimpan = String(info.mapelAktif || '').trim();
   var slotTersimpan = 0;
@@ -11146,26 +11146,24 @@ function rpcSiado_(nama, argumen) {
 
 function kunciKkmTingkat_() {
   var boleh = !!ADMIN.isAdmin;
+  var isi = document.getElementById('kkmTingkatIsi');
+  var baca = document.getElementById('kkmTingkatBaca');
   ['sKkm7', 'sKkm8', 'sKkm9'].forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
     el.readOnly = !boleh;
     el.classList.toggle('role-locked', !boleh);
   });
-  var info = document.getElementById('kkmTingkatInfo');
-  if (info) {
-    var angka = ['sKkm7', 'sKkm8', 'sKkm9'].map(function(id) {
-      var el = document.getElementById(id);
-      return el && String(el.value || '').trim() ? String(el.value).trim() : '-';
-    });
-    var ringkas = 'VII ' + angka[0] + '  |  VIII ' + angka[1] + '  |  IX ' + angka[2];
-    info.textContent = boleh
-      ? 'Berlaku SEMUA mapel (PKN, B. Indonesia, B. Inggris, Seni Budaya, Prakarya, PJOK, '
-        + 'Informatika, KKA, Matematika, PAI, PAK, IPA, IPS). KKM default dipakai bila '
-        + 'tingkat peserta tidak dikenali. Sekarang: ' + ringkas + '.'
-      : 'Ditetapkan admin sekolah dan berlaku semua mapel, yaitu ' + ringkas
-        + '. Hubungi admin bila perlu diubah.';
-  }
+  // ADMIN: kolom isian. GURU/PROKTOR: angkanya dibaca sebagai teks biasa.
+  if (isi) isi.style.display = boleh ? '' : 'none';
+  if (baca) baca.style.display = boleh ? 'none' : 'grid';   // sejajar 3 kolom
+  [['bacaKkm7', 'sKkm7'], ['bacaKkm8', 'sKkm8'], ['bacaKkm9', 'sKkm9']].forEach(function(p) {
+    var tampil = document.getElementById(p[0]);
+    var sumber = document.getElementById(p[1]);
+    if (!tampil) return;
+    var nilai = sumber && String(sumber.value || '').trim() ? String(sumber.value).trim() : '-';
+    tampil.textContent = nilai;
+  });
 }
 
 async function muatKkmTingkat_() {
@@ -11185,12 +11183,19 @@ async function muatKkmTingkat_() {
   });
   kunciKkmTingkat_();
   if (gagalMuat) {
-    // Jangan diam: kalau tabel/RPC belum terpasang, admin harus tahu.
+    // Jangan diam: kalau tabel/RPC belum terpasang, pengguna harus tahu.
     var info = document.getElementById('kkmTingkatInfo');
     if (info) {
       info.textContent = 'Angka KKM per tingkat belum dapat dimuat dari database. '
         + 'Pastikan LANGKAH 14.1 dan 14.4 sudah dijalankan, lalu muat ulang halaman.';
       info.style.color = '#b45309';
+    }
+  } else {
+    var info2 = document.getElementById('kkmTingkatInfo');
+    if (info2) {
+      info2.textContent = 'Ditetapkan admin / proktor dan berlaku semua mapel, '
+        + 'hubungi bila perlu diubah.';
+      info2.style.color = '';
     }
   }
 }

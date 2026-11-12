@@ -1720,7 +1720,8 @@ function jawabanTerisi(question, value) {
   if (type === 'MENJODOHKAN') {
     // Dianggap terjawab hanya bila SEMUA pernyataan sudah dipasangkan.
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    var daftarOpsi = Array.isArray(question.opsi) ? question.opsi : [];
+    var daftarOpsi = (Array.isArray(question.opsi) ? question.opsi : [])
+      .filter(function(option) { return !option.distraktor; });
     if (!daftarOpsi.length) return false;
     return daftarOpsi.every(function(option) {
       return String(value[option.id] || '').trim().length > 0;

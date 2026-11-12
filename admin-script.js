@@ -11154,21 +11154,28 @@ function kunciKkmTingkat_() {
   });
   var info = document.getElementById('kkmTingkatInfo');
   if (info) {
+    var angka = ['sKkm7', 'sKkm8', 'sKkm9'].map(function(id) {
+      var el = document.getElementById(id);
+      return el && String(el.value || '').trim() ? String(el.value).trim() : '-';
+    });
+    var ringkas = 'VII ' + angka[0] + '  |  VIII ' + angka[1] + '  |  IX ' + angka[2];
     info.textContent = boleh
       ? 'Berlaku SEMUA mapel (PKN, B. Indonesia, B. Inggris, Seni Budaya, Prakarya, PJOK, '
         + 'Informatika, KKA, Matematika, PAI, PAK, IPA, IPS). KKM default dipakai bila '
-        + 'tingkat peserta tidak dikenali.'
-      : 'Ditetapkan admin sekolah dan berlaku semua mapel. Hubungi admin bila perlu diubah.';
+        + 'tingkat peserta tidak dikenali. Sekarang: ' + ringkas + '.'
+      : 'Ditetapkan admin sekolah dan berlaku semua mapel, yaitu ' + ringkas
+        + '. Hubungi admin bila perlu diubah.';
   }
 }
 
 async function muatKkmTingkat_() {
-  var peta = null;
+  var peta = null, gagalMuat = false;
   try {
     peta = await rpcSiado_('siado_kkm_tingkat_baca');
   } catch (error) {
-    peta = null;   // tabel belum dipasang (LANGKAH 14.1/14.4): kolom dibiarkan kosong
+    gagalMuat = true;   // tabel/RPC belum dipasang (LANGKAH 14.1/14.4)
   }
+  if (!peta || typeof peta !== 'object') gagalMuat = true;
   peta = peta || {};
   [['sKkm7', 'VII'], ['sKkm8', 'VIII'], ['sKkm9', 'IX']].forEach(function(pasangan) {
     var el = document.getElementById(pasangan[0]);
@@ -11177,7 +11184,7 @@ async function muatKkmTingkat_() {
     if (nilai !== undefined && nilai !== null) el.value = nilai;
   });
   kunciKkmTingkat_();
-  if (peta === null) {
+  if (gagalMuat) {
     // Jangan diam: kalau tabel/RPC belum terpasang, admin harus tahu.
     var info = document.getElementById('kkmTingkatInfo');
     if (info) {

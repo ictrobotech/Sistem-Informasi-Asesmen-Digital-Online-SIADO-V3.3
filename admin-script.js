@@ -1882,7 +1882,8 @@ function pasangTombolPerataan_(prefix) {
     grup.appendChild(btn);
   });
   bar.appendChild(grup);
-  pasangTombolHapusTabel_(prefix, bar);
+  pasangMenuTambah_(prefix, bar);
+  pasangMenuHapus_(prefix, bar);
   pasangNavigasiTabel_(prefix);
 }
 
@@ -2005,17 +2006,44 @@ function sinkronPertanyaan_(prefix, area) {
 }
 
 /* ===== NAVIGASI PAPAN TUNJUK DI DALAM TABEL ===== */
+/** Kisi visual tabel: kolom dihitung dengan memperhatikan colspan & rowspan. */
+function kisiVisual_(tabel) {
+  var baris = Array.prototype.slice.call(tabel.querySelectorAll('tr'));
+  var kisi = [];
+  var lanjut = {};   /* kolom -> {cell, sisa} dari rowspan di atasnya */
+  for (var b = 0; b < baris.length; b++) {
+    kisi[b] = [];
+    var anak = Array.prototype.slice.call(baris[b].children).filter(function (x) {
+      var t = x.tagName ? x.tagName.toLowerCase() : '';
+      return t === 'td' || t === 'th';
+    });
+    var k = 0, idx = 0;
+    for (;;) {
+      if (lanjut[k]) {
+        kisi[b][k] = lanjut[k].cell;
+        lanjut[k].sisa--;
+        if (lanjut[k].sisa <= 0) delete lanjut[k];
+        k++;
+        continue;
+      }
+      if (idx >= anak.length) break;
+      var selnya = anak[idx++];
+      var cs = Math.max(1, parseInt(selnya.getAttribute('colspan') || '1', 10) || 1);
+      var rs = Math.max(1, parseInt(selnya.getAttribute('rowspan') || '1', 10) || 1);
+      for (var c = 0; c < cs; c++) {
+        kisi[b][k] = selnya;
+        if (rs > 1) lanjut[k] = { cell: selnya, sisa: rs - 1 };
+        k++;
+      }
+    }
+  }
+  return kisi;
+}
+
 function posisiSel_(sel) {
   var tabel = sel && sel.closest ? sel.closest('table') : null;
   if (!tabel) return null;
-  var baris = tabel.querySelectorAll('tr');
-  var kisi = [];
-  for (var i = 0; i < baris.length; i++) {
-    kisi.push(Array.prototype.slice.call(baris[i].children).filter(function (x) {
-      var t = x.tagName ? x.tagName.toLowerCase() : '';
-      return t === 'td' || t === 'th';
-    }));
-  }
+  var kisi = kisiVisual_(tabel);
   for (var b = 0; b < kisi.length; b++) {
     var k = kisi[b].indexOf(sel);
     if (k !== -1) return { tabel: tabel, kisi: kisi, baris: b, kolom: k };
@@ -2162,15 +2190,315 @@ function hapusTabelDiKursor_(prefix) {
   sinkronPertanyaan_(prefix, area);
 }
 
-function pasangTombolHapusTabel_(prefix, bar) {
-  if (!bar || bar.querySelector('.srte-btn-hapus-tabel')) return;
+/** Rentang sel yang sedang diblok (atau sel tempat kursor). */
+function rentangSel_(prefix, area) {
+  var jarak = jarakAktif_(prefix, area);
+  if (!jarak) return null;
+  var awal = selDariTitik_(jarak.startContainer, area);
+  var akhir = selDariTitik_(jarak.endContainer, area) || awal;
+  if (!awal) return null;
+  var pA = posisiSel_(awal), pB = posisiSel_(akhir) || pA;
+  if (!pA) return null;
+  return {
+    tabel: pA.tabel,
+    kisi: pA.kisi,
+    jarak: jarak,
+    baris1: Math.min(pA.baris, pB.baris), baris2: Math.max(pA.baris, pB.baris),
+    kolom1: Math.min(pA.kolom, pB.kolom), kolom2: Math.max(pA.kolom, pB.kolom)
+  };
+}
+
+function rapikanTabelKosong_(prefix, area, tabel) {
+  var sisaSel = tabel.querySelectorAll('td, th').length;
+  var sisaBaris = tabel.querySelectorAll('tr').length;
+  if (sisaBaris > 0 && sisaSel > 0) return false;
+  var ganti = document.createElement('p');
+  ganti.innerHTML = '<br>';
+  if (tabel.parentNode) tabel.parentNode.replaceChild(ganti, tabel);
+  PILIHAN_TERAKHIR_[prefix] = null;
+  fokusSel_(ganti, false);
+  simpanPilihan_(prefix);
+  sinkronPertanyaan_(prefix, area);
+  return true;
+}
+
+/** Hapus baris yang diblok (atau baris tempat kursor). */
+function hapusBaris_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var r = rentangSel_(prefix, area);
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Hapus baris.'); return; }
+  var trs = Array.prototype.slice.call(r.tabel.querySelectorAll('tr'));
+  var dipilih = [];
+  for (var b = r.baris1; b <= r.baris2; b++) if (trs[b]) dipilih.push(trs[b]);
+  if (!dipilih.length) return;
+  if (!window.confirm('Hapus ' + dipilih.length + ' baris ini beserta isinya?')) return;
+  dipilih.forEach(function (tr) { if (tr.parentNode) tr.parentNode.removeChild(tr); });
+  if (!rapikanTabelKosong_(prefix, area, r.tabel)) {
+    PILIHAN_TERAKHIR_[prefix] = null;
+    try { area.focus(); } catch (e) {}
+    sinkronPertanyaan_(prefix, area);
+  }
+}
+
+/** Hapus kolom yang diblok (atau kolom tempat kursor). */
+function hapusKolom_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var r = rentangSel_(prefix, area);
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Hapus kolom.'); return; }
+
+  /* Untuk tiap sel: berapa kolom terpilih yang ditutupinya (menghormati colspan). */
+  var rencana = [];
+  for (var b = 0; b < r.kisi.length; b++) {
+    for (var k = r.kolom1; k <= r.kolom2; k++) {
+      var c = r.kisi[b] && r.kisi[b][k];
+      if (!c) continue;
+      var catatan = null;
+      for (var i = 0; i < rencana.length; i++) if (rencana[i].sel === c) { catatan = rencana[i]; break; }
+      if (!catatan) { catatan = { sel: c, kena: 0 }; rencana.push(catatan); }
+      catatan.kena++;
+    }
+  }
+  if (!rencana.length) return;
+  var jumlahKolom = r.kolom2 - r.kolom1 + 1;
+  if (!window.confirm('Hapus ' + jumlahKolom + ' kolom ini beserta isinya?')) return;
+
+  rencana.forEach(function (it) {
+    var cs = Math.max(1, parseInt(it.sel.getAttribute('colspan') || '1', 10) || 1);
+    if (cs > it.kena) {
+      var sisa = cs - it.kena;
+      if (sisa > 1) it.sel.setAttribute('colspan', String(sisa));
+      else it.sel.removeAttribute('colspan');
+      return;
+    }
+    if (it.sel.parentNode) it.sel.parentNode.removeChild(it.sel);
+  });
+  if (!rapikanTabelKosong_(prefix, area, r.tabel)) {
+    PILIHAN_TERAKHIR_[prefix] = null;
+    try { area.focus(); } catch (e) {}
+    sinkronPertanyaan_(prefix, area);
+  }
+}
+
+/* ===== TAMBAH BARIS / KOLOM / TABEL ===== */
+
+/** Baris acuan untuk penambahan: dari blok, atau baris tempat kursor. */
+function barisAcuan_(r, diAtas) {
+  var trs = Array.prototype.slice.call(r.tabel.querySelectorAll('tr'));
+  var b = diAtas ? r.baris1 : r.baris2;
+  return { trs: trs, tr: trs[b] || null, indeks: b };
+}
+
+/** Tambah baris di atas / di bawah baris acuan. */
+function tambahBaris_(prefix, diAtas) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var r = rentangSel_(prefix, area);
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Tambah baris.'); return; }
+
+  var acuan = barisAcuan_(r, diAtas);
+  if (!acuan.tr) return;
+  /* Jumlah sel = lebar VISUAL tabel (kolom tergabung dihitung terpisah),
+     supaya baris baru selalu lurus dengan seluruh kolom di atasnya. */
+  var lebar = 1;
+  for (var bb = 0; bb < r.kisi.length; bb++) {
+    if (r.kisi[bb] && r.kisi[bb].length > lebar) lebar = r.kisi[bb].length;
+  }
+
+  var trBaru = document.createElement('tr');
+  for (var i = 0; i < lebar; i++) {
+    var sel = document.createElement('td');
+    sel.innerHTML = '<br>';
+    trBaru.appendChild(sel);
+  }
+  acuan.tr.parentNode.insertBefore(trBaru, diAtas ? acuan.tr : acuan.tr.nextSibling);
+
+  PILIHAN_TERAKHIR_[prefix] = null;
+  fokusSel_(trBaru.children[0] || null, false);
+  simpanPilihan_(prefix);
+  sinkronPertanyaan_(prefix, area);
+}
+
+/** Tambah kolom di kiri / kanan kolom acuan (menghormati colspan). */
+function tambahKolom_(prefix, diKiri) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var r = rentangSel_(prefix, area);
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Tambah kolom.'); return; }
+
+  var sasaran = diKiri ? r.kolom1 : r.kolom2 + 1;
+  var trs = Array.prototype.slice.call(r.tabel.querySelectorAll('tr'));
+  var barisTidakSejajar = 0;
+  var selPertamaBaru = null;
+
+  for (var b = 0; b < trs.length; b++) {
+    var baris = trs[b];
+    var milikSendiri = Array.prototype.slice.call(baris.children).filter(function (x) {
+      var t = x.tagName ? x.tagName.toLowerCase() : '';
+      return t === 'td' || t === 'th';
+    });
+    if (!milikSendiri.length) continue;
+
+    /* Kolom visual awal tiap sel pada baris ini (menghormati rowspan). */
+    var kisiBaris = r.kisi[b] || [];
+    var awal = milikSendiri.map(function (c) { return kisiBaris.indexOf(c); });
+
+    var sisipSebelum = null;
+    for (var i = 0; i < milikSendiri.length; i++) {
+      var k0 = awal[i];
+      if (k0 < 0) continue;
+      var cs = parseInt(milikSendiri[i].getAttribute('colspan') || '1', 10) || 1;
+      if (k0 >= sasaran) { sisipSebelum = milikSendiri[i]; break; }
+      if (k0 < sasaran && sasaran < k0 + cs) { sisipSebelum = milikSendiri[i].nextSibling; break; }
+    }
+
+    /* Baris yang slotnya tertutup rowspan dari baris atas: lewati agar tidak miring. */
+    var tertutup = r.kisi[b] && r.kisi[b][sasaran] && milikSendiri.indexOf(r.kisi[b][sasaran]) === -1;
+    if (tertutup) { barisTidakSejajar++; continue; }
+
+    var selBaru = document.createElement('td');
+    selBaru.innerHTML = '<br>';
+    baris.insertBefore(selBaru, sisipSebelum);
+    if (!selPertamaBaru && b >= r.baris1) selPertamaBaru = selBaru;
+  }
+
+  PILIHAN_TERAKHIR_[prefix] = null;
+  if (selPertamaBaru) fokusSel_(selPertamaBaru, false);
+  simpanPilihan_(prefix);
+  sinkronPertanyaan_(prefix, area);
+  if (barisTidakSejajar && window.console && console.info) {
+    console.info('[tabel] ' + barisTidakSejajar + ' baris dilewati (sel gabungan/rowspan) agar susunan tetap lurus.');
+  }
+}
+
+/** Sisipkan tabel baru di posisi kursor. */
+function sisipkanTabel_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var jBaris = parseInt(window.prompt('Jumlah baris tabel baru:', '3'), 10);
+  if (!jBaris || jBaris < 1) return;
+  var jKolom = parseInt(window.prompt('Jumlah kolom tabel baru:', '3'), 10);
+  if (!jKolom || jKolom < 1) return;
+  jBaris = Math.min(20, jBaris);
+  jKolom = Math.min(10, jKolom);
+
+  var html = '<table><tbody>';
+  for (var i = 0; i < jBaris; i++) {
+    html += '<tr>';
+    for (var k = 0; k < jKolom; k++) html += (i === 0 ? '<th><br></th>' : '<td><br></td>');
+    html += '</tr>';
+  }
+  html += '</tbody></table><p><br></p>';
+
+  pulihkanPilihan_(prefix);
+  var terpasang = false;
+  try { terpasang = document.execCommand('insertHTML', false, html); } catch (e) { terpasang = false; }
+  if (!terpasang) {
+    var wadah = document.createElement('div');
+    wadah.innerHTML = html;
+    var jarak = jarakAktif_(prefix, area);
+    if (jarak) {
+      var frag = document.createDocumentFragment();
+      while (wadah.firstChild) frag.appendChild(wadah.firstChild);
+      jarak.deleteContents();
+      jarak.insertNode(frag);
+    } else {
+      area.appendChild(wadah);
+    }
+  }
+  PILIHAN_TERAKHIR_[prefix] = null;
+  try { area.focus(); } catch (e) {}
+  simpanPilihan_(prefix);
+  sinkronPertanyaan_(prefix, area);
+}
+
+/* ===== MENU KECIL (dipakai tombol Tambah & Hapus) ===== */
+function tutupMenuAksi_() {
+  var lama = document.querySelector('.srte-menu-aksi');
+  if (lama && lama.parentNode) lama.parentNode.removeChild(lama);
+  document.removeEventListener('mousedown', tutupMenuAksi_.luar, true);
+}
+tutupMenuAksi_.luar = function (e) {
+  var menu = document.querySelector('.srte-menu-aksi');
+  if (menu && !menu.contains(e.target)) tutupMenuAksi_();
+};
+
+function bukaMenuAksi_(prefix, tombol, daftar) {
+  var sudahAda = document.querySelector('.srte-menu-aksi');
+  var kunciLama = sudahAda ? sudahAda.getAttribute('data-kunci') : null;
+  tutupMenuAksi_();
+  var kunci = prefix + '|' + tombol.className;
+  if (sudahAda && kunciLama === kunci) return;
+
+  var menu = document.createElement('div');
+  menu.className = 'srte-menu-aksi';
+  menu.setAttribute('data-kunci', kunci);
+  var kotak = tombol.getBoundingClientRect();
+  menu.style.top = Math.round(kotak.bottom + (window.scrollY || 0) + 6) + 'px';
+  menu.style.left = Math.round(Math.min(kotak.left + (window.scrollX || 0),
+    (window.innerWidth || 1024) - 220)) + 'px';
+
+  daftar.forEach(function (p) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'srte-item' + (p.danger ? ' danger' : '');
+    b.innerHTML = '<i class="' + p.ikon + '"></i><span>' + p.label + '</span>';
+    b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    b.addEventListener('click', function () { tutupMenuAksi_(); p.aksi(); });
+    menu.appendChild(b);
+  });
+
+  document.body.appendChild(menu);
+  setTimeout(function () { document.addEventListener('mousedown', tutupMenuAksi_.luar, true); }, 0);
+}
+
+function pasangMenuHapus_(prefix, bar) {
+  if (!bar || bar.querySelector('.srte-btn-hapus')) return;
+  simpanPilihan_(prefix);
   var btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'srte-btn srte-btn-hapus-tabel';
-  btn.title = 'Hapus tabel di posisi kursor';
+  btn.className = 'srte-btn srte-btn-hapus';
+  btn.title = 'Hapus baris / kolom / seluruh tabel';
   btn.innerHTML = '<i class="fa-solid fa-rectangle-xmark"></i>';
   btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
-  btn.addEventListener('click', function () { hapusTabelDiKursor_(prefix); });
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    simpanPilihan_(prefix);
+    bukaMenuAksi_(prefix, btn, [
+      { ikon: 'fa-solid fa-arrow-up-from-bracket', label: 'Hapus baris', aksi: function () { hapusBaris_(prefix); } },
+      { ikon: 'fa-solid fa-grip-lines-vertical', label: 'Hapus kolom', aksi: function () { hapusKolom_(prefix); } },
+      { ikon: 'fa-solid fa-rectangle-xmark', label: 'Hapus seluruh tabel', danger: true, aksi: function () { hapusTabelDiKursor_(prefix); } }
+    ]);
+  });
+  bar.appendChild(btn);
+}
+
+function pasangMenuTambah_(prefix, bar) {
+  if (!bar || bar.querySelector('.srte-btn-tambah')) return;
+  simpanPilihan_(prefix);
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'srte-btn srte-btn-tambah';
+  btn.title = 'Tambah baris / kolom / tabel';
+  btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+  btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    simpanPilihan_(prefix);
+    bukaMenuAksi_(prefix, btn, [
+      { ikon: 'fa-solid fa-arrow-up', label: 'Tambah baris di atas', aksi: function () { tambahBaris_(prefix, true); } },
+      { ikon: 'fa-solid fa-arrow-down', label: 'Tambah baris di bawah', aksi: function () { tambahBaris_(prefix, false); } },
+      { ikon: 'fa-solid fa-arrow-left', label: 'Tambah kolom di kiri', aksi: function () { tambahKolom_(prefix, true); } },
+      { ikon: 'fa-solid fa-arrow-right', label: 'Tambah kolom di kanan', aksi: function () { tambahKolom_(prefix, false); } },
+      { ikon: 'fa-solid fa-table', label: 'Sisipkan tabel baru', aksi: function () { sisipkanTabel_(prefix); } }
+    ]);
+  });
   bar.appendChild(btn);
 }
 

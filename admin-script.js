@@ -1843,27 +1843,17 @@ function terapkanPerataanSeleksi_(prefix, nilai) {
   var rte = RTE_PERTANYAAN[prefix];
   var area = rte && rte.el;
   if (!area) return;
-  var sel = window.getSelection ? window.getSelection() : null;
-  if (!sel || !sel.rangeCount || !area.contains(sel.anchorNode)) { area.focus(); return; }
-  var jarak = sel.getRangeAt(0);
-  var sasaran = [];
-  if (!jarak.collapsed) {
-    var selTabel = area.querySelectorAll('td, th');
-    for (var i = 0; i < selTabel.length; i++) {
-      try { if (jarak.intersectsNode(selTabel[i])) sasaran.push(selTabel[i]); } catch (e) {}
-    }
-  }
-  if (!sasaran.length) {
-    var blok = blokPerataanDari_(sel.anchorNode, area);
-    if (blok) sasaran.push(blok);
-  }
+  /* Hanya sel yang DIBLOK yang berubah; tidak pernah melebar ke seluruh tabel. */
+  var jarak = jarakAktif_(prefix, area);
+  var sasaran = sasaranPerataan_(area, jarak);
+  if (!sasaran.length) { pulihkanPilihan_(prefix); return; }
   sasaran.forEach(function (el) {
     el.style.textAlign = (nilai === 'left') ? '' : nilai;
     var anak = el.querySelectorAll('p, div');
     for (var j = 0; j < anak.length; j++) anak[j].style.textAlign = '';
   });
-  var ta = document.getElementById(prefix + 'Pertanyaan');
-  if (ta) ta.value = gabungPerataan_(rte.getHtml(), area.innerHTML);
+  sinkronPertanyaan_(prefix, area);
+  pulihkanPilihan_(prefix);
 }
 
 /** Menambahkan 4 tombol perataan ke bilah editor. */
@@ -1892,6 +1882,274 @@ function pasangTombolPerataan_(prefix) {
     grup.appendChild(btn);
   });
   bar.appendChild(grup);
+  pasangTombolHapusTabel_(prefix, bar);
+  pasangNavigasiTabel_(prefix);
+}
+
+
+/* ===== NAVIGASI & HAPUS TABEL (13 Nov 2026) =====
+ * a) perataan hanya mengenai sel yang benar-benar DIBLOK
+ * b) Tab / panah atas-bawah-kiri-kanan bekerja di dalam tabel tanpa klik mouse
+ * c) tombol Hapus tabel membuang tabel di posisi kursor
+ */
+var PILIHAN_TERAKHIR_ = { f: null, e: null };
+
+/** Menyimpan pilihan terakhir di dalam editor (supaya tidak hilang saat klik bilah). */
+function simpanPilihan_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el) return;
+  var sel = window.getSelection ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount) return;
+  var r = sel.getRangeAt(0);
+  if (rte.el.contains(r.commonAncestorContainer)) PILIHAN_TERAKHIR_[prefix] = r.cloneRange();
+}
+
+/** Mengembalikan fokus + pilihan ke editor, tanpa perlu klik mouse. */
+function pulihkanPilihan_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el) return;
+  try { rte.el.focus(); } catch (e) {}
+  var r = PILIHAN_TERAKHIR_[prefix];
+  if (!r) return;
+  try {
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  } catch (e) {}
+}
+
+/** Pilihan yang sedang berlaku: dari layar, atau dari simpanan terakhir. */
+function jarakAktif_(prefix, area) {
+  var sel = window.getSelection ? window.getSelection() : null;
+  if (sel && sel.rangeCount) {
+    var r = sel.getRangeAt(0);
+    if (area.contains(r.commonAncestorContainer)) return r;
+  }
+  var simpan = PILIHAN_TERAKHIR_[prefix];
+  if (simpan && area.contains(simpan.commonAncestorContainer)) return simpan;
+  return null;
+}
+
+/** Sel tabel (td/th) terdekat dari sebuah titik simpul. */
+function selDariTitik_(titik, area) {
+  var el = titik ? (titik.nodeType === 1 ? titik : titik.parentNode) : null;
+  while (el && el !== area) {
+    var tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'td' || tag === 'th') return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+
+/** Tabel terdekat dari sebuah titik simpul. */
+function tabelDariTitik_(titik, area) {
+  var el = titik ? (titik.nodeType === 1 ? titik : titik.parentNode) : null;
+  while (el && el !== area) {
+    if (el.tagName && el.tagName.toLowerCase() === 'table') return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+
+/* ===== SASARAN PERATAAN =====
+ * Aturan tegas: yang berubah hanya sel yang diblok. Blok satu kolom -> satu
+ * kolom itu saja. Kursor tanpa blok -> sel tempat kursor berada. Bila di luar
+ * tabel -> paragraf/daftar terdekat. TIDAK PERNAH melebar ke seluruh tabel. */
+function sasaranPerataan_(area, jarak) {
+  var hasil = [];
+  if (!jarak) return hasil;
+  if (!jarak.collapsed) {
+    var semua = area.querySelectorAll('td, th');
+    var adaSel = false;
+    for (var i = 0; i < semua.length; i++) {
+      var kena = false;
+      try { kena = jarak.intersectsNode(semua[i]); } catch (e) { kena = false; }
+      if (kena) { hasil.push(semua[i]); adaSel = true; }
+    }
+    if (adaSel) return hasil;
+  }
+  var sel = selDariTitik_(jarak.startContainer, area);
+  if (sel) return [sel];
+  var blok = blokPerataanDari_(jarak.startContainer, area);
+  return blok ? [blok] : [];
+}
+
+/** Menyimpan isi editor ke textarea cadangan. */
+function sinkronPertanyaan_(prefix, area) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var ta = document.getElementById(prefix + 'Pertanyaan');
+  if (!rte || !ta || !area) return;
+  ta.value = gabungPerataan_(rte.getHtml(), area.innerHTML);
+}
+
+/* ===== NAVIGASI PAPAN TUNJUK DI DALAM TABEL ===== */
+function posisiSel_(sel) {
+  var tabel = sel && sel.closest ? sel.closest('table') : null;
+  if (!tabel) return null;
+  var baris = tabel.querySelectorAll('tr');
+  var kisi = [];
+  for (var i = 0; i < baris.length; i++) {
+    kisi.push(Array.prototype.slice.call(baris[i].children).filter(function (x) {
+      var t = x.tagName ? x.tagName.toLowerCase() : '';
+      return t === 'td' || t === 'th';
+    }));
+  }
+  for (var b = 0; b < kisi.length; b++) {
+    var k = kisi[b].indexOf(sel);
+    if (k !== -1) return { tabel: tabel, kisi: kisi, baris: b, kolom: k };
+  }
+  return null;
+}
+
+function fokusSel_(sel, keAwal) {
+  if (!sel) return;
+  var r = document.createRange();
+  r.selectNodeContents(sel);
+  r.collapse(keAwal === true);
+  var s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(r);
+  if (sel.scrollIntoView) { try { sel.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+}
+
+function geserSel_(sel, arah) {
+  var pos = posisiSel_(sel);
+  if (!pos) return false;
+  var b = pos.baris, k = pos.kolom, kisi = pos.kisi;
+  var tujuan = null;
+  if (arah === 'kanan') {
+    if (k + 1 < kisi[b].length) tujuan = kisi[b][k + 1];
+    else if (b + 1 < kisi.length && kisi[b + 1].length) tujuan = kisi[b + 1][0];
+  } else if (arah === 'kiri') {
+    if (k - 1 >= 0) tujuan = kisi[b][k - 1];
+    else if (b - 1 >= 0 && kisi[b - 1].length) tujuan = kisi[b - 1][kisi[b - 1].length - 1];
+  } else if (arah === 'bawah') {
+    if (b + 1 < kisi.length && kisi[b + 1].length) tujuan = kisi[b + 1][Math.min(k, kisi[b + 1].length - 1)];
+  } else if (arah === 'atas') {
+    if (b - 1 >= 0 && kisi[b - 1].length) tujuan = kisi[b - 1][Math.min(k, kisi[b - 1].length - 1)];
+  }
+  if (!tujuan) return false;
+  fokusSel_(tujuan, arah === 'kiri' || arah === 'atas');
+  return true;
+}
+
+/** Apakah kursor berada di ujung awal/akhir isi sel. */
+function diUjung_(sel, ujung) {
+  var s = window.getSelection ? window.getSelection() : null;
+  if (!s || !s.rangeCount) return false;
+  var r = s.getRangeAt(0);
+  if (!r.collapsed) return false;
+  var uji = document.createRange();
+  uji.selectNodeContents(sel);
+  try {
+    if (ujung === 'akhir') { uji.setStart(r.endContainer, r.endOffset); return uji.toString().trim() === ''; }
+    uji.setEnd(r.startContainer, r.startOffset);
+    return uji.toString().trim() === '';
+  } catch (e) { return false; }
+}
+
+/** Baris baru di akhir tabel (dipakai saat Tab di sel terakhir). */
+function tambahBarisTabel_(pos) {
+  var terakhir = pos.kisi[pos.kisi.length - 1];
+  if (!terakhir || !terakhir.length) return null;
+  var tr = terakhir[0].parentNode;
+  var baru = tr.cloneNode(false);
+  for (var i = 0; i < terakhir.length; i++) {
+    var td = document.createElement('td');
+    td.innerHTML = '<br>';
+    baru.appendChild(td);
+  }
+  tr.parentNode.appendChild(baru);
+  var isi = baru.children[0] || null;
+  fokusSel_(isi, false);
+  return isi;
+}
+
+function pasangNavigasiTabel_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el || rte.__navTabel) return;
+  var area = rte.el;
+  rte.__navTabel = true;
+
+  ['keyup', 'mouseup', 'focus'].forEach(function (ev) {
+    area.addEventListener(ev, function () { simpanPilihan_(prefix); });
+  });
+
+  area.addEventListener('keydown', function (e) {
+    var s = window.getSelection ? window.getSelection() : null;
+    if (!s || !s.rangeCount) return;
+    var r = s.getRangeAt(0);
+    var sel = selDariTitik_(r.startContainer, area);
+    if (!sel) return;
+    var kunci = e.key;
+
+    if (kunci === 'Tab') {
+      var pos = posisiSel_(sel);
+      if (!pos) return;
+      var b = pos.baris, k = pos.kolom, tujuan = null;
+      if (e.shiftKey) {
+        if (k > 0) tujuan = pos.kisi[b][k - 1];
+        else if (b > 0 && pos.kisi[b - 1].length) tujuan = pos.kisi[b - 1][pos.kisi[b - 1].length - 1];
+      } else {
+        if (k + 1 < pos.kisi[b].length) tujuan = pos.kisi[b][k + 1];
+        else if (b + 1 < pos.kisi.length && pos.kisi[b + 1].length) tujuan = pos.kisi[b + 1][0];
+        else { e.preventDefault(); tambahBarisTabel_(pos); sinkronPertanyaan_(prefix, area); return; }
+      }
+      e.preventDefault();
+      fokusSel_(tujuan, e.shiftKey === true);
+      sinkronPertanyaan_(prefix, area);
+      return;
+    }
+
+    if (kunci === 'ArrowDown' || kunci === 'ArrowUp') {
+      if (geserSel_(sel, kunci === 'ArrowDown' ? 'bawah' : 'atas')) {
+        e.preventDefault();
+        sinkronPertanyaan_(prefix, area);
+      }
+      return;
+    }
+    if (kunci === 'ArrowRight' && diUjung_(sel, 'akhir')) {
+      if (geserSel_(sel, 'kanan')) { e.preventDefault(); sinkronPertanyaan_(prefix, area); }
+      return;
+    }
+    if (kunci === 'ArrowLeft' && diUjung_(sel, 'awal')) {
+      if (geserSel_(sel, 'kiri')) { e.preventDefault(); sinkronPertanyaan_(prefix, area); }
+      return;
+    }
+  });
+}
+
+/* ===== HAPUS TABEL ===== */
+function hapusTabelDiKursor_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var jarak = jarakAktif_(prefix, area);
+  var tabel = jarak ? tabelDariTitik_(jarak.startContainer, area) : null;
+  if (!tabel) {
+    window.alert('Letakkan kursor di dalam tabel yang ingin dihapus, lalu tekan tombol ini.');
+    return;
+  }
+  if (!window.confirm('Hapus seluruh tabel ini beserta isinya?')) return;
+  var ganti = document.createElement('p');
+  ganti.innerHTML = '<br>';
+  tabel.parentNode.replaceChild(ganti, tabel);
+  PILIHAN_TERAKHIR_[prefix] = null;
+  fokusSel_(ganti, false);
+  simpanPilihan_(prefix);
+  sinkronPertanyaan_(prefix, area);
+}
+
+function pasangTombolHapusTabel_(prefix, bar) {
+  if (!bar || bar.querySelector('.srte-btn-hapus-tabel')) return;
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'srte-btn srte-btn-hapus-tabel';
+  btn.title = 'Hapus tabel di posisi kursor';
+  btn.innerHTML = '<i class="fa-solid fa-rectangle-xmark"></i>';
+  btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  btn.addEventListener('click', function () { hapusTabelDiKursor_(prefix); });
+  bar.appendChild(btn);
 }
 
 /* Pratinjau & tampilan peserta: pasang kembali perataan sesudah dibersihkan. */

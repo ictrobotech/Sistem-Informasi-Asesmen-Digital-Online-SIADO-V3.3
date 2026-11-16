@@ -1754,7 +1754,7 @@ var RTE_PERTANYAAN = { f: null, e: null };
  */
 var TAG_PERATAAN_ = ['td', 'th', 'caption', 'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
 var NILAI_PERATAAN_ = ['left', 'center', 'right', 'justify'];
-var LABEL_PERATAAN_ = { left: 'Rata kiri', center: 'Rata tengah', right: 'Rata kanan', justify: 'Rata kiri-kanan' };
+var LABEL_PERATAAN_ = { left: 'Left', center: 'Centre', right: 'Right', justify: 'Justify' };
 var IKON_PERATAAN_ = {
   left: 'fa-solid fa-align-left',
   center: 'fa-solid fa-align-center',
@@ -1882,8 +1882,7 @@ function pasangTombolPerataan_(prefix) {
     grup.appendChild(btn);
   });
   bar.appendChild(grup);
-  pasangMenuTambah_(prefix, bar);
-  pasangMenuHapus_(prefix, bar);
+  pasangMenuTabel_(prefix, bar);
   pasangNavigasiTabel_(prefix);
 }
 
@@ -2177,7 +2176,7 @@ function hapusTabelDiKursor_(prefix) {
   var jarak = jarakAktif_(prefix, area);
   var tabel = jarak ? tabelDariTitik_(jarak.startContainer, area) : null;
   if (!tabel) {
-    window.alert('Letakkan kursor di dalam tabel yang ingin dihapus, lalu tekan tombol ini.');
+    window.alert('Letakkan kursor di dalam tabel, lalu pilih Baris / Kolom / Tabel > Hapus Tabel.');
     return;
   }
   if (!window.confirm('Hapus seluruh tabel ini beserta isinya?')) return;
@@ -2228,7 +2227,7 @@ function hapusBaris_(prefix) {
   var area = rte && rte.el;
   if (!area) return;
   var r = rentangSel_(prefix, area);
-  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Hapus baris.'); return; }
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Baris / Kolom / Tabel > Hapus Baris.'); return; }
   var trs = Array.prototype.slice.call(r.tabel.querySelectorAll('tr'));
   var dipilih = [];
   for (var b = r.baris1; b <= r.baris2; b++) if (trs[b]) dipilih.push(trs[b]);
@@ -2248,7 +2247,7 @@ function hapusKolom_(prefix) {
   var area = rte && rte.el;
   if (!area) return;
   var r = rentangSel_(prefix, area);
-  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Hapus kolom.'); return; }
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Baris / Kolom / Tabel > Hapus Kolom.'); return; }
 
   /* Untuk tiap sel: berapa kolom terpilih yang ditutupinya (menghormati colspan). */
   var rencana = [];
@@ -2298,7 +2297,7 @@ function tambahBaris_(prefix, diAtas) {
   var area = rte && rte.el;
   if (!area) return;
   var r = rentangSel_(prefix, area);
-  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Tambah baris.'); return; }
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Baris / Kolom / Tabel > Tambah Baris Diatas / Dibawah.'); return; }
 
   var acuan = barisAcuan_(r, diAtas);
   if (!acuan.tr) return;
@@ -2329,7 +2328,7 @@ function tambahKolom_(prefix, diKiri) {
   var area = rte && rte.el;
   if (!area) return;
   var r = rentangSel_(prefix, area);
-  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Tambah kolom.'); return; }
+  if (!r) { window.alert('Letakkan kursor di dalam tabel, lalu pilih Baris / Kolom / Tabel > Tambah Kolom Dikiri / Dikanan.'); return; }
 
   var sasaran = diKiri ? r.kolom1 : r.kolom2 + 1;
   var trs = Array.prototype.slice.call(r.tabel.querySelectorAll('tr'));
@@ -2445,6 +2444,11 @@ function bukaMenuAksi_(prefix, tombol, daftar) {
     (window.innerWidth || 1024) - 220)) + 'px';
 
   daftar.forEach(function (p) {
+    if (p.pisah) {
+      var grs = document.createElement('div');
+      grs.className = 'srte-pisah';
+      menu.appendChild(grs);
+    }
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'srte-item' + (p.danger ? ' danger' : '');
@@ -2458,45 +2462,28 @@ function bukaMenuAksi_(prefix, tombol, daftar) {
   setTimeout(function () { document.addEventListener('mousedown', tutupMenuAksi_.luar, true); }, 0);
 }
 
-function pasangMenuHapus_(prefix, bar) {
-  if (!bar || bar.querySelector('.srte-btn-hapus')) return;
+/** Satu menu untuk semua tindakan tabel: tambah & hapus. */
+function pasangMenuTabel_(prefix, bar) {
+  if (!bar || bar.querySelector('.srte-btn-tabel')) return;
   simpanPilihan_(prefix);
   var btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'srte-btn srte-btn-hapus';
-  btn.title = 'Hapus baris / kolom / seluruh tabel';
-  btn.innerHTML = '<i class="fa-solid fa-rectangle-xmark"></i>';
+  btn.className = 'srte-btn srte-btn-tabel';
+  btn.title = 'Baris / Kolom / Tabel';
+  btn.innerHTML = '<i class="fa-solid fa-table-list"></i>';
   btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
   btn.addEventListener('click', function (e) {
     e.preventDefault();
     simpanPilihan_(prefix);
     bukaMenuAksi_(prefix, btn, [
-      { ikon: 'fa-solid fa-arrow-up-from-bracket', label: 'Hapus baris', aksi: function () { hapusBaris_(prefix); } },
-      { ikon: 'fa-solid fa-grip-lines-vertical', label: 'Hapus kolom', aksi: function () { hapusKolom_(prefix); } },
-      { ikon: 'fa-solid fa-rectangle-xmark', label: 'Hapus seluruh tabel', danger: true, aksi: function () { hapusTabelDiKursor_(prefix); } }
-    ]);
-  });
-  bar.appendChild(btn);
-}
-
-function pasangMenuTambah_(prefix, bar) {
-  if (!bar || bar.querySelector('.srte-btn-tambah')) return;
-  simpanPilihan_(prefix);
-  var btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'srte-btn srte-btn-tambah';
-  btn.title = 'Tambah baris / kolom / tabel';
-  btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-  btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
-  btn.addEventListener('click', function (e) {
-    e.preventDefault();
-    simpanPilihan_(prefix);
-    bukaMenuAksi_(prefix, btn, [
-      { ikon: 'fa-solid fa-arrow-up', label: 'Tambah baris di atas', aksi: function () { tambahBaris_(prefix, true); } },
-      { ikon: 'fa-solid fa-arrow-down', label: 'Tambah baris di bawah', aksi: function () { tambahBaris_(prefix, false); } },
-      { ikon: 'fa-solid fa-arrow-left', label: 'Tambah kolom di kiri', aksi: function () { tambahKolom_(prefix, true); } },
-      { ikon: 'fa-solid fa-arrow-right', label: 'Tambah kolom di kanan', aksi: function () { tambahKolom_(prefix, false); } },
-      { ikon: 'fa-solid fa-table', label: 'Sisipkan tabel baru', aksi: function () { sisipkanTabel_(prefix); } }
+      { ikon: 'fa-solid fa-arrow-up',              label: 'Tambah Baris Diatas',   aksi: function () { tambahBaris_(prefix, true); } },
+      { ikon: 'fa-solid fa-arrow-down',            label: 'Tambah Baris Dibawah',  aksi: function () { tambahBaris_(prefix, false); } },
+      { ikon: 'fa-solid fa-arrow-left',            label: 'Tambah Kolom Dikiri',   aksi: function () { tambahKolom_(prefix, true); } },
+      { ikon: 'fa-solid fa-arrow-right',           label: 'Tambah Kolom Dikanan',  aksi: function () { tambahKolom_(prefix, false); } },
+      { ikon: 'fa-solid fa-table',                 label: 'Sisipkan Tabel Baru',   aksi: function () { sisipkanTabel_(prefix); } },
+      { ikon: 'fa-solid fa-minus',                 label: 'Hapus Baris',   pisah: true, aksi: function () { hapusBaris_(prefix); } },
+      { ikon: 'fa-solid fa-grip-lines-vertical',   label: 'Hapus Kolom',            aksi: function () { hapusKolom_(prefix); } },
+      { ikon: 'fa-solid fa-rectangle-xmark',       label: 'Hapus Tabel',   danger: true, aksi: function () { hapusTabelDiKursor_(prefix); } }
     ]);
   });
   bar.appendChild(btn);

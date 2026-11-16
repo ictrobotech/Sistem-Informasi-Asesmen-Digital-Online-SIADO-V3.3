@@ -1516,12 +1516,12 @@
     var BTNS = [
       ['bold', 'fa-solid fa-bold', 'Tebal'],
       ['italic', 'fa-solid fa-italic', 'Miring'],
-      ['underline', 'fa-solid fa-underline', 'Garis bawah'],
+      ['underline', 'fa-solid fa-underline', 'Garis Bawah'],
       ['strikeThrough', 'fa-solid fa-strikethrough', 'Coret'],
       ['sub', 'fa-solid fa-subscript', 'Subskrip (H2O)'],
       ['sup', 'fa-solid fa-superscript', 'Superskrip (x2)'],
-      ['insertUnorderedList', 'fa-solid fa-list-ul', 'Daftar butir'],
-      ['insertOrderedList', 'fa-solid fa-list-ol', 'Daftar angka']
+      ['insertUnorderedList', 'fa-solid fa-list-ul', 'Daftar Butir'],
+      ['insertOrderedList', 'fa-solid fa-list-ol', 'Daftar Angka']
     ];
     BTNS.forEach(function (b) {
       if (opts.compact && ['sub', 'sup', 'insertUnorderedList', 'insertOrderedList'].indexOf(b[0]) !== -1) return;
@@ -1565,7 +1565,7 @@
 
     if (!opts.compact) {
       // Tabel
-      toolBtn('fa-solid fa-table', 'Sisipkan tabel', function () {
+      toolBtn('fa-solid fa-table', 'Sisipkan Tabel', function () {
         var pop = popover(function (p) {
           var f1 = field('Baris', 'input', '3');
           f1.querySelector('input').type = 'number'; f1.querySelector('input').min = '1'; f1.querySelector('input').max = '20';
@@ -1611,7 +1611,7 @@
         });
       });
       // Gambar
-      toolBtn('fa-regular fa-image', 'Sisipkan gambar dari URL (https)', function () {
+      toolBtn('fa-regular fa-image', 'Sisipkan Gambar Dari URL', function () {
         var pop = popover(function (p) {
           var f1 = field('URL gambar (https://...)', 'input', 'https://');
           var f2 = field('Keterangan (alt)', 'input', '');
@@ -1628,7 +1628,7 @@
     }
     // Rumus (dengan pratinjau langsung; copy-paste dari Word/AI langsung
     // boleh ditempel ke kotak ini — sumber LaTeX diambil otomatis)
-    toolBtn('fa-solid fa-square-root-variable', 'Sisipkan rumus (LaTeX) — boleh copy-paste langsung dari Word/AI', function () {
+    toolBtn('fa-solid fa-square-root-variable', 'Sisipkan Rumus Word / AI (LateX)', function () {
       var pop = popover(function (p) {
         var f1 = document.createElement('label');
         f1.className = 'srte-field';
@@ -1682,7 +1682,7 @@
       });
     });
     // Bersihkan format
-    toolBtn('fa-solid fa-wand-magic-sparkles', 'Rapikan tempelan / bersihkan format', function () {
+    toolBtn('fa-solid fa-wand-magic-sparkles', 'Rapikan Format', function () {
       setHtml(normalizeStyled(getHtml()));
       fireChange();
     });

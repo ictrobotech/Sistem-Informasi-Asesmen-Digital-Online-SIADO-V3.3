@@ -1888,6 +1888,83 @@ function pasangTombolPerataan_(prefix) {
   bar.appendChild(grup);
 }
 
+/* ===== HAPUS GRAFIK (menyertai tombol Sisipkan Grafik) ===== */
+var GRAFIK_TERAKHIR_ = { f: null, e: null };
+
+/** Mengingat grafik (svg) yang terakhir diklik di dalam editor. */
+function pasangPengingatGrafik_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area || area.__ingatGrafik) return;
+  area.__ingatGrafik = true;
+  area.addEventListener('mousedown', function (e) {
+    var el = e.target, svg = null;
+    while (el && el !== area) {
+      if (el.tagName && el.tagName.toLowerCase() === 'svg') { svg = el; break; }
+      el = el.parentNode;
+    }
+    if (svg) GRAFIK_TERAKHIR_[prefix] = svg;
+  });
+}
+
+/** Grafik di posisi kursor, atau grafik terakhir yang diklik. */
+function grafikDiKursor_(prefix, area) {
+  var jarak = jarakAktif_(prefix, area);
+  var titik = jarak ? jarak.startContainer : null;
+  var el = titik ? (titik.nodeType === 1 ? titik : titik.parentNode) : null;
+  while (el && el !== area) {
+    if (el.tagName && el.tagName.toLowerCase() === 'svg') return el;
+    el = el.parentNode;
+  }
+  var ingat = GRAFIK_TERAKHIR_[prefix];
+  if (ingat && ingat.parentNode && area.contains(ingat)) return ingat;
+  return null;
+}
+
+/** Menghapus grafik di posisi kursor (atau yang terakhir diklik). */
+function hapusGrafik_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var svg = grafikDiKursor_(prefix, area);
+  if (!svg) {
+    window.alert('Klik dulu grafik yang ingin dihapus, lalu tekan tombol Hapus Grafik.');
+    return;
+  }
+  if (!window.confirm('Hapus grafik ini?')) return;
+  var induk = svg.parentNode;
+  induk.removeChild(svg);
+  while (induk && induk !== area && induk.childNodes.length === 0 &&
+         induk.tagName && ['p', 'div', 'span'].indexOf(induk.tagName.toLowerCase()) !== -1) {
+    var naik = induk.parentNode;
+    naik.removeChild(induk);
+    induk = naik;
+  }
+  GRAFIK_TERAKHIR_[prefix] = null;
+  try { area.focus(); } catch (e) {}
+  sinkronPertanyaan_(prefix, area);
+}
+
+/** Tombol hapus grafik, dipasang TEPAT di sebelah tombol Sisipkan Grafik. */
+function pasangTombolHapusGrafik_(prefix, bar) {
+  if (!bar || bar.querySelector('.srte-btn-hapus-grafik')) return;
+  var tombolGrafik = null;
+  var semua = bar.querySelectorAll('.srte-btn');
+  for (var i = 0; i < semua.length; i++) {
+    var judul = String(semua[i].getAttribute('title') || '').toLowerCase();
+    if (judul.indexOf('sisipkan grafik') === 0) { tombolGrafik = semua[i]; break; }
+  }
+  if (!tombolGrafik) return;
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'srte-btn srte-btn-hapus-grafik';
+  btn.title = 'Hapus Grafik';
+  btn.innerHTML = '<i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-xmark srte-silang"></i>';
+  btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  btn.addEventListener('click', function (e) { e.preventDefault(); hapusGrafik_(prefix); });
+  tombolGrafik.parentNode.insertBefore(btn, tombolGrafik.nextSibling);
+}
+
 /** Memastikan tombol perataan + Baris/Kolom/Tabel selalu ada di bilah.
  *  Dipanggil saat mulai, saat editor difokuskan, dan lewat MutationObserver
  *  sehingga tombol kembali sendiri bila bilah dibangun ulang oleh pustaka. */
@@ -1899,10 +1976,13 @@ function pastikanTombolBilah_(prefix) {
   if (!bar) return;
   pasangTombolPerataan_(prefix);
   if (!bar.querySelector('.srte-btn-tabel')) pasangMenuTabel_(prefix, bar);
+  pasangPengingatGrafik_(prefix);
+  pasangTombolHapusGrafik_(prefix, bar);
   pasangNavigasiTabel_(prefix);
   if (!rte.__pantauBilah && typeof MutationObserver === 'function') {
     rte.__pantauBilah = new MutationObserver(function () {
-      if (!bar.querySelector('.srte-btn-tabel')) pastikanTombolBilah_(prefix);
+      if (!bar.querySelector('.srte-btn-tabel') ||
+          !bar.querySelector('.srte-btn-hapus-grafik')) pastikanTombolBilah_(prefix);
     });
     rte.__pantauBilah.observe(bar, { childList: true });
   }

@@ -1958,18 +1958,40 @@ function tabelDariTitik_(titik, area) {
 function sasaranPerataan_(area, jarak) {
   var hasil = [];
   if (!jarak) return hasil;
-  if (!jarak.collapsed) {
-    var semua = area.querySelectorAll('td, th');
-    var adaSel = false;
-    for (var i = 0; i < semua.length; i++) {
-      var kena = false;
-      try { kena = jarak.intersectsNode(semua[i]); } catch (e) { kena = false; }
-      if (kena) { hasil.push(semua[i]); adaSel = true; }
+
+  /* Tabel: sasaran = PERSEGI ANTARA sel awal dan sel akhir.
+     intersectsNode TIDAK dipakai karena ia ikut menghitung sel yang berada di
+     antara kedua titik pada urutan dokumen — akibatnya memblok kolom nomor
+     baris 1-2 ikut menyeret kolom lain pada baris yang sama. */
+  var selAwal  = selDariTitik_(jarak.startContainer, area);
+  var selAkhir = selDariTitik_(jarak.endContainer, area);
+  if (selAwal && selAkhir) {
+    var posA = posisiSel_(selAwal), posB = posisiSel_(selAkhir);
+    if (posA && posB && posA.tabel === posB.tabel) {
+      if (jarak.collapsed) return [selAwal];
+      var b1 = Math.min(posA.baris, posB.baris), b2 = Math.max(posA.baris, posB.baris);
+      var k1 = Math.min(posA.kolom, posB.kolom), k2 = Math.max(posA.kolom, posB.kolom);
+      for (var b = b1; b <= b2; b++) {
+        for (var k = k1; k <= k2; k++) {
+          var sel = posA.kisi[b] && posA.kisi[b][k];
+          if (sel) hasil.push(sel);
+        }
+      }
+      if (hasil.length) return hasil;
     }
-    if (adaSel) return hasil;
   }
-  var sel = selDariTitik_(jarak.startContainer, area);
-  if (sel) return [sel];
+
+  /* Di luar tabel: paragraf/daftar/judul yang tersentuh blok teks. */
+  if (!jarak.collapsed) {
+    var blokKena = area.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6');
+    for (var i = 0; i < blokKena.length; i++) {
+      var kena = false;
+      try { kena = jarak.intersectsNode(blokKena[i]); } catch (e) { kena = false; }
+      if (kena) hasil.push(blokKena[i]);
+    }
+    if (hasil.length) return hasil;
+  }
+  if (selAwal) return [selAwal];
   var blok = blokPerataanDari_(jarak.startContainer, area);
   return blok ? [blok] : [];
 }

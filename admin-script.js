@@ -2400,48 +2400,6 @@ function tambahKolom_(prefix, diKiri) {
   }
 }
 
-/** Sisipkan tabel baru di posisi kursor. */
-function sisipkanTabel_(prefix) {
-  var rte = RTE_PERTANYAAN[prefix];
-  var area = rte && rte.el;
-  if (!area) return;
-  var jBaris = parseInt(window.prompt('Jumlah baris tabel baru:', '3'), 10);
-  if (!jBaris || jBaris < 1) return;
-  var jKolom = parseInt(window.prompt('Jumlah kolom tabel baru:', '3'), 10);
-  if (!jKolom || jKolom < 1) return;
-  jBaris = Math.min(20, jBaris);
-  jKolom = Math.min(10, jKolom);
-
-  var html = '<table><tbody>';
-  for (var i = 0; i < jBaris; i++) {
-    html += '<tr>';
-    for (var k = 0; k < jKolom; k++) html += (i === 0 ? '<th><br></th>' : '<td><br></td>');
-    html += '</tr>';
-  }
-  html += '</tbody></table><p><br></p>';
-
-  pulihkanPilihan_(prefix);
-  var terpasang = false;
-  try { terpasang = document.execCommand('insertHTML', false, html); } catch (e) { terpasang = false; }
-  if (!terpasang) {
-    var wadah = document.createElement('div');
-    wadah.innerHTML = html;
-    var jarak = jarakAktif_(prefix, area);
-    if (jarak) {
-      var frag = document.createDocumentFragment();
-      while (wadah.firstChild) frag.appendChild(wadah.firstChild);
-      jarak.deleteContents();
-      jarak.insertNode(frag);
-    } else {
-      area.appendChild(wadah);
-    }
-  }
-  PILIHAN_TERAKHIR_[prefix] = null;
-  try { area.focus(); } catch (e) {}
-  simpanPilihan_(prefix);
-  sinkronPertanyaan_(prefix, area);
-}
-
 /* ===== MENU KECIL (dipakai tombol Tambah & Hapus) ===== */
 function tutupMenuAksi_() {
   var lama = document.querySelector('.srte-menu-aksi');
@@ -2495,7 +2453,7 @@ function pasangMenuTabel_(prefix, bar) {
   btn.type = 'button';
   btn.className = 'srte-btn srte-btn-tabel';
   btn.title = 'Baris / Kolom / Tabel';
-  btn.innerHTML = '<i class="fa-solid fa-table-cells-large"></i><span class="srte-btn-teks">Tabel</span>';
+  btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
   btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
   btn.addEventListener('click', function (e) {
     e.preventDefault();
@@ -2505,7 +2463,6 @@ function pasangMenuTabel_(prefix, bar) {
       { ikon: 'fa-solid fa-arrow-down',            label: 'Tambah Baris Dibawah',  aksi: function () { tambahBaris_(prefix, false); } },
       { ikon: 'fa-solid fa-arrow-left',            label: 'Tambah Kolom Dikiri',   aksi: function () { tambahKolom_(prefix, true); } },
       { ikon: 'fa-solid fa-arrow-right',           label: 'Tambah Kolom Dikanan',  aksi: function () { tambahKolom_(prefix, false); } },
-      { ikon: 'fa-solid fa-table',                 label: 'Sisipkan Tabel Baru',   aksi: function () { sisipkanTabel_(prefix); } },
       { ikon: 'fa-solid fa-minus',                 label: 'Hapus Baris',   pisah: true, aksi: function () { hapusBaris_(prefix); } },
       { ikon: 'fa-solid fa-grip-lines-vertical',   label: 'Hapus Kolom',            aksi: function () { hapusKolom_(prefix); } },
       { ikon: 'fa-solid fa-rectangle-xmark',       label: 'Hapus Tabel',   danger: true, aksi: function () { hapusTabelDiKursor_(prefix); } }

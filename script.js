@@ -3,6 +3,62 @@
  * Timer, autosave, sinkron soal realtime, dan proteksi best-effort.
  * ================================================================ */
 
+/* ===== PERATAAN ISI TABEL PADA TAMPILAN PESERTA =====
+ * SRich.renderRich() membershipkan HTML dan membuang atribut style, sehingga
+ * text-align pada <td>/<th>/<p> hilang. Di sini perataan dibaca dari HTML asli
+ * lebih dulu, lalu dipasang kembali pada hasil yang sudah dibersihkan.
+ * Menjaga markup tetap aman: hanya text-align (left/center/right/justify).
+ */
+var TAG_PERATAAN_PESERTA_ = ['td', 'th', 'caption', 'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+var NILAI_PERATAAN_PESERTA_ = ['left', 'center', 'right', 'justify'];
+
+function petaPerataanPeserta_(html) {
+  var peta = {};
+  if (!html || typeof document === 'undefined') return peta;
+  var wadah = document.createElement('div');
+  wadah.innerHTML = String(html);
+  TAG_PERATAAN_PESERTA_.forEach(function (tag) {
+    var daftar = wadah.querySelectorAll(tag);
+    var nilai = [];
+    for (var i = 0; i < daftar.length; i++) {
+      var ta = String((daftar[i].style && daftar[i].style.textAlign) || '').toLowerCase();
+      if (ta === 'start') ta = 'left';
+      if (ta === 'justify-all') ta = 'justify';
+      nilai.push(NILAI_PERATAAN_PESERTA_.indexOf(ta) === -1 ? '' : ta);
+    }
+    peta[tag] = nilai;
+  });
+  return peta;
+}
+
+function terapkanPerataanPeserta_(htmlBersih, peta) {
+  if (!htmlBersih || typeof document === 'undefined') return htmlBersih;
+  var wadah = document.createElement('div');
+  wadah.innerHTML = String(htmlBersih);
+  Object.keys(peta || {}).forEach(function (tag) {
+    var daftar = wadah.querySelectorAll(tag);
+    var nilai = peta[tag] || [];
+    for (var i = 0; i < daftar.length && i < nilai.length; i++) {
+      if (!nilai[i]) continue;
+      var lama = daftar[i].getAttribute('style') || '';
+      if (lama && lama.charAt(lama.length - 1) !== ';') lama += ';';
+      daftar[i].setAttribute('style', lama + 'text-align:' + nilai[i]);
+    }
+  });
+  return wadah.innerHTML;
+}
+
+(function pasangPerataanPeserta_() {
+  if (!window.SRich || SRich.__perataanPeserta) return;
+  var renderAsli = SRich.renderRich;
+  SRich.renderRich = function (html) {
+    var bersih = renderAsli.apply(this, arguments);
+    try { return terapkanPerataanPeserta_(bersih, petaPerataanPeserta_(html)); }
+    catch (e) { return bersih; }
+  };
+  SRich.__perataanPeserta = true;
+})();
+
 var UJIAN = {
   peserta: null,
   soal: [],

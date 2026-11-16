@@ -689,13 +689,15 @@ function bindAdminInterface() {
   RTE_PERTANYAAN.f = SRich.mountEditor(document.getElementById('fPertanyaanRte'), {
     placeholder: 'Tulis pertanyaan. Dukung tebal, miring, garis bawah, coret, tabel, grafik, gambar, dan rumus.',
     maxlength: 12000,
-    onChange: function() { document.getElementById('fPertanyaan').value = RTE_PERTANYAAN.f.getHtml(); }
+    onChange: function() { document.getElementById('fPertanyaan').value = gabungPerataan_(RTE_PERTANYAAN.f.getHtml(), RTE_PERTANYAAN.f.el.innerHTML); }
   });
   RTE_PERTANYAAN.e = SRich.mountEditor(document.getElementById('ePertanyaanRte'), {
     placeholder: 'Tulis pertanyaan...',
     maxlength: 12000,
-    onChange: function() { document.getElementById('ePertanyaan').value = RTE_PERTANYAAN.e.getHtml(); }
+    onChange: function() { document.getElementById('ePertanyaan').value = gabungPerataan_(RTE_PERTANYAAN.e.getHtml(), RTE_PERTANYAAN.e.el.innerHTML); }
   });
+  pasangTombolPerataan_('f');
+  pasangTombolPerataan_('e');
   resetPgkEditor('f', null);
   resetJodohEditor('f', null);
   bersihkanGambarOpsi_('f');
@@ -1744,6 +1746,166 @@ function perbaruiKunciJodoh_(prefix) {
 var PGK_STATE = { f: null, e: null };
 var JODOH_STATE = { f: null, e: null };
 var RTE_PERTANYAAN = { f: null, e: null };
+
+/* ===== PERATAAN TEKS & TABEL (rata kiri / tengah / kanan / kiri-kanan) =====
+ * Editor membershipkan HTML dan membuang atribut style, jadi text-align hilang.
+ * Di sini perataan dibaca dari HTML editor SEBELUM dibersihkan, ditulis lagi ke
+ * HTML yang disimpan, dan dipasang kembali saat pratinjau maupun tampilan peserta.
+ */
+var TAG_PERATAAN_ = ['td', 'th', 'caption', 'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+var NILAI_PERATAAN_ = ['left', 'center', 'right', 'justify'];
+var LABEL_PERATAAN_ = { left: 'Rata kiri', center: 'Rata tengah', right: 'Rata kanan', justify: 'Rata kiri-kanan' };
+var IKON_PERATAAN_ = {
+  left: 'fa-solid fa-align-left',
+  center: 'fa-solid fa-align-center',
+  right: 'fa-solid fa-align-right',
+  justify: 'fa-solid fa-align-justify'
+};
+
+function bacaPerataanDari_(el) {
+  if (!el || !el.style) return '';
+  var nilai = String(el.style.textAlign || '').toLowerCase();
+  if (nilai === 'start') nilai = 'left';
+  if (nilai === 'justify-all') nilai = 'justify';
+  return NILAI_PERATAAN_.indexOf(nilai) === -1 ? '' : nilai;
+}
+
+/** Peta perataan per jenis tag, dalam urutan dokumen. */
+function petaPerataan_(html) {
+  var peta = {};
+  if (!html || typeof document === 'undefined') return peta;
+  var wadah = document.createElement('div');
+  wadah.innerHTML = String(html);
+  TAG_PERATAAN_.forEach(function (tag) {
+    var daftar = wadah.querySelectorAll(tag);
+    var nilai = [];
+    for (var i = 0; i < daftar.length; i++) nilai.push(bacaPerataanDari_(daftar[i]));
+    peta[tag] = nilai;
+  });
+  return peta;
+}
+
+/** Menuliskan kembali perataan ke HTML yang sudah dibersihkan. */
+function terapkanPetaPerataan_(htmlBersih, peta) {
+  if (!htmlBersih || typeof document === 'undefined') return htmlBersih;
+  var wadah = document.createElement('div');
+  wadah.innerHTML = String(htmlBersih);
+  Object.keys(peta || {}).forEach(function (tag) {
+    var daftar = wadah.querySelectorAll(tag);
+    var nilai = peta[tag] || [];
+    for (var i = 0; i < daftar.length && i < nilai.length; i++) {
+      if (!nilai[i]) continue;
+      var lama = daftar[i].getAttribute('style') || '';
+      if (lama && lama.charAt(lama.length - 1) !== ';') lama += ';';
+      daftar[i].setAttribute('style', lama + 'text-align:' + nilai[i]);
+    }
+  });
+  return wadah.innerHTML;
+}
+
+/** Gabungan: ambil perataan dari html mentah, terapkan ke html bersih. */
+function gabungPerataan_(htmlBersih, htmlMentah) {
+  try { return terapkanPetaPerataan_(htmlBersih, petaPerataan_(htmlMentah)); }
+  catch (e) { return htmlBersih; }
+}
+
+/** Memasang kembali perataan ke dalam editor (mis. saat membuka form edit). */
+function terapkanPerataanKeEditor_(prefix, htmlAsli) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el) return;
+  try {
+    var peta = petaPerataan_(htmlAsli);
+    Object.keys(peta).forEach(function (tag) {
+      var daftar = rte.el.querySelectorAll(tag);
+      var nilai = peta[tag] || [];
+      for (var i = 0; i < daftar.length && i < nilai.length; i++) {
+        if (nilai[i]) daftar[i].style.textAlign = nilai[i];
+      }
+    });
+  } catch (e) {}
+}
+
+/** Blok terdekat: sel tabel bila ada, kalau tidak paragraf/daftar terdekat. */
+function blokPerataanDari_(node, areaAtas) {
+  var el = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
+  var kandidat = null;
+  while (el && el !== areaAtas) {
+    var tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'td' || tag === 'th') return el;
+    if (TAG_PERATAAN_.indexOf(tag) !== -1 && !kandidat) kandidat = el;
+    el = el.parentNode;
+  }
+  return kandidat;
+}
+
+/** Menerapkan perataan pada pilihan; bila di dalam tabel, seluruh sel terpilih. */
+function terapkanPerataanSeleksi_(prefix, nilai) {
+  var rte = RTE_PERTANYAAN[prefix];
+  var area = rte && rte.el;
+  if (!area) return;
+  var sel = window.getSelection ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount || !area.contains(sel.anchorNode)) { area.focus(); return; }
+  var jarak = sel.getRangeAt(0);
+  var sasaran = [];
+  if (!jarak.collapsed) {
+    var selTabel = area.querySelectorAll('td, th');
+    for (var i = 0; i < selTabel.length; i++) {
+      try { if (jarak.intersectsNode(selTabel[i])) sasaran.push(selTabel[i]); } catch (e) {}
+    }
+  }
+  if (!sasaran.length) {
+    var blok = blokPerataanDari_(sel.anchorNode, area);
+    if (blok) sasaran.push(blok);
+  }
+  sasaran.forEach(function (el) {
+    el.style.textAlign = (nilai === 'left') ? '' : nilai;
+    var anak = el.querySelectorAll('p, div');
+    for (var j = 0; j < anak.length; j++) anak[j].style.textAlign = '';
+  });
+  var ta = document.getElementById(prefix + 'Pertanyaan');
+  if (ta) ta.value = gabungPerataan_(rte.getHtml(), area.innerHTML);
+}
+
+/** Menambahkan 4 tombol perataan ke bilah editor. */
+function pasangTombolPerataan_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el) return;
+  var host = rte.el.parentNode;
+  var bar = host ? host.querySelector('.srte-bar') : null;
+  if (!bar || bar.querySelector('.srte-perataan')) return;
+  var grup = document.createElement('span');
+  grup.className = 'srte-perataan';
+  NILAI_PERATAAN_.forEach(function (nilai) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'srte-btn srte-btn-perataan';
+    btn.title = LABEL_PERATAAN_[nilai] + (nilai === 'justify' ? ' (isi tabel & teks)' : '');
+    btn.setAttribute('data-rata', nilai);
+    btn.innerHTML = '<i class="' + IKON_PERATAAN_[nilai] + '"></i>';
+    btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    btn.addEventListener('click', function () {
+      terapkanPerataanSeleksi_(prefix, nilai);
+      Array.prototype.forEach.call(grup.querySelectorAll('.srte-btn-perataan'), function (x) {
+        x.classList.toggle('srte-aktif', x === btn);
+      });
+    });
+    grup.appendChild(btn);
+  });
+  bar.appendChild(grup);
+}
+
+/* Pratinjau & tampilan peserta: pasang kembali perataan sesudah dibersihkan. */
+(function pasangPerataanRender_() {
+  if (!window.SRich || SRich.__perataanTerpasang) return;
+  var renderAsli = SRich.renderRich;
+  SRich.renderRich = function (html) {
+    var bersih = renderAsli.apply(this, arguments);
+    try { return gabungPerataan_(bersih, html); } catch (e) { return bersih; }
+  };
+  SRich.__perataanTerpasang = true;
+})();
+
+
 
 function pgkStateDefault() {
   return { labelKiri: '', kategori: kategoriObjek_(['Informasi Penting', 'Dapat Diabaikan']), rows: [] };
@@ -2873,7 +3035,9 @@ async function buildQuestionPayload(prefix) {
   // kategori disematkan sebagai penanda tersembunyi agar tampilan peserta
   // selalu sama dengan susunan di panel.
   var rte = RTE_PERTANYAAN[prefix];
-  var pertanyaanHtml = rte ? rte.getHtml() : document.getElementById(prefix + 'Pertanyaan').value;
+  var pertanyaanHtml = rte
+    ? gabungPerataan_(rte.getHtml(), rte.el ? rte.el.innerHTML : '')
+    : document.getElementById(prefix + 'Pertanyaan').value;
   if (tipe === 'PGK') {
     var stPgk = PGK_STATE[prefix] || { kategori: [] };
     pertanyaanHtml = SRich.pgkMarkerEmbed(
@@ -3611,7 +3775,10 @@ function openEditQuestion(id) {
   var elMapelEdit = document.getElementById('eMapel');
   if (elMapelEdit) elMapelEdit.value = EDIT_MAPEL_LAMA_ || mapelDiujikan_();
   document.getElementById('ePertanyaan').value = question.pertanyaan;
-  if (RTE_PERTANYAAN.e) RTE_PERTANYAAN.e.setHtml(question.pertanyaan);
+  if (RTE_PERTANYAAN.e) {
+    RTE_PERTANYAAN.e.setHtml(question.pertanyaan);
+    terapkanPerataanKeEditor_('e', question.pertanyaan);
+  }
   setNilaiInput_('eDeskripsiStimulus', question.stimulus_deskripsi || '');
   // Isi editor terstruktur PGK Kategori & Menjodohkan dari data soal tersimpan.
   var tipeSoal = String(question.tipe || '').toUpperCase();

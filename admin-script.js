@@ -696,8 +696,8 @@ function bindAdminInterface() {
     maxlength: 12000,
     onChange: function() { document.getElementById('ePertanyaan').value = gabungPerataan_(RTE_PERTANYAAN.e.getHtml(), RTE_PERTANYAAN.e.el.innerHTML); }
   });
-  pasangTombolPerataan_('f');
-  pasangTombolPerataan_('e');
+  pastikanTombolBilah_('f');
+  pastikanTombolBilah_('e');
   resetPgkEditor('f', null);
   resetJodohEditor('f', null);
   bersihkanGambarOpsi_('f');
@@ -1862,14 +1862,18 @@ function pasangTombolPerataan_(prefix) {
   if (!rte || !rte.el) return;
   var host = rte.el.parentNode;
   var bar = host ? host.querySelector('.srte-bar') : null;
-  if (!bar || bar.querySelector('.srte-perataan')) return;
+  if (!bar) return;
+  /* JANGAN berhenti hanya karena grup perataan sudah ada: dulu early-return di
+     sini membuat tombol "Baris / Kolom / Tabel" tidak pernah dipasang bila bilah
+     sudah pernah dihias. Pemasangan dipecah ke pastikanTombolBilah_(). */
+  if (bar.querySelector('.srte-perataan')) return;
   var grup = document.createElement('span');
   grup.className = 'srte-perataan';
   NILAI_PERATAAN_.forEach(function (nilai) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'srte-btn srte-btn-perataan';
-    btn.title = LABEL_PERATAAN_[nilai] + (nilai === 'justify' ? ' (isi tabel & teks)' : '');
+    btn.title = LABEL_PERATAAN_[nilai];
     btn.setAttribute('data-rata', nilai);
     btn.innerHTML = '<i class="' + IKON_PERATAAN_[nilai] + '"></i>';
     btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
@@ -1882,8 +1886,26 @@ function pasangTombolPerataan_(prefix) {
     grup.appendChild(btn);
   });
   bar.appendChild(grup);
-  pasangMenuTabel_(prefix, bar);
+}
+
+/** Memastikan tombol perataan + Baris/Kolom/Tabel selalu ada di bilah.
+ *  Dipanggil saat mulai, saat editor difokuskan, dan lewat MutationObserver
+ *  sehingga tombol kembali sendiri bila bilah dibangun ulang oleh pustaka. */
+function pastikanTombolBilah_(prefix) {
+  var rte = RTE_PERTANYAAN[prefix];
+  if (!rte || !rte.el) return;
+  var host = rte.el.parentNode;
+  var bar = host ? host.querySelector('.srte-bar') : null;
+  if (!bar) return;
+  pasangTombolPerataan_(prefix);
+  if (!bar.querySelector('.srte-btn-tabel')) pasangMenuTabel_(prefix, bar);
   pasangNavigasiTabel_(prefix);
+  if (!rte.__pantauBilah && typeof MutationObserver === 'function') {
+    rte.__pantauBilah = new MutationObserver(function () {
+      if (!bar.querySelector('.srte-btn-tabel')) pastikanTombolBilah_(prefix);
+    });
+    rte.__pantauBilah.observe(bar, { childList: true });
+  }
 }
 
 
@@ -2121,7 +2143,10 @@ function pasangNavigasiTabel_(prefix) {
   rte.__navTabel = true;
 
   ['keyup', 'mouseup', 'focus'].forEach(function (ev) {
-    area.addEventListener(ev, function () { simpanPilihan_(prefix); });
+    area.addEventListener(ev, function () {
+      simpanPilihan_(prefix);
+      pastikanTombolBilah_(prefix);
+    });
   });
 
   area.addEventListener('keydown', function (e) {
@@ -2470,7 +2495,7 @@ function pasangMenuTabel_(prefix, bar) {
   btn.type = 'button';
   btn.className = 'srte-btn srte-btn-tabel';
   btn.title = 'Baris / Kolom / Tabel';
-  btn.innerHTML = '<i class="fa-solid fa-table-list"></i>';
+  btn.innerHTML = '<i class="fa-solid fa-table-cells-large"></i><span class="srte-btn-teks">Tabel</span>';
   btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
   btn.addEventListener('click', function (e) {
     e.preventDefault();

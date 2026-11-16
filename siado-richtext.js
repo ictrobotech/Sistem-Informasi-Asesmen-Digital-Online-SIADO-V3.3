@@ -1589,7 +1589,7 @@
         });
       });
       // Grafik
-      toolBtn('fa-solid fa-chart-column', 'Sisipkan grafik (batang/garis/lingkaran)', function () {
+      toolBtn('fa-solid fa-chart-column', 'Sisipkan Grafik', function () {
         var pop = popover(function (p) {
           var f0 = field('Judul grafik', 'input', '');
           var f1 = document.createElement('label'); f1.className = 'srte-field';

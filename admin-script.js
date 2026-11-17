@@ -580,7 +580,18 @@ function bindAdminInterface() {
     var opsiEl = document.getElementById(prefix + 'Opsi');
     if (opsiEl) opsiEl.addEventListener('input', function() { renderOpsiGambar_(prefix); });
     var tipeEl = document.getElementById(prefix + 'Tipe');
-    if (tipeEl) tipeEl.addEventListener('change', function() { renderOpsiGambar_(prefix); renderKunciGambar_(prefix); });
+    if (tipeEl) tipeEl.addEventListener('change', function() {
+      renderOpsiGambar_(prefix); renderKunciGambar_(prefix);
+      /* Revisi 2026-11-17: peringatan tipe soal ikut diperbarui. */
+      periksaTipeSaatIni_(prefix);
+    });
+    var elKunciCek = document.getElementById(prefix + 'Kunci');
+    if (elKunciCek) {
+      elKunciCek.addEventListener('input', function() { periksaTipeSaatIni_(prefix); });
+      elKunciCek.addEventListener('change', function() { periksaTipeSaatIni_(prefix); });
+    }
+    var elOpsiCek = document.getElementById(prefix + 'Opsi');
+    if (elOpsiCek) elOpsiCek.addEventListener('input', function() { periksaTipeSaatIni_(prefix); });
     pasangLabelKolomKiri_(prefix);
     ['JodohLabelKiri', 'JodohLabelKanan'].forEach(function(sufiks) {
       var elLabel = document.getElementById(prefix + sufiks);
@@ -2915,6 +2926,205 @@ function resetJodohEditor(prefix, rows) {
 }
 
 /** Validasi editor terstruktur & pertanyaan sebelum disimpan. */
+
+/* ==================================================================
+ * NOTIFIKASI "JAWABAN TIDAK SESUAI TIPE SOAL"  (revisi 2026-11-17)
+ *
+ * Guru sering salah memilih tipe soal, misalnya memilih PGK MCMA padahal
+ * soal hanya punya satu jawaban benar. Sebelum revisi ini soal seperti itu
+ * tetap tersimpan, sehingga penerapan tipe menjadi salah di halaman peserta.
+ *
+ * Pemeriksaan di bawah berjalan SEBELUM data dikirim ke server:
+ *   masalah -> simpan dibatalkan, guru diberi notifikasi + petunjuk
+ *   saran   -> boleh simpan, tetapi diberi peringatan lebih dulu
+ *   ragu    -> guru boleh meneruskan (tipe bisa saja memang disengaja)
+ * ================================================================== */
+
+/** Huruf opsi yang tersedia pada penyunting (A..H). */
+function hurufOpsiEditor_(prefix) {
+  var daftar = optionsFromField(prefix);
+  return daftar.map(function(op, i) {
+    return String((op && op.label) || SIADO_HURUF_OPSI_.charAt(i) || '');
+  }).filter(Boolean);
+}
+
+/** Daftar kategori PGK Kategori yang terisi pada penyunting. */
+function kategoriEditor_(prefix) {
+  var st = PGK_STATE[prefix];
+  if (!st || !Array.isArray(st.kategori)) return [];
+  return st.kategori.map(namaKategori_).map(function(x) { return String(x || '').trim(); })
+    .filter(Boolean);
+}
+
+/** Baris Menjodohkan yang sudah lengkap (teks/gambar kiri dan kanan). */
+function pasanganEditor_(prefix) {
+  var jd = JODOH_STATE[prefix];
+  if (!jd || !Array.isArray(jd.rows)) return [];
+  return jd.rows.filter(function(r) {
+    return (String(r.text || '').trim() || String(r.gambar || '').trim()) &&
+      (String(r.pasangan || '').trim() || String(r.pasanganGambar || '').trim());
+  });
+}
+
+/**
+ * Memeriksa kesesuaian isi formulir dengan tipe soal yang dipilih.
+ * Mengembalikan { tipe, masalah: [], saran: [], ragu: [], ringkas }.
+ *   masalah : penyimpanan dibatalkan
+ *   saran   : boleh disimpan setelah guru menegaskan
+ *   ragu    : boleh disimpan, guru hanya diberi tahu
+ */
+function validasiSesuaiTipe_(prefix) {
+  var tipeEl = document.getElementById(prefix + 'Tipe');
+  var tipe = String((tipeEl && tipeEl.value) || 'PG').toUpperCase();
+  var elKunci = document.getElementById(prefix + 'Kunci');
+  var kunciMentah = elKunci ? String(elKunci.value || '') : '';
+  var daftarOpsi = optionsFromField(prefix);
+  var jumlahOpsi = daftarOpsi.length;
+  var hurufTersedia = hurufOpsiEditor_(prefix);
+  var huruf = hurufKunciPilihan_(kunciMentah, daftarOpsi);
+  var hasil = { tipe: tipe, masalah: [], saran: [], ragu: [], ringkas: '' };
+  var labelNama = labelTipeSoal_(tipe);
+
+  if (tipe === 'PG' || tipe === 'PGK_MCMA') {
+    if (jumlahOpsi < 2) {
+      hasil.masalah.push('Tipe ' + labelNama + ' membutuhkan minimal 2 opsi, sedangkan kolom Opsi / Pernyataan baru berisi ' +
+        jumlahOpsi + ' baris.');
+    }
+    if (jumlahOpsi > 8) {
+      hasil.masalah.push('Jumlah opsi ' + jumlahOpsi + ' melebihi batas 8 opsi (A sampai H).');
+    }
+    if (!kunciMentah.trim()) {
+      hasil.masalah.push('Kunci jawaban belum diisi. Tipe ' + labelNama + ' wajib punya kunci.');
+    } else if (!huruf.length) {
+      /* Bukan masalah tipe, tetapi kunci tidak terbaca: tetap dicegah karena
+         server juga akan menolaknya. */
+      hasil.masalah.push('Kunci "' + kunciMentah.trim() + '" tidak dikenali. Pakai huruf opsi, misalnya ' +
+        (tipe === 'PG' ? 'A.' : 'A,C.'));
+    } else if (tipe === 'PGK_MCMA' && huruf.length === 1) {
+      hasil.masalah.push('Tipe soal yang dipilih adalah ' + labelNama + ' (jawaban lebih dari satu), tetapi kunci jawaban hanya berisi 1 pilihan (' +
+        huruf[0] + '). Soal dengan satu jawaban benar harus memakai tipe Pilihan Ganda.');
+      hasil.masalah.push('Pilih salah satu: ubah Tipe soal menjadi Pilihan Ganda, atau tambahkan kunci kedua, misalnya ' +
+        huruf[0] + ',' + (hurufTersedia[1] || 'B') + '.');
+    } else if (tipe === 'PG' && huruf.length > 1) {
+      hasil.masalah.push('Tipe soal yang dipilih adalah Pilihan Ganda (satu jawaban), tetapi kunci jawaban berisi ' +
+        huruf.length + ' pilihan (' + huruf.join(',') + ').');
+      hasil.masalah.push('Pilih salah satu: ubah Tipe soal menjadi PGK MCMA, atau sisakan satu kunci saja.');
+    }
+    if (tipe === 'PGK_MCMA' && jumlahOpsi >= 2) {
+      var semuaTerpilih = huruf.length >= jumlahOpsi;
+      if (semuaTerpilih) {
+        hasil.saran.push('Semua opsi (' + huruf.length + ' dari ' + jumlahOpsi + ') dijadikan kunci. Pastikan memang tidak ada pengecoh.');
+      }
+      /* 2 kunci dari 4 opsi adalah PGK MCMA yang wajar, jadi tidak diberi
+         peringatan. Yang perlu diperiksa hanya bila SEMUA opsi jadi kunci
+         (tidak ada pengecoh sama sekali). */
+    }
+  } else if (tipe === 'PGK') {
+    var kategori = kategoriEditor_(prefix);
+    var baris = (PGK_STATE[prefix] && PGK_STATE[prefix].rows) || [];
+    if (kategori.length < 2) {
+      hasil.masalah.push('PGK Kategori membutuhkan minimal 2 kategori jawaban, sedangkan baru terisi ' + kategori.length + '.');
+    }
+    if (!baris.length) {
+      hasil.masalah.push('PGK Kategori membutuhkan minimal 1 pernyataan beserta kunci kategorinya.');
+    }
+    var tanpaKunci = baris.filter(function(r) { return !String(r.kunci || '').trim(); }).length;
+    if (tanpaKunci) {
+      hasil.masalah.push(tanpaKunci + ' pernyataan belum dipilihkan kunci kategorinya.');
+    } else if (baris.length) {
+      var semuaSatuKategori = baris.every(function(r) {
+        return String(r.kunci || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean).length <= 1;
+      });
+      if (kategori.length >= 2 && semuaSatuKategori && baris.length > 1) {
+        hasil.ragu.push('Semua pernyataan memakai satu kategori saja. Bila soal hanya punya satu jawaban benar, ' +
+          'tipe yang tepat adalah Pilihan Ganda.');
+      }
+    }
+  } else if (tipe === 'MENJODOHKAN') {
+    var pasangan = pasanganEditor_(prefix);
+    if (pasangan.length < 2) {
+      hasil.masalah.push('Menjodohkan membutuhkan minimal 2 pasangan lengkap, sedangkan baru ' + pasangan.length + '.');
+    }
+  } else if (tipe === 'ISIAN' || tipe === 'URAIAN') {
+    if (!kunciMentah.trim()) {
+      hasil.saran.push('Tipe ' + labelNama + ' belum memiliki kunci atau rubrik penilaian. Boleh tetap disimpan, ' +
+        'tetapi penilaian nanti tidak punya acuan.');
+    }
+  }
+  hasil.ringkas = hasil.masalah.concat(hasil.saran, hasil.ragu);
+  return hasil;
+}
+
+/** Menampilkan / menyembunyikan kotak peringatan di bawah kolom kunci. */
+function tampilkanPeringatanTipe_(prefix, hasil) {
+  var kotak = document.getElementById(prefix + 'PeringatanTipe');
+  if (!kotak) return;
+  if (!hasil || !hasil.ringkas.length) {
+    kotak.hidden = true;
+    kotak.innerHTML = '';
+    kotak.className = 'peringatan-tipe';
+    return;
+  }
+  var jenis = hasil.masalah.length ? 'masalah' : (hasil.saran.length ? 'saran' : 'ragu');
+  var ikon = jenis === 'masalah' ? 'fa-circle-xmark' : (jenis === 'saran' ? 'fa-triangle-exclamation' : 'fa-circle-info');
+  var judul = jenis === 'masalah'
+    ? 'Jawaban tidak sesuai tipe soal — belum bisa disimpan'
+    : (jenis === 'saran' ? 'Periksa kembali sebelum menyimpan' : 'Sekadar pengingat');
+  var html = '<div class="peringatan-tipe-judul"><i class="fa-solid ' + ikon + '"></i> ' + escapeAdmin(judul) + '</div><ul>';
+  hasil.masalah.concat(hasil.saran, hasil.ragu).forEach(function(baris) {
+    html += '<li>' + escapeAdmin(baris) + '</li>';
+  });
+  html += '</ul>';
+  if (jenis !== 'masalah') {
+    html += '<div class="peringatan-tipe-aksi"><button type="button" class="admin-secondary" data-tutup-peringatan-tipe="' +
+      prefix + '" style="min-height:28px"><i class="fa-solid fa-check"></i> Mengerti</button></div>';
+  }
+  kotak.className = 'peringatan-tipe ' + jenis;
+  kotak.innerHTML = html;
+  kotak.hidden = false;
+  var tombol = kotak.querySelector('[data-tutup-peringatan-tipe]');
+  if (tombol) tombol.addEventListener('click', function() { kotak.hidden = true; });
+}
+
+/** Dipanggil saat tipe soal atau kunci berubah: memperbarui kotak peringatan. */
+function periksaTipeSaatIni_(prefix) {
+  if (!document.getElementById(prefix + 'PeringatanTipe')) return;
+  tampilkanPeringatanTipe_(prefix, validasiSesuaiTipe_(prefix));
+}
+
+/**
+ * Gerbang simpan: dipanggil sebelum payload dibangun.
+ * Mengembalikan true bila penyimpanan boleh diteruskan.
+ */
+async function gerbangTipeSoal_(prefix) {
+  var hasil = validasiSesuaiTipe_(prefix);
+  tampilkanPeringatanTipe_(prefix, hasil);
+  if (hasil.masalah.length) {
+    await hasilGagal_('Jawaban Tidak Sesuai Tipe Soal',
+      'Soal belum disimpan karena isi jawaban tidak sesuai dengan tipe yang dipilih.',
+      hasil.masalah.map(function(baris) { return String(baris); }).concat([
+        { label: 'Tipe soal sekarang', nilai: labelTipeSoal_(hasil.tipe) }
+      ]));
+    return false;
+  }
+  if (hasil.saran.length) {
+    var lanjut = await konfirmasi_(
+      'Ada hal yang sebaiknya diperiksa dulu sebelum soal disimpan.',
+      {
+        judul: 'Periksa Kesesuaian Tipe Soal',
+        nada: 'warn',
+        pesanHtml: '<span class="dialog-text">' + escapeAdmin('Isi soal ini bisa disimpan, tetapi ada hal yang sebaiknya diperiksa:') +
+          '</span><ul class="dialog-list">' +
+          hasil.saran.map(function(baris) { return '<li><span>' + escapeAdmin(baris) + '</span></li>'; }).join('') +
+          '</ul><span class="dialog-text">Tetap simpan soal ini?</span>',
+        teksOk: 'Ya, Simpan',
+        teksBatal: 'Periksa Dulu'
+      });
+    if (!lanjut) return false;
+  }
+  return true;
+}
+
 function validateSoalStruct_(prefix) {
   var tipe = document.getElementById(prefix + 'Tipe').value;
   var rte = RTE_PERTANYAAN[prefix];
@@ -3841,6 +4051,8 @@ async function previewEditMedia() {
 
 async function saveNewQuestion() {
   if (ADMIN.operationBusy.addQuestion) return;
+  /* Revisi 2026-11-17: hentikan penyimpanan bila jawaban tidak sesuai tipe soal. */
+  if (!(await gerbangTipeSoal_('f'))) return;
   var galatStruktur = validateSoalStruct_('f');
   if (galatStruktur) {
     await hasilGagal_('Soal Gagal Disimpan', galatStruktur);
@@ -4510,6 +4722,8 @@ function openEditQuestion(id) {
   document.getElementById('eMediaStatus').className = 'media-status';
   document.getElementById('eUploadProgress').classList.remove('show');
   updateQuestionFormatHelp('e');
+  /* Catatan tipe soal milik soal sebelumnya jangan terbawa. */
+  tampilkanPeringatanTipe_('e', null);
   previewEditMedia();
   document.getElementById('editQuestionModal').classList.add('show');
 }
@@ -4518,6 +4732,8 @@ function closeEditQuestion() { document.getElementById('editQuestionModal').clas
 
 async function saveEditedQuestion() {
   if (ADMIN.operationBusy.editQuestion) return;
+  /* Revisi 2026-11-17: hentikan penyimpanan bila jawaban tidak sesuai tipe soal. */
+  if (!(await gerbangTipeSoal_('e'))) return;
   var galatStruktur = validateSoalStruct_('e');
   if (galatStruktur) {
     await hasilGagal_('Perubahan Gagal Disimpan', galatStruktur);

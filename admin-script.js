@@ -3205,7 +3205,7 @@ function opsiTeksBaris_(prefix) {
   var el = document.getElementById(prefix + 'Opsi');
   if (!el) return [];
   return String(el.value || '').split(/\r?\n/)
-    .map(function(l) { return l.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
+    .map(function(l) { return l.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); })
     .filter(Boolean);
 }
 
@@ -3312,7 +3312,7 @@ function optionsFromField(prefix) {
     }
   }
   var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
-    .map(function(line) { return line.trim().replace(/^[A-Ha-h0-9]+[.)\-:]\s*/, ''); })
+    .map(function(line) { return line.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); })
     .filter(Boolean);
   var gambarOpsi = gambarOpsiDari_(prefix);
   if (type === 'MENJODOHKAN') {

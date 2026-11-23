@@ -1660,6 +1660,9 @@ function renderAnswerInput(question, value) {
       // tampilkan label standar A/B/C/D.
       var optionText = String(option.text || '');
       if (!optionText && rawLabel && !isLetter) optionText = rawLabel;
+      /* Revisi 2026-11-23: teks penanda "(gambar saja)" dari versi lama
+         dibuang agar tidak tampil di atas gambar opsi. */
+      if (option.gambar && /^\(?\s*gambar\s+saja\s*\)?[.!]?$/i.test(optionText.trim())) optionText = '';
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
         '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span><span class="choice-body"> ' +
@@ -1676,7 +1679,13 @@ function renderAnswerInput(question, value) {
       kategori: infoKategori.kategori,
       kategoriInfo: infoKategori.kategoriInfo,
       labelKiri: infoKategori.labelKiri,
-      statements: options.map(function(option) { return { id: option.id, html: option.text }; }),
+      statements: options.map(function(option) {
+        /* Revisi 2026-11-23: penanda "(gambar saja)" pada pernyataan bergambar
+           dibuang agar tidak tampil di atas gambarnya. */
+        var htmlPernyataan = String(option.text || '');
+        if (option.gambar && /^\(?\s*gambar\s+saja\s*\)?[.!]?$/i.test(SRich.stripHtml(htmlPernyataan).trim())) htmlPernyataan = '';
+        return { id: option.id, html: htmlPernyataan };
+      }),
       jawaban: objectValue,
       interaksi: true,
       legacy: infoKategori.legacy
@@ -1735,8 +1744,12 @@ function renderAnswerInput(question, value) {
           var label = hurufPilihanJodoh_(pi + 1) + '. ' + SRich.texKeTeks_(teks);
           return '<option value="' + escapeHtml(teks) + '"' + (terpilih === teks ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
         }).join('');
-        var kiriHtml = String(option.text || '').trim()
-          ? formatTextInline(option.text) : '<em>(gambar saja)</em>';
+        /* Revisi 2026-11-23: penanda "(gambar saja)" hanya dipakai bila memang
+           tidak ada gambar; bila ada gambar, gambar itu sudah cukup. */
+        var teksKiriJodoh = String(option.text || '').trim();
+        var kiriHtml = teksKiriJodoh
+          ? formatTextInline(option.text)
+          : (option.gambar ? '' : '<em>(gambar saja)</em>');
         /* Nomor pernyataan ditaruh di kolomnya sendiri agar teks panjang
            tidak melewati penomoran (sama seperti pratinjau panel). */
         return '<tr><td><div class="jodoh-sel"><span class="jodoh-no">' + (index + 1) + '.</span>' +

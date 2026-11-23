@@ -4860,8 +4860,10 @@ function optionsToLines(question) {
     // ditampilkan sebagai teks LaTeX polos agar bisa disunting ulang.
     if (option.pasangan) return SRich.stripHtml(option.text || '') + ' = ' + SRich.stripHtml(option.pasangan || '');
     /* Revisi 2026-11-23: opsi bergambar dibiarkan KOSONG di kolom Opsi agar
-       rapi. Keterangannya tampil di panel "Gambar pada opsi" (baris
-       "Opsi A bergambar saja"), bukan sebagai teks opsi. */
+       rapi. Teks "(gambar saja)" yang terlanjur TERSIMPAN oleh versi
+       sebelumnya juga dianggap kosong, sehingga tidak muncul lagi di panel. */
+    var teksOpsiRapi = SRich.stripHtml(option.text || '').trim();
+    if (/^\(?\s*gambar\s+saja\s*\)?[.!]?$/i.test(teksOpsiRapi)) return '';
     return SRich.stripHtml(option.text || '');
   }).join('\n');
 }

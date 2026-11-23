@@ -3456,7 +3456,8 @@ function renderOpsiGambar_(prefix) {
     html += '<div class="gambar-opsi-baris' + (teks ? '' : ' kosong') + '">' +
       '<span class="gambar-opsi-huruf">' + String.fromCharCode(65 + i) + '.</span>' +
       '<span class="gambar-opsi-teks">' + (teks ? escapeAdmin(truncate(teks, 90)) :
-        '<em>Opsi ' + String.fromCharCode(65 + i) + ' belum ditulis</em>') +
+        (adaGambar ? '<em>Opsi ' + String.fromCharCode(65 + i) + ' bergambar saja (tanpa teks)</em>'
+                   : '<em>Opsi ' + String.fromCharCode(65 + i) + ' belum ditulis</em>')) +
         (adaGambar ? '<br><img class="gambar-opsi-mini" src="' + escapeAdmin(urlGambarTampilAdmin_(gambar.gambar)) + '" alt="' + escapeAdmin(gambar.alt || 'Gambar opsi ' + (i + 1)) + '" loading="lazy">' : '') +
         (gambar.alt ? '<br><small>' + escapeAdmin(gambar.alt) + '</small>' : '') +
       '</span>' +
@@ -3538,14 +3539,18 @@ function optionsFromField(prefix) {
   /* Revisi 2026-11-22: baris kosong dipertahankan agar opsi bergambar saja
      tidak menghilangkan pasangan nomor baris -> gambar. Baris kosong di ujung
      tetap dibuang. */
+  var gambarOpsiAwal = gambarOpsiDari_(prefix);
   var linesMentah = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
     .map(function(line) { return line.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); });
   var lines = linesMentah.filter(function(teks, i, arr) {
     if (teks) return true;
+    /* Revisi 2026-11-23: baris kosong yang MEMILIKI gambar tidak dibuang,
+       walaupun berada di ujung, agar opsi bergambar terakhir tetap tersimpan. */
+    if (gambarOpsiAwal[i] && gambarOpsiAwal[i].gambar) return true;
     for (var j = i + 1; j < arr.length; j++) { if (arr[j]) return true; }
     return false;
   });
-  var gambarOpsi = gambarOpsiDari_(prefix);
+  var gambarOpsi = gambarOpsiAwal;
   if (type === 'MENJODOHKAN') {
     // Setiap baris berformat "pernyataan = jawaban". Baris tanpa tanda sama
     // dengan diabaikan agar tidak membentuk pasangan yang tidak lengkap.
@@ -4854,10 +4859,9 @@ function optionsToLines(question) {
     // stripHtml: bila opsi tersimpan sebagai HTML (mis. rumus [data-tex]),
     // ditampilkan sebagai teks LaTeX polos agar bisa disunting ulang.
     if (option.pasangan) return SRich.stripHtml(option.text || '') + ' = ' + SRich.stripHtml(option.pasangan || '');
-    /* Revisi 2026-11-22: opsi bergambar tanpa teks ditandai "(gambar saja)"
-       agar saat soal dibuka kembali guru tahu baris itu sudah punya gambar. */
-    var teksOpsi = SRich.stripHtml(option.text || '').trim();
-    if (!teksOpsi && option.gambar) return '(gambar saja)';
+    /* Revisi 2026-11-23: opsi bergambar dibiarkan KOSONG di kolom Opsi agar
+       rapi. Keterangannya tampil di panel "Gambar pada opsi" (baris
+       "Opsi A bergambar saja"), bukan sebagai teks opsi. */
     return SRich.stripHtml(option.text || '');
   }).join('\n');
 }

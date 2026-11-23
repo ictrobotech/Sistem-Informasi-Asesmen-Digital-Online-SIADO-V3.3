@@ -1647,16 +1647,19 @@ function rapikanSatuanPangkat_(teks) {
   var isi = String(teks === undefined || teks === null ? '' : teks);
   if (!isi) return isi;
   if (/[\^\u00B2\u00B3]/.test(isi)) return isi;
+  /* \u03C0 (pi) di depan/teks satuan dipertahankan: "132\u03C0 cm2" -> "132\u03C0 cm\u00B2". */
   var pola = new RegExp(
     '(^|[^0-9A-Za-z.,])' +
-    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?)' +
+    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?' +
+    '(?:\\s*\u03C0)?)' +
     '(\\s*)' +
     '(' + SATUAN_PANGKAT_.join('|') + ')' +
     '([23])' +
+    '(\\s*\u03C0)?' +
     '(?![0-9A-Za-z])',
     'gi');
-  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat) {
-    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3');
+  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat, piBelakang) {
+    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3') + (piBelakang || '');
   });
 }
 

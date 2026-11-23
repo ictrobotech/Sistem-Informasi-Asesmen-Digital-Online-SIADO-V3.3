@@ -3564,16 +3564,20 @@ function rapikanSatuanPangkat_(teks) {
   if (!isi) return isi;
   /* Jangan menyentuh teks yang memuat rumus/penanda superskrip. */
   if (/[\^²³]|\\(^|[^A-Za-z])\\\\?(frac|sqrt)\b/.test(isi)) return isi;
+  /* Angka boleh disusul \u03C0 (pi) sebelum satuan: "132\u03C0 cm2" -> "132\u03C0 cm\u00B2",
+     dan \u03C0 di belakang satuan juga dipertahankan. */
   var pola = new RegExp(
     '(^|[^0-9A-Za-z.,])' +                       /* batas kiri */
-    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?)' + /* bilangan */
+    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?' + /* bilangan */
+    '(?:\\s*\u03C0)?)' +                        /* pi (boleh tidak ada) */
     '(\\s*)' +                                    /* spasi */
     '(' + SATUAN_PANGKAT_.join('|') + ')' +
     '([23])' +
+    '(\\s*\u03C0)?' +                            /* pi sesudah satuan */
     '(?![0-9A-Za-z])',                            /* batas kanan */
     'gi');
-  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat) {
-    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3');
+  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat, piBelakang) {
+    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3') + (piBelakang || '');
   });
 }
 

@@ -1637,6 +1637,29 @@ function perbaruiChipStatusJawaban_() {
     '<i class="fa-regular fa-circle"></i> Belum terjawab';
 }
 
+
+/* Revisi 2026-11-23: satuan pangkat ditulis formal. "512 cm2" -> "512 cm²".
+   Hanya satuan pada daftar putih dan hanya bila di depannya bilangan sah,
+   sehingga "H2O", "SO4", dan rumus bersuperskrip tidak tersentuh. */
+var SATUAN_PANGKAT_ = ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm', 'km2', 'km3', 'm2', 'm3', 'dm2', 'dm3', 'cm2', 'cm3', 'mm2', 'mm3', 'l', 'liter', 'ml', 'cc', 'g', 'kg', 'mg', 'ton', 's', 'ha', 'are', 'kj', 'j', 'kal', 'kkal', 'w', 'kw', 'volt', 'ampere', 'hz', 'px'];
+
+function rapikanSatuanPangkat_(teks) {
+  var isi = String(teks === undefined || teks === null ? '' : teks);
+  if (!isi) return isi;
+  if (/[\^\u00B2\u00B3]/.test(isi)) return isi;
+  var pola = new RegExp(
+    '(^|[^0-9A-Za-z.,])' +
+    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?)' +
+    '(\\s*)' +
+    '(' + SATUAN_PANGKAT_.join('|') + ')' +
+    '([23])' +
+    '(?![0-9A-Za-z])',
+    'gi');
+  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat) {
+    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3');
+  });
+}
+
 function renderAnswerInput(question, value) {
   var type = String(question.tipe || '').toUpperCase();
   var options = Array.isArray(question.opsi) ? question.opsi : [];
@@ -1663,6 +1686,8 @@ function renderAnswerInput(question, value) {
       /* Revisi 2026-11-23: teks penanda "(gambar saja)" dari versi lama
          dibuang agar tidak tampil di atas gambar opsi. */
       if (option.gambar && /^\(?\s*gambar\s+saja\s*\)?[.!]?$/i.test(optionText.trim())) optionText = '';
+      /* Revisi 2026-11-23: satuan pangkat formal (cm2 -> cm²). */
+      optionText = rapikanSatuanPangkat_(optionText);
       return '<label class="choice-option ' + (type === 'PGK_MCMA' ? 'multi ' : '') + (checked ? 'checked' : '') + '">' +
         '<input data-answer-input="true" type="' + (type === 'PG' ? 'radio' : 'checkbox') + '" name="objectiveAnswer" value="' + escapeHtml(label) + '"' + (checked ? ' checked' : '') + '>' +
         '<span class="choice-mark"><i class="fa-solid fa-check"></i></span><span class="choice-text"><span class="choice-letter">' + escapeHtml(label) + '.</span><span class="choice-body"> ' +
@@ -1684,6 +1709,7 @@ function renderAnswerInput(question, value) {
            dibuang agar tidak tampil di atas gambarnya. */
         var htmlPernyataan = String(option.text || '');
         if (option.gambar && /^\(?\s*gambar\s+saja\s*\)?[.!]?$/i.test(SRich.stripHtml(htmlPernyataan).trim())) htmlPernyataan = '';
+        htmlPernyataan = rapikanSatuanPangkat_(htmlPernyataan);
         return { id: option.id, html: htmlPernyataan };
       }),
       jawaban: objectValue,
@@ -1746,7 +1772,7 @@ function renderAnswerInput(question, value) {
         }).join('');
         /* Revisi 2026-11-23: penanda "(gambar saja)" hanya dipakai bila memang
            tidak ada gambar; bila ada gambar, gambar itu sudah cukup. */
-        var teksKiriJodoh = String(option.text || '').trim();
+        var teksKiriJodoh = rapikanSatuanPangkat_(String(option.text || '').trim());
         var kiriHtml = teksKiriJodoh
           ? formatTextInline(option.text)
           : (option.gambar ? '' : '<em>(gambar saja)</em>');

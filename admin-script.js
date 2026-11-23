@@ -3502,6 +3502,91 @@ function bersihkanGambarOpsi_(prefix) {
   renderOpsiGambar_(prefix);
 }
 
+
+/* ==================================================================
+ * SATUAN PANGKAT FORMAL  (revisi 2026-11-23)
+ *
+ * "512 cm2"  -> "512 cm²"
+ * "1.080 cm3"-> "1.080 cm³"
+ * "784 m2"   -> "784 m²"
+ *
+ * Aturan:
+ *   * hanya satuan pada daftar putih (SATUAN_PANGKAT_) yang diubah;
+ *   * hanya bila bagian depan adalah bilangan sah (boleh titik/koma ribuan,
+ *     desimal, atau pecahan seperti 1/2);
+ *   * TIDAK diubah bila sudah memakai superskrip, bila berada di dalam rumus
+ *     (^ atau \\frac), atau bila angkanya bukan bilangan (mis. H2O, SO4).
+ * ================================================================== */
+var SATUAN_PANGKAT_ = [
+  'km',
+  'hm',
+  'dam',
+  'm',
+  'dm',
+  'cm',
+  'mm',
+  'km2',
+  'km3',
+  'm2',
+  'm3',
+  'dm2',
+  'dm3',
+  'cm2',
+  'cm3',
+  'mm2',
+  'mm3',
+  'l',
+  'liter',
+  'ml',
+  'cc',
+  'g',
+  'kg',
+  'mg',
+  'ton',
+  's',
+  'ha',
+  'are',
+  'kj',
+  'j',
+  'kal',
+  'kkal',
+  'w',
+  'kw',
+  'volt',
+  'ampere',
+  'hz',
+  'px'
+];
+
+function rapikanSatuanPangkat_(teks) {
+  var isi = String(teks === undefined || teks === null ? '' : teks);
+  if (!isi) return isi;
+  /* Jangan menyentuh teks yang memuat rumus/penanda superskrip. */
+  if (/[\^²³]|\\(^|[^A-Za-z])\\\\?(frac|sqrt)\b/.test(isi)) return isi;
+  var pola = new RegExp(
+    '(^|[^0-9A-Za-z.,])' +                       /* batas kiri */
+    '((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+)?)' + /* bilangan */
+    '(\\s*)' +                                    /* spasi */
+    '(' + SATUAN_PANGKAT_.join('|') + ')' +
+    '([23])' +
+    '(?![0-9A-Za-z])',                            /* batas kanan */
+    'gi');
+  return isi.replace(pola, function (utuh, kiri, angka, spasi, satuan, pangkat) {
+    return kiri + angka + spasi + satuan + (pangkat === '2' ? '\u00B2' : '\u00B3');
+  });
+}
+
+/** Merapikan teks opsi pada penyunting sebelum dikirim ke server. */
+function rapikanSatuanOpsi_(opsi) {
+  return (Array.isArray(opsi) ? opsi : []).map(function (item) {
+    if (!item || typeof item !== 'object') return item;
+    var salin = {};
+    Object.keys(item).forEach(function (k) { salin[k] = item[k]; });
+    if (typeof salin.text === 'string') salin.text = rapikanSatuanPangkat_(salin.text);
+    return salin;
+  });
+}
+
 function optionsFromField(prefix) {
   var type = document.getElementById(prefix + 'Tipe').value;
   if (type === 'ISIAN' || type === 'URAIAN') return [];
@@ -3955,7 +4040,7 @@ async function buildQuestionPayload(prefix) {
   }
   /* Gambar pada kunci/rubrik berlaku untuk semua tipe soal. */
   pertanyaanHtml = SRich.kunciMarkerEmbed(pertanyaanHtml, KUNCI_GAMBAR_STATE[prefix] || []);
-  var kunci = document.getElementById(prefix + 'Kunci').value;
+  var kunci = rapikanSatuanPangkat_(document.getElementById(prefix + 'Kunci').value);
   if (tipe === 'PGK' && prefix === 'f') {
     // Form tambah membentuk kunci dari tabel PGK.
     // Pada form edit, kunci yang tersimpan dipertahankan dan hanya berubah
@@ -3975,7 +4060,8 @@ async function buildQuestionPayload(prefix) {
   }
   /* Label kolom tabel Menjodohkan disimpan pada opsi pertama, sama seperti
      yang dibaca halaman peserta (opsi[0].labelKiri / labelKanan). */
-  var opsiSoal = optionsFromField(prefix);
+  /* Revisi 2026-11-23: satuan pangkat ditulis formal (cm2 -> cm²). */
+  var opsiSoal = rapikanSatuanOpsi_(optionsFromField(prefix));
   if (tipe === 'MENJODOHKAN' && opsiSoal.length) {
     var labelJodohSimpan = labelJodoh_(prefix);
     opsiSoal[0].labelKiri = labelJodohSimpan.kiri;

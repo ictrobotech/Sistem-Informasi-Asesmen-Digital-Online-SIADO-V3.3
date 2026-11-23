@@ -1642,7 +1642,13 @@ function renderAnswerInput(question, value) {
   var options = Array.isArray(question.opsi) ? question.opsi : [];
   if (type === 'PG' || type === 'PGK_MCMA') {
     var selected = type === 'PG' ? String(value || '') : (Array.isArray(value) ? value : []);
-    return '<div class="choice-list">' + options.map(function(option, optionIndex) {
+    /* Revisi 2026-11-22: bila semua opsi berupa gambar (teks boleh kosong),
+       daftar pilihan ditata sebagai kotak sejajar seperti soal bergambar. */
+    var semuaOpsiBergambar = options.length > 0 && options.every(function(option) {
+      return !!(option && option.gambar);
+    });
+    return '<div class="choice-list' + (semuaOpsiBergambar ? ' opsi-bergambar' : '') + '">' +
+      options.map(function(option, optionIndex) {
       var rawLabel = String(option.label || '').trim();
       var isLetter = /^[A-H]$/i.test(rawLabel);
       var label = isLetter ? rawLabel.toUpperCase() : String.fromCharCode(65 + optionIndex);

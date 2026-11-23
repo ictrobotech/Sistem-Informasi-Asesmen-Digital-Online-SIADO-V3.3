@@ -1561,7 +1561,8 @@ function updateQuestionFormatHelp(prefix) {
     PGK: '<strong>PGK Kategori:</strong> susun pada editor tabel di bawah — kategori jawaban dapat dibuat sendiri (tidak harus Benar/Salah) dan setiap pernyataan diberi kunci kategorinya. Peserta memberi tanda centang (√) pada kolom kategori yang sesuai. ' +
       'Rumus pada pernyataan: copy-paste langsung dari Word/AI didukung otomatis.',
     PGK_MCMA: '<strong>PGK MCMA:</strong> tulis 1 opsi per baris. Kunci dapat lebih dari satu, misalnya: <strong>A,C,D</strong>. ' +
-      'Rumus boleh ditempel dari Word/AI, atau tulis <strong>$...$</strong> / <strong>\\frac{a}{b}</strong>.',
+      'Rumus boleh ditempel dari Word/AI, atau tulis <strong>$...$</strong> / <strong>\\frac{a}{b}</strong>. ' +
+      '<strong>Opsi bergambar:</strong> teks opsi boleh dikosongkan asalkan gambarnya sudah dipilih pada panel "Gambar pada opsi" di bawah - peserta melihat gambar itu sebagai pilihan.',
     MENJODOHKAN: '<strong>Menjodohkan:</strong> isi pasangan <em>pernyataan &rarr; pasangan</em> pada editor tabel di bawah. ' +
       'Kunci jawaban terisi otomatis, dan pilihan pasangan diacak untuk peserta. Rumus boleh ditempel dari Word/AI.',
     ISIAN: '<strong>Isian:</strong> opsi tidak diperlukan. Gunakan tanda <strong>|</strong> untuk jawaban alternatif, misalnya: Jakarta|DKI Jakarta. ' +
@@ -3416,9 +3417,17 @@ function opsiTeksBaris_(prefix) {
   if (!el) return [];
   return String(el.value || '').split(/\r?\n/)
     .map(function(l) { return l.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); })
-    .filter(Boolean);
+    /* Revisi 2026-11-22: baris kosong DIPERTAHANKAN (boleh menjadi opsi
+       bergambar); hanya baris kosong di ujung yang dibuang. */
+    .reduce(function(acc, teks) { acc.push(teks); return acc; }, [])
+    .filter(function(teks, i, arr) {
+      if (teks) return true;
+      for (var j = i + 1; j < arr.length; j++) { if (arr[j]) return true; }
+      return false;
+    });
 }
 
+/** Menampilkan daftar opsi + tombol unggah gambar pada penyunting PG/PGK MCMA. */
 /** Menampilkan daftar opsi + tombol unggah gambar pada penyunting PG/PGK MCMA. */
 function renderOpsiGambar_(prefix) {
   var wrap = document.getElementById(prefix + 'OpsiGambar');
@@ -3429,31 +3438,34 @@ function renderOpsiGambar_(prefix) {
   if (wrap.hidden) return;
   var baris = opsiTeksBaris_(prefix);
   var state = GAMBAR_OPSI_STATE[prefix] || (GAMBAR_OPSI_STATE[prefix] = []);
-  var kosong = !baris.length;
-  // Setelah soal berhasil disimpan/form dikosongkan, jangan tampilkan baris
-  // A-D kosong. Panel gambar baru muncul setelah opsi benar-benar diketik.
-  if (kosong) {
-    wrap.hidden = true;
-    wrap.innerHTML = '';
-    return;
-  }
+  /* REVISI 2026-11-22: guru boleh menyiapkan gambar sebelum mengetik opsi.
+     Panelnya SELALU tampil berisi baris A..D sebagai awalan (minimal 4 baris,
+     sama dengan jumlah pilihan bawaan). Baris kosong tidak menjadi opsi saat
+     disimpan — optionsFromField hanya membaca baris yang benar-benar terisi —
+     tetapi gambar yang sudah dipilih tetap menempel saat opsinya diketik. */
+  var jumlahBaris = Math.max(4, baris.length);
+  if (state.length > jumlahBaris) jumlahBaris = state.length;
   var html = '<h5><i class="fa-regular fa-image"></i> Gambar pada opsi / pernyataan (opsional)</h5>' +
     '<p>Setiap opsi boleh diberi gambar — misalnya pilihan jawaban berupa gambar. Tekan <b>Upload gambar</b> ' +
-    'pada baris opsi yang dituju (boleh unggah dari komputer, Google Drive, atau tautan URL).</p>';
-  baris.forEach(function(teks, i) {
+    'pada baris opsi yang dituju (boleh unggah dari komputer, Google Drive, atau tautan URL). ' +
+    'Gambar boleh disiapkan lebih dulu: pilih gambarnya, lalu tulis opsi pada baris yang sama.</p>';
+  for (var i = 0; i < jumlahBaris; i++) {
+    var teks = baris[i] || '';
     var gambar = state[i] || {};
-    html += '<div class="gambar-opsi-baris' + (kosong ? ' bawaan' : '') + '">' +
+    var adaGambar = !!(gambar && gambar.gambar);
+    html += '<div class="gambar-opsi-baris' + (teks ? '' : ' kosong') + '">' +
       '<span class="gambar-opsi-huruf">' + String.fromCharCode(65 + i) + '.</span>' +
-      '<span class="gambar-opsi-teks">' + (teks ? escapeAdmin(truncate(teks, 90)) : '<em>Opsi ' + String.fromCharCode(65 + i) + '</em>') +
-        (gambar.gambar ? '<br><img class="gambar-opsi-mini" src="' + escapeAdmin(urlGambarTampilAdmin_(gambar.gambar)) + '" alt="' + escapeAdmin(gambar.alt || 'Gambar opsi ' + (i + 1)) + '" loading="lazy">' : '') +
+      '<span class="gambar-opsi-teks">' + (teks ? escapeAdmin(truncate(teks, 90)) :
+        '<em>Opsi ' + String.fromCharCode(65 + i) + ' belum ditulis</em>') +
+        (adaGambar ? '<br><img class="gambar-opsi-mini" src="' + escapeAdmin(urlGambarTampilAdmin_(gambar.gambar)) + '" alt="' + escapeAdmin(gambar.alt || 'Gambar opsi ' + (i + 1)) + '" loading="lazy">' : '') +
         (gambar.alt ? '<br><small>' + escapeAdmin(gambar.alt) + '</small>' : '') +
       '</span>' +
       '<span class="gambar-opsi-aksi">' +
         '<button class="admin-secondary" type="button" data-gambar-opsi="' + i + '" style="min-height:30px"><i class="fa-solid fa-cloud-arrow-up"></i> ' +
-          (gambar.gambar ? 'Ganti gambar' : 'Upload gambar') + '</button>' +
-        (gambar.gambar ? '<button class="admin-danger" type="button" data-hapus-gambar-opsi="' + i + '" style="min-height:30px"><i class="fa-solid fa-xmark"></i> Hapus</button>' : '') +
+          (adaGambar ? 'Ganti gambar' : 'Upload gambar') + '</button>' +
+        (adaGambar ? '<button class="admin-danger" type="button" data-hapus-gambar-opsi="' + i + '" style="min-height:30px"><i class="fa-solid fa-xmark"></i> Hapus</button>' : '') +
       '</span></div>';
-  });
+  }
   wrap.innerHTML = html;
   wrap.querySelectorAll('[data-gambar-opsi]').forEach(function(btn) {
     btn.addEventListener('click', async function() {
@@ -3463,6 +3475,7 @@ function renderOpsiGambar_(prefix) {
         keterangan: 'Gambar ini tampil pada opsi ' + String.fromCharCode(65 + i) + ' di panel, pada peserta ujian, dan pada Export Soal.'
       });
       if (!hasil) return;
+      if (!Array.isArray(GAMBAR_OPSI_STATE[prefix])) GAMBAR_OPSI_STATE[prefix] = [];
       GAMBAR_OPSI_STATE[prefix][i] = { gambar: hasil.url, alt: hasil.alt };
       renderOpsiGambar_(prefix);
       showToast('Gambar opsi ' + String.fromCharCode(65 + i) + ' siap dipakai.', 'success');
@@ -3476,6 +3489,7 @@ function renderOpsiGambar_(prefix) {
     });
   });
 }
+
 
 /** Gambar untuk setiap baris opsi (sejajar dengan optionsFromField). */
 function gambarOpsiDari_(prefix) {
@@ -3521,9 +3535,16 @@ function optionsFromField(prefix) {
         });
     }
   }
-  var lines = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
-    .map(function(line) { return line.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); })
-    .filter(Boolean);
+  /* Revisi 2026-11-22: baris kosong dipertahankan agar opsi bergambar saja
+     tidak menghilangkan pasangan nomor baris -> gambar. Baris kosong di ujung
+     tetap dibuang. */
+  var linesMentah = document.getElementById(prefix + 'Opsi').value.split(/\r?\n/)
+    .map(function(line) { return line.trim().replace(/^(?:[A-Ha-h][.)\-:]\s+|\(?[0-9]{1,2}[.)]\s+)/, ''); });
+  var lines = linesMentah.filter(function(teks, i, arr) {
+    if (teks) return true;
+    for (var j = i + 1; j < arr.length; j++) { if (arr[j]) return true; }
+    return false;
+  });
   var gambarOpsi = gambarOpsiDari_(prefix);
   if (type === 'MENJODOHKAN') {
     // Setiap baris berformat "pernyataan = jawaban". Baris tanpa tanda sama
@@ -3537,12 +3558,20 @@ function optionsFromField(prefix) {
       };
     }).filter(function(item) { return item && item.text && item.pasangan; });
   }
-  return lines.map(function(text, i) {
+  /* REVISI 2026-11-22: opsi boleh berupa GAMBAR SAJA. Jumlah baris mengikuti
+     yang terbanyak antara baris teks dan baris bergambar, sehingga guru boleh
+     mengunggah gambar lebih dulu saat kolom opsi masih benar-benar kosong.
+     Baris yang teksnya kosong tetap ikut bila sudah diberi gambar; opsi yang
+     kosong sama sekali dibuang. */
+  var jumlahBarisOpsi = Math.max(lines.length, gambarOpsi.length);
+  var barisOpsi = [];
+  for (var bi = 0; bi < jumlahBarisOpsi; bi++) barisOpsi.push(lines[bi] || '');
+  return barisOpsi.map(function(text, i) {
     var lampiran = gambarOpsi[i] || {};
     var item = { text: text };
     if (lampiran.gambar) { item.gambar = lampiran.gambar; item.alt = lampiran.alt || ''; }
     return item;
-  });
+  }).filter(function(item) { return String(item.text || '').trim() || item.gambar; });
 }
 
 /* ====================== UPLOADER MEDIA MULTI-SUMBER ======================
@@ -4825,6 +4854,10 @@ function optionsToLines(question) {
     // stripHtml: bila opsi tersimpan sebagai HTML (mis. rumus [data-tex]),
     // ditampilkan sebagai teks LaTeX polos agar bisa disunting ulang.
     if (option.pasangan) return SRich.stripHtml(option.text || '') + ' = ' + SRich.stripHtml(option.pasangan || '');
+    /* Revisi 2026-11-22: opsi bergambar tanpa teks ditandai "(gambar saja)"
+       agar saat soal dibuka kembali guru tahu baris itu sudah punya gambar. */
+    var teksOpsi = SRich.stripHtml(option.text || '').trim();
+    if (!teksOpsi && option.gambar) return '(gambar saja)';
     return SRich.stripHtml(option.text || '');
   }).join('\n');
 }

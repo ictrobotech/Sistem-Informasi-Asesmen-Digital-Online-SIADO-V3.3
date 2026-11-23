@@ -1510,9 +1510,10 @@ async function loadAdminBootstrap() {
     // atau `data`. Jangan menganggap `soal` selalu tersedia pada bootstrap;
     // bila tidak ada, panel guru akan tampak kosong walaupun RPC
     // siado.list_soal() sebenarnya mengembalikan data.
-    ADMIN.questions = (Array.isArray(result.soal) && result.soal.length)
-      ? result.soal
-      : (Array.isArray(result.data) ? result.data : (Array.isArray(result.soal) ? result.soal : []));
+    ADMIN.questions = rapikanSatuanDaftarSoal_(
+      (Array.isArray(result.soal) && result.soal.length)
+        ? result.soal
+        : (Array.isArray(result.data) ? result.data : (Array.isArray(result.soal) ? result.soal : [])));
     DATA_MENTAH.soal = ADMIN.questions;
     terapkanFilterSoal_();
     applySettingsData(result.pengaturan);
@@ -4238,7 +4239,7 @@ async function loadQuestions() {
   try {
     var result = await adminApi('getAllSoal', {});
     if (!guardAdminResult(result)) return;
-    ADMIN.questions = result.soal || result.data || [];
+    ADMIN.questions = rapikanSatuanDaftarSoal_(result.soal || result.data || []);
     // Sumber data filter ikut diperbarui, supaya daftar yang tampil dan daftar yang dipakai
     // tombol Edit/Hapus selalu sama (sebelumnya filter memakai salinan lama dari bootstrap).
     DATA_MENTAH.soal = ADMIN.questions;
@@ -4638,6 +4639,29 @@ function lampiranGambarOpsi_(op) {
  * PG/PGK MCMA: A. B. C. ...; PGK Kategori: pernyataan bernomor + kunci per
  * nomor; Menjodohkan: "pernyataan = pasangan"; Isian/Uraian: kunci saja.
  */
+function rapikanSatuanSoal_(question) {
+  /* Revisi 2026-11-23: "1.080 cm3" -> "1.080 cm³" pada tabel Bank Soal,
+     form Edit, Kartu Soal, dan ekspor — tanpa mengubah data di database. */
+  if (!question || typeof question !== 'object') return question;
+  if (Array.isArray(question.opsi)) {
+    question.opsi = question.opsi.map(function (op) {
+      if (!op || typeof op !== 'object') return op;
+      if (typeof op.text === 'string') op.text = rapikanSatuanPangkat_(op.text);
+      if (typeof op.pasangan === 'string') op.pasangan = rapikanSatuanPangkat_(op.pasangan);
+      return op;
+    });
+  }
+  if (typeof question.kunci_jawaban === 'string' && /[A-Za-z]2|[A-Za-z]3/.test(question.kunci_jawaban)) {
+    question.kunci_jawaban = rapikanSatuanPangkat_(question.kunci_jawaban);
+  }
+  return question;
+}
+
+function rapikanSatuanDaftarSoal_(daftar) {
+  (Array.isArray(daftar) ? daftar : []).forEach(rapikanSatuanSoal_);
+  return daftar;
+}
+
 function selOpsiKunciBankSoal_(question) {
   var tipe = String(question.tipe || '').toUpperCase();
   var opsi = Array.isArray(question.opsi) ? question.opsi : [];

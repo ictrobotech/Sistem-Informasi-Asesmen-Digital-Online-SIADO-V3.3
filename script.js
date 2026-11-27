@@ -2144,14 +2144,14 @@ function tampilkanHasil(result) {
   content += '<div class="result-score-hero"><span>' + numberFormat(result.skorPersen) + '</span><small>SKOR AKHIR (%)</small></div>';
 
   content += '<div class="result-summary">' +
-    '<div class="result-stat correct"><span>' + numberFormat(result.totalBenar) + '</span><small>Jawaban Benar</small></div>' +
-    '<div class="result-stat wrong"><span>' + numberFormat(result.totalSalah) + '</span><small>Jawaban Salah</small></div>' +
-    '<div class="result-stat"><span>' + numberFormat(result.totalNilai) + ' / ' + numberFormat(result.totalPoin) + '</span><small>Total Skor Poin</small></div>' +
-    (pending ? '<div class="result-stat pending"><span>' + numberFormat(pending) + '</span><small>Uraian Menunggu Nilai</small></div>' : '') +
+    '<div class="result-stat correct"><span>' + numberFormat(result.totalBenar) + '</span><small>JAWABAN BENAR</small></div>' +
+    '<div class="result-stat wrong"><span>' + numberFormat(result.totalSalah) + '</span><small>JAWABAN SALAH</small></div>' +
+    '<div class="result-stat"><span>' + numberFormat(result.totalNilai) + ' / ' + numberFormat(result.totalPoin) + '</span><small>TOTAL SKOR POIN</small></div>' +
+    (pending ? '<div class="result-stat pending"><span>' + numberFormat(pending) + '</span><small>URAIAN MENUNGGU NILAI</small></div>' : '') +
     '</div>';
 
   content += '<p class="result-note">' + escapeHtml(result.message || '') +
-    (menunggu ? ' Status Tuntas/Remedial ditetapkan setelah guru menilai jawaban uraian.' : '') + '</p>';
+    (menunggu ? ' Status TUNTAS/REMEDIAL ditetapkan setelah guru menilai jawaban uraian.' : '') + '</p>';
 
   document.getElementById('resultContent').innerHTML = content;
   showModal('resultModal');

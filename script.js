@@ -1363,7 +1363,11 @@ function updateTimerUI() {
 function pad2(value) { return value < 10 ? '0' + value : String(value); }
 
 async function sendHeartbeat() {
-  if (!UJIAN.aktif || UJIAN.jeda || UJIAN.heartbeatBusy || UJIAN.selesaiDiproses) return;
+  /* Revisi 2026-11-27: UJIAN.jeda TIDAK lagi menghentikan heartbeat.
+     Tanpa ini, saat peserta terjeda tidak ada lagi permintaan ke server,
+     sehingga pemulihan jaringan tidak pernah terdeteksi dan peserta terjebak
+     di layar jeda sampai memuat ulang halaman. */
+  if (!UJIAN.aktif || UJIAN.heartbeatBusy || UJIAN.selesaiDiproses) return;
   UJIAN.heartbeatBusy = true;
   try {
     var result = await apiPeserta('heartbeat', Object.assign(credentialSesi(), {
@@ -1377,6 +1381,17 @@ async function sendHeartbeat() {
     if (result.status === 'JEDA' || result.needsResume) {
       UJIAN.remaining = Number(result.remainingSeconds || UJIAN.remaining);
       tampilkanJeda('Tampilan dijeda karena koneksi bermasalah. Waktu resmi tetap dihitung oleh server.');
+      return;
+    }
+    if (result.dipulihkanOtomatis && UJIAN.jeda) {
+      /* Revisi 2026-11-27: server memulihkan sesi yang dijeda sebentar.
+         Layar jeda ditutup dan antrean ujian dinyalakan ulang. */
+      UJIAN.jeda = false;
+      UJIAN.lastTick = Date.now();
+      if (typeof result.remainingSeconds === 'number') UJIAN.remaining = Number(result.remainingSeconds);
+      updateTimerUI();
+      hideModal('pauseModal');
+      startExamLoops();
       return;
     }
     if (result.timeUp || result.remainingSeconds <= 0) {
@@ -2196,7 +2211,10 @@ async function lanjutkanSetelahJeda() {
     UJIAN.lastTick = Date.now();
     updateTimerUI();
     hideModal('pauseModal');
-    sendHeartbeat();
+    /* Revisi 2026-11-27: nyalakan ulang SELURUH antrean ujian, bukan hanya
+       satu heartbeat. Bila satu kiriman gagal, antrean tetap mencoba lagi
+       tiap heartbeatMs sehingga peserta tidak terjebak jeda berulang. */
+    startExamLoops();
   } catch (error) {
     document.getElementById('pauseText').textContent = 'Koneksi masih belum stabil. Periksa internet lalu coba kembali.';
   } finally {
